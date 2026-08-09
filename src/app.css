@@ -1,0 +1,223 @@
+/* ---------------------------------------------------------------------------
+   Design tokens. Dark is the default (mobile PWA at night is the main use),
+   but both palettes are fully defined so the toggle works in both directions.
+   --------------------------------------------------------------------------- */
+
+:root,
+:root[data-theme='dark'] {
+	--bg: #1c1b19;
+	--bg-raised: #262523;
+	--bg-sunken: #151412;
+	--bg-hover: #302e2b;
+	--border: #3a3835;
+	--border-soft: #2e2c29;
+	--text: #f0eee6;
+	--text-muted: #a5a196;
+	--text-faint: #6f6b62;
+	--accent: #d97757;
+	--accent-soft: rgba(217, 119, 87, 0.14);
+	--danger: #e05252;
+	--ok: #5fa85f;
+	--code-bg: #121110;
+	--user-bubble: #2f2d29;
+	--shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme='light'] {
+	--bg: #faf9f5;
+	--bg-raised: #ffffff;
+	--bg-sunken: #f0eee6;
+	--bg-hover: #eeece4;
+	--border: #dedbd1;
+	--border-soft: #e8e5dc;
+	--text: #26241f;
+	--text-muted: #63605a;
+	--text-faint: #928f87;
+	--accent: #c25f3c;
+	--accent-soft: rgba(194, 95, 60, 0.1);
+	--danger: #c33;
+	--ok: #3f7d3f;
+	--code-bg: #f3f1ea;
+	--user-bubble: #eceadf;
+	--shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	overscroll-behavior-y: none;
+}
+
+body {
+	background: var(--bg);
+	color: var(--text);
+	font-family:
+		ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	font-size: 15px;
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+}
+
+button {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: none;
+	cursor: pointer;
+}
+
+input,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+
+a {
+	color: var(--accent);
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--border);
+	border-radius: 5px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* --- markdown ------------------------------------------------------------ */
+
+.md > :first-child {
+	margin-top: 0;
+}
+.md > :last-child {
+	margin-bottom: 0;
+}
+.md p {
+	margin: 0 0 0.85em;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+	margin: 1.4em 0 0.5em;
+	line-height: 1.3;
+	font-weight: 600;
+}
+.md h1 {
+	font-size: 1.4em;
+}
+.md h2 {
+	font-size: 1.22em;
+}
+.md h3 {
+	font-size: 1.08em;
+}
+.md ul,
+.md ol {
+	margin: 0 0 0.85em;
+	padding-left: 1.4em;
+}
+.md li {
+	margin: 0.2em 0;
+}
+.md blockquote {
+	margin: 0 0 0.85em;
+	padding: 0.1em 0 0.1em 1em;
+	border-left: 3px solid var(--border);
+	color: var(--text-muted);
+}
+.md code {
+	font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+	font-size: 0.88em;
+	background: var(--code-bg);
+	padding: 0.15em 0.38em;
+	border-radius: 4px;
+}
+.md pre {
+	margin: 0 0 0.9em;
+	padding: 0;
+	background: var(--code-bg);
+	border: 1px solid var(--border-soft);
+	border-radius: 10px;
+	overflow: hidden;
+}
+.md pre code {
+	display: block;
+	padding: 0.9em 1em;
+	background: none;
+	overflow-x: auto;
+	font-size: 0.85em;
+	line-height: 1.55;
+}
+.md table {
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
+	border-collapse: collapse;
+	margin: 0 0 0.9em;
+	font-size: 0.92em;
+}
+.md th,
+.md td {
+	border: 1px solid var(--border);
+	padding: 0.4em 0.7em;
+	text-align: left;
+}
+.md th {
+	background: var(--bg-sunken);
+	font-weight: 600;
+}
+.md img {
+	max-width: 100%;
+	border-radius: 8px;
+}
+.md hr {
+	border: none;
+	border-top: 1px solid var(--border);
+	margin: 1.4em 0;
+}
+
+/* highlight.js — minimal token palette driven by our tokens */
+.hljs-comment,
+.hljs-quote {
+	color: var(--text-faint);
+	font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+	color: #c678dd;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+	color: #98c379;
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-attr {
+	color: #d19a66;
+}
+.hljs-title,
+.hljs-section,
+.hljs-name {
+	color: #61afef;
+}
+.hljs-built_in,
+.hljs-class .hljs-title {
+	color: #e5c07b;
+}
+.hljs-deletion {
+	color: var(--danger);
+}

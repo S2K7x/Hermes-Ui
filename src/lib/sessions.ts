@@ -1,0 +1,102 @@
+import type { HermesSession } from './types';
+
+/** Seconds-since-epoch of the last activity on a session. */
+export const activityAt = (s: HermesSession): number => s.last_active || s.started_at || 0;
+
+export function sessionLabel(s: HermesSession): string {
+	const title = s.title?.trim();
+	if (title) return title;
+	const preview = s.preview?.trim();
+	if (preview) return preview.length > 48 ? `${preview.slice(0, 47)}…` : preview;
+	return 'Sans titre';
+}
+
+/** Short relative time for a sidebar row. */
+export function relativeTime(ts: number): string {
+	if (!ts) return '';
+	const date = new Date(ts * 1000);
+	const days = daysAgo(ts);
+	if (days === 0) return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+	if (days === 1) return 'hier';
+	if (days < 7) return `${days} j`;
+	return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+/** Whole days between a timestamp and now, counted from local midnight. */
+function daysAgo(ts: number): number {
+	const then = new Date(ts * 1000);
+	const midnight = new Date();
+	midnight.setHours(0, 0, 0, 0);
+	const diff = midnight.getTime() - then.getTime();
+	return diff < 0 ? 0 : Math.floor(diff / 86_400_000) + 1;
+}
+
+export interface SessionGroup {
+	key: string;
+	label: string;
+	sessions: HermesSession[];
+}
+
+/**
+ * Bucket sessions the way Claude.ai and ChatGPT do: pinned first, then by
+ * recency band. Bands with nothing in them are dropped so the sidebar never
+ * shows an empty heading.
+ */
+export function groupSessions(sessions: HermesSession[]): SessionGroup[] {
+	const sorted = [...sessions].sort((a, b) => activityAt(b) - activityAt(a));
+
+	const bands: SessionGroup[] = [
+		{ key: 'pinned', label: 'Épinglées', sessions: [] },
+		{ key: 'today', label: "Aujourd'hui", sessions: [] },
+		{ key: 'yesterday', label: 'Hier', sessions: [] },
+		{ key: 'week', label: '7 derniers jours', sessions: [] },
+		{ key: 'month', label: '30 derniers jours', sessions: [] },
+		{ key: 'older', label: 'Plus ancien', sessions: [] }
+	];
+	const byKey = Object.fromEntries(bands.map((b) => [b.key, b]));
+
+	for (const session of sorted) {
+		if (session.pinned) {
+			byKey.pinned.sessions.push(session);
+			continue;
+		}
+		const days = daysAgo(activityAt(session));
+		if (days === 0) byKey.today.sessions.push(session);
+		else if (days === 1) byKey.yesterday.sessions.push(session);
+		else if (days < 7) byKey.week.sessions.push(session);
+		else if (days < 30) byKey.month.sessions.push(session);
+		else byKey.older.sessions.push(session);
+	}
+
+	return bands.filter((b) => b.sessions.length > 0);
+}
+
+/** Case- and accent-insensitive substring match over title and preview. */
+export function matchesQuery(session: HermesSession, query: string): boolean {
+	const needle = normalize(query);
+	if (!needle) return true;
+	return (
+		normalize(session.title ?? '').includes(needle) ||
+		normalize(session.preview ?? '').includes(needle)
+	);
+}
+
+// Strip combining marks so "resume" finds "résumé".
+const normalize = (s: string) =>
+	s
+		.toLowerCase()
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '');
+
+/** Compact token/cost summary for a session, or null when nothing ran yet. */
+export function usageSummary(s: HermesSession | undefined): string | null {
+	if (!s) return null;
+	const inTok = s.input_tokens ?? 0;
+	const outTok = s.output_tokens ?? 0;
+	if (!inTok && !outTok) return null;
+	const cost = s.actual_cost_usd ?? s.estimated_cost_usd ?? 0;
+	const tokens = `${fmtTokens(inTok)} ↓ / ${fmtTokens(outTok)} ↑`;
+	return cost > 0 ? `${tokens} · $${cost.toFixed(4)}` : tokens;
+}
+
+const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));

@@ -1,0 +1,47 @@
+services:
+  hermes-web:
+    build: .
+    image: hermes-web:local
+    container_name: hermes-web
+    restart: unless-stopped
+
+    # Host networking, deliberately.
+    #
+    # Hermes binds 127.0.0.1:8642 and must stay there — its API executes the
+    # full toolset (terminal included) on this machine. From a bridge network
+    # the container's traffic arrives on the docker0 gateway address, not on
+    # loopback, so `host.docker.internal` cannot reach it; the only bridge-
+    # compatible fix would be to bind Hermes to a routable interface, which is
+    # exactly what we refuse to do. Sharing the host netns lets the container
+    # dial 127.0.0.1:8642 while HOST=127.0.0.1 below keeps the UI itself
+    # loopback-only. Tailscale Serve is what publishes it.
+    #
+    # Consequence: `ports:` is ignored under host networking — HOST/PORT are
+    # the binding, and there is no port mapping to declare.
+    network_mode: host
+
+    environment:
+      HOST: 127.0.0.1
+      PORT: ${PORT:-3000}
+      HERMES_API_URL: http://127.0.0.1:8642
+      HERMES_API_KEY: ${HERMES_API_KEY:?set HERMES_API_KEY in .env — must match API_SERVER_KEY in ~/.hermes/.env}
+      HERMES_SESSION_KEY: ${HERMES_SESSION_KEY:-agent:main:webui:dm:user}
+      HERMES_PUBLIC_ORIGIN: ${HERMES_PUBLIC_ORIGIN:?set HERMES_PUBLIC_ORIGIN to your Tailscale Serve hostname}
+      # adapter-node otherwise reconstructs the origin from the Host header as
+      # http://…, which never matches the https:// Origin the browser sends
+      # through Tailscale Serve.
+      ORIGIN: ${HERMES_PUBLIC_ORIGIN}
+      WEB_DB_PATH: /data/hermes-web.db
+      BODY_SIZE_LIMIT: 8M # inline images travel as base64 data: URLs
+      HERMES_TIMEOUT_MS: ${HERMES_TIMEOUT_MS:-30000}
+      MAX_CONCURRENT_TURNS: ${MAX_CONCURRENT_TURNS:-3}
+
+    volumes:
+      # Put this path on the SSD. SQLite WAL churn kills SD cards.
+      - ${WEB_DATA_DIR:-./data}:/data
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
