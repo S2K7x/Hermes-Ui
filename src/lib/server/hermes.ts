@@ -7,7 +7,8 @@ import type {
 	HermesSession,
 	HermesSkill,
 	HermesToolset,
-	ModelOptions
+	ModelOptions,
+	SessionRuntime
 } from '$lib/types';
 import { AppErrorCode } from '$lib/errors';
 
@@ -256,6 +257,27 @@ export const forkSession = (id: string, body: { title?: string; id?: string } = 
 		method: 'POST',
 		body
 	});
+
+/**
+ * Re-pin the model of an EXISTING session.
+ *
+ * Verified against `_handle_session_model_lock` in api_server.py: the handler
+ * forces `require_model_lock`, persists a confirmed `browser_model_lock` in
+ * the session's `model_config`, and updates the `model` column
+ * (`model = COALESCE(?, model)`). Every later turn resolves its runtime
+ * through `_effective_session_runtime_request`, where a confirmed lock wins
+ * over the session row — so the switch applies to the open conversation, not
+ * only to the next one.
+ *
+ * A model the gateway cannot route is refused with 409
+ * `model_lock_unavailable` rather than silently falling back to the global
+ * default, which is why this must not be retried blindly.
+ */
+export const setSessionModel = (id: string, body: { model: string; provider?: string }) =>
+	hermesJson<{ object: string; session_id: string; runtime: SessionRuntime }>(
+		`/api/sessions/${encodeURIComponent(id)}/model`,
+		{ method: 'POST', body }
+	);
 
 /** SSE turn. Returns the raw upstream Response for the relay to pipe. */
 export const sessionChatStream = (

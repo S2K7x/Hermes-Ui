@@ -88,6 +88,11 @@ export function humanizeError(err: unknown): string {
 			return "La base de données de Hermes est indisponible (state.db).";
 		case 'model_lock_persistence_failed':
 			return "Le modèle demandé n'a pas pu être enregistré sur la conversation.";
+		case 'model_lock_unavailable':
+			// Upstream refuses rather than falling back to the global default.
+			return "Hermes ne sait pas router ce modèle. Vérifiez que le fournisseur est configuré (`hermes model`).";
+		case 'missing_model':
+			return 'Aucun modèle sélectionné.';
 	}
 
 	if (err.status === 401 || err.status === 403) {
