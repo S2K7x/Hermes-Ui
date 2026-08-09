@@ -170,15 +170,16 @@ fréquentes usent rapidement une carte SD.
 ## Amélioration automatique quotidienne
 
 Un timer systemd sur le Pi lance Claude Code chaque jour à 05:00. Il travaille
-dans un clone isolé du dépôt — jamais dans le déploiement — sur un thème qui
-tourne avec les jours de la semaine (robustesse, fonctionnalité, performance,
-simplification, accessibilité, tests, intégration Hermes), vérifie son travail
-avec `npm run check`, `npm test` et `npm run build`, puis ouvre une pull
-request et notifie Discord.
+dans un clone isolé du dépôt sur un thème qui tourne avec les jours de la
+semaine (robustesse, fonctionnalité, performance, simplification,
+accessibilité, tests, intégration Hermes), vérifie son travail avec
+`npm run check`, `npm test` et `npm run build`, **déploie le résultat sur
+l'application** (fast-forward + rebuild Docker + smoke test, retour arrière
+automatique en cas d'échec), puis pousse sur GitHub et notifie Discord.
 
-Aucune fusion ni aucun déploiement n'est automatique : les PR attendent une
-relecture humaine. Le déploiement en cours n'est jamais modifié, et une
-sauvegarde horodatée est prise avant chaque exécution.
+`main` sur GitHub reflète donc ce qui tourne réellement. Une sauvegarde
+horodatée est prise avant chaque exécution, et le message Discord contient la
+commande de retour arrière prête à coller.
 
 Le runner vit dans `/opt/stacks/hermes-ui-bot/` (hors dépôt, pour qu'une
 mauvaise PR ne puisse pas casser le mécanisme) et sa documentation est dans

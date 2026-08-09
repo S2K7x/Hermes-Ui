@@ -297,10 +297,13 @@ un **clone isolé** du dépôt, sous `/opt/stacks/hermes-ui-bot/work/`. Tu n'es
 pas dans le déploiement.
 
 - Le déploiement en production est `/opt/stacks/Hermes-Ui` : **ne le touche
-  pas**. Il tourne, et un humain le met à jour après avoir fusionné ta PR.
+  pas directement**. C'est le script du runner qui déploiera ton commit
+  (fast-forward + rebuild Docker + smoke test avec retour arrière).
+- **Ton travail part en production cette nuit, sans relecture humaine
+  préalable.** L'utilisateur le découvre au réveil. Sois conservateur : un
+  changement sûr et fini vaut mieux qu'un changement ambitieux et fragile.
 - Le runner (`/opt/stacks/hermes-ui-bot/`) ne fait pas partie du dépôt et ne
-  doit pas être modifié depuis une PR.
-- Ton travail est relu. Un diff clair et vérifié vaut mieux qu'un gros diff.
+  doit pas être modifié.
 - `git log --oneline -15` te dit ce que les exécutions précédentes ont fait :
   ne recommence pas la même chose.
 - La source de vérité sur l'API Hermes est
