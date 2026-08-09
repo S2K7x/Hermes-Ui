@@ -74,12 +74,34 @@ de question précédente ». Il faudrait lui repasser `conversation_history`, qu
 le handler aplatit en `str(content)` : adieu les `tool_calls` structurés et le
 multimodal. Le multi-tours fidèle vaut plus que le bouton stop.
 
-### 3. Le modèle est figé par session
+### 3. Le modèle d'une session se change — via `POST /api/sessions/{id}/model`
 
-Hermes épingle le modèle sur la ligne de session à la création. Changer le
-modèle dans le sélecteur s'applique à la **prochaine** discussion — c'est
-`chat.nextModel`, et `ModelPicker.svelte` l'explique à l'utilisateur quand la
-conversation courante a déjà des messages.
+Hermes épingle bien un modèle sur la ligne de session à la création, mais ce
+n'est pas définitif : `_handle_session_model_lock` force `require_model_lock`,
+écrit un `browser_model_lock` **confirmé** dans le `model_config` de la session
+et met à jour la colonne `model` (`model = COALESCE(?, model)` dans
+`hermes_state.update_session_runtime_lock`). Chaque tour suivant résout son
+runtime par `_effective_session_runtime_request`, où un verrou confirmé passe
+**avant** la colonne `model`. Le changement s'applique donc à la conversation
+ouverte, dès le message suivant.
+
+`chat.setModel()` fait les deux : il mémorise le choix pour les nouvelles
+discussions (`nextModel`, persisté en localStorage) et, si une conversation est
+ouverte, pose le verrou dessus. `chat.activeModel` est ce que le sélecteur
+affiche : le modèle de la session ouverte, sinon `nextModel`.
+
+Deux pièges :
+
+- Hermes **refuse** un modèle qu'il ne sait pas router (409
+  `model_lock_unavailable`) plutôt que de retomber en silence sur le défaut
+  global. Un rejet veut dire que le choix est inutilisable : `setModel()`
+  annule alors aussi bien la ligne de sidebar que `nextModel`.
+- La capacité est annoncée dans `GET /v1/capabilities` sous
+  `features.session_model_lock`. L'UI se cale dessus (`chat.canSwitchModel`) et
+  retombe sur l'ancien discours — « ce choix s'appliquera à la prochaine
+  discussion » — si le gateway ne l'expose pas. Ce constat vient de la lecture
+  d'`api_server.py` (0.20.0), pas d'une mesure sur un tour réel : à vérifier en
+  relecture.
 
 ### 4. `X-Hermes-Session-Key` doit être stable
 
@@ -98,7 +120,8 @@ affiche pourquoi, plutôt que de laisser le tour échouer.
 ### 6. `PATCH /api/sessions/{id}` n'accepte que 4 champs
 
 `title`, `pinned`, `archived`, `end_reason`. Tout autre champ → 400
-`unsupported_session_field`. Le proxy filtre explicitement.
+`unsupported_session_field`. Le proxy filtre explicitement. Le modèle ne passe
+pas par là mais par `POST /api/sessions/{id}/model` (point 3).
 
 ### 7. Le fork ferme le parent
 
@@ -172,6 +195,7 @@ src/
 │   │   ├── chat.svelte.ts    tout l'état de conversation (runes Svelte 5)
 │   │   └── toast.svelte.ts   notifications
 │   ├── errors.ts      ApiError + codes + `humanizeError`
+│   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage
 │   ├── sse.ts         parseur SSE incrémental (partagé)
 │   ├── markdown.ts    rendu tolérant à l'incomplet

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { shortModelName } from '$lib/models';
 	import { chat } from '$lib/stores/chat.svelte';
 
 	let open = $state(false);
@@ -15,14 +16,14 @@
 			: entries.slice(0, 60)
 	);
 
-	let short = $derived(chat.nextModel.split('/').at(-1) ?? chat.nextModel);
-	/** The model is pinned on the session row at creation time, so changing it
-	 *  applies to the next conversation, not the open one. */
-	let locked = $derived(Boolean(chat.sessionId && (chat.current?.message_count ?? 0) > 0));
+	let short = $derived(shortModelName(chat.activeModel));
+	/** A gateway too old to expose POST /api/sessions/{id}/model still pins the
+	 *  model at session creation: the choice only lands on the next discussion. */
+	let deferred = $derived(Boolean(chat.sessionId) && !chat.canSwitchModel);
 </script>
 
 <div class="picker">
-	<button class="trigger" onclick={() => (open = !open)} title={chat.nextModel}>
+	<button class="trigger" onclick={() => (open = !open)} title={chat.activeModel}>
 		{short || 'modèle'}
 		<span class="chev">▾</span>
 	</button>
@@ -31,19 +32,23 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<div class="scrim" onclick={() => (open = false)}></div>
 		<div class="menu">
-			{#if locked}
+			{#if deferred}
 				<p class="hint">
-					Hermes fige le modèle par conversation : ce choix s'appliquera à la prochaine
+					Ce gateway fige le modèle par conversation : ce choix s'appliquera à la prochaine
 					discussion.
+				</p>
+			{:else if chat.sessionId}
+				<p class="hint">
+					Le modèle choisi s'applique à cette conversation dès le prochain message.
 				</p>
 			{/if}
 			<input bind:value={filter} placeholder="Filtrer…" type="search" />
 			<div class="items">
 				{#each matches as entry (entry.provider + entry.model)}
 					<button
-						class:sel={entry.model === chat.nextModel}
+						class:sel={entry.model === chat.activeModel}
 						onclick={() => {
-							chat.nextModel = entry.model;
+							chat.setModel(entry.model);
 							open = false;
 						}}
 					>

@@ -1,6 +1,7 @@
 import { api, withRetry } from '$lib/client/api';
 import { readJSON, writeJSON } from '$lib/client/storage';
 import { ApiError, AppErrorCode } from '$lib/errors';
+import { isModelAvailable, providerForModel, shortModelName } from '$lib/models';
 import { newSSEState, parseSSEChunk } from '$lib/sse';
 import { emptyAssistant, groupTranscript, uid, type UiMessage } from '$lib/transcript';
 import { toasts } from './toast.svelte';
@@ -10,6 +11,7 @@ import type {
 	HermesMessage,
 	HermesSession,
 	ModelOptions,
+	SessionRuntime,
 	StatusPayload,
 	ToolStep
 } from '$lib/types';
@@ -34,9 +36,11 @@ class ChatStore {
 	connected = $state<boolean | null>(null);
 	version = $state('');
 	status = $state<StatusPayload | null>(null);
+	/** `capabilities.features` — features are gated off this, not off a version. */
+	features = $state<Record<string, boolean | string>>({});
 
 	models = $state<ModelOptions | null>(null);
-	/** Model for the NEXT new session — Hermes pins it per session row. */
+	/** Model used for a NEW session, and the default the picker shows. */
 	nextModel = $state('');
 	skills = $state<Array<{ name: string; description?: string }>>([]);
 	toolCount = $state(0);
@@ -53,6 +57,16 @@ class ChatStore {
 
 	get canResend(): boolean {
 		return !this.streaming && this.#lastPrompt !== null;
+	}
+
+	/** Model the next message will run on: the open session's, else nextModel. */
+	get activeModel(): string {
+		return (this.sessionId && this.current?.model) || this.nextModel;
+	}
+
+	/** Does this gateway expose POST /api/sessions/{id}/model? */
+	get canSwitchModel(): boolean {
+		return this.features.session_model_lock === true;
 	}
 
 	// -- bootstrap ----------------------------------------------------------
@@ -87,12 +101,14 @@ class ChatStore {
 	async refreshHealth() {
 		const wasConnected = this.connected;
 		try {
-			const res = await api<{ health: { version: string } }>('/api/capabilities', {
-				timeoutMs: 8000
-			});
+			const res = await api<{
+				health: { version: string };
+				capabilities?: { features?: Record<string, boolean | string> };
+			}>('/api/capabilities', { timeoutMs: 8000 });
 			this.connected = true;
 			this.#healthBackoff = 0;
 			this.version = res.health?.version ?? '';
+			this.features = res.capabilities?.features ?? {};
 			if (wasConnected === false) {
 				toasts.success('Connexion à Hermes rétablie.');
 				// State may have moved on while we were blind.
@@ -117,8 +133,7 @@ class ChatStore {
 		try {
 			this.models = await withRetry(() => api<ModelOptions>('/api/models'));
 			// A model saved from a previous session may no longer be offered.
-			const known = new Set(this.models.providers.flatMap((p) => p.models));
-			if (!this.nextModel || !known.has(this.nextModel)) this.nextModel = this.models.model;
+			if (!isModelAvailable(this.models, this.nextModel)) this.nextModel = this.models.model;
 		} catch {
 			/* the picker stays empty; chat still works on the server default */
 		}
@@ -150,9 +165,50 @@ class ChatStore {
 		}
 	}
 
-	setModel(model: string) {
+	/**
+	 * Pick a model.
+	 *
+	 * It becomes the default for new conversations, and — when one is open and
+	 * the gateway advertises `session_model_lock` — is re-pinned on that
+	 * conversation right away: Hermes persists a confirmed model lock on the
+	 * session row and resolves every later turn through it, so the switch
+	 * takes effect from the next message instead of the next discussion.
+	 *
+	 * Upstream refuses a model it cannot route (409 `model_lock_unavailable`)
+	 * rather than falling back to the global default, so a rejection means the
+	 * choice is unusable here too: both the session and `nextModel` roll back.
+	 */
+	async setModel(model: string) {
+		if (!model || model === this.activeModel) return;
+		const previousNext = this.nextModel;
 		this.nextModel = model;
 		writeJSON('hermes-next-model', model);
+
+		const id = this.sessionId;
+		if (!id || !this.canSwitchModel) return;
+
+		const previousModel = this.current?.model ?? null;
+		this.#patchLocal(id, { model });
+		try {
+			const res = await api<{ runtime?: SessionRuntime }>(
+				`/api/sessions/${encodeURIComponent(id)}/model`,
+				{
+					method: 'POST',
+					body: JSON.stringify({ model, provider: providerForModel(this.models, model) })
+				}
+			);
+			// Hermes echoes what it actually routed to; trust it over our guess.
+			const applied = res.runtime?.model || model;
+			this.#patchLocal(id, { model: applied });
+			toasts.success(
+				`Cette conversation utilise ${shortModelName(applied)} à partir du prochain message.`
+			);
+		} catch (err) {
+			this.#patchLocal(id, { model: previousModel });
+			this.nextModel = previousNext;
+			writeJSON('hermes-next-model', previousNext);
+			toasts.error(err);
+		}
 	}
 
 	// -- session lifecycle --------------------------------------------------

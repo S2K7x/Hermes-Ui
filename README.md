@@ -22,7 +22,8 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   tours en cours, coût et tokens de la conversation
 - **Palette de skills** : `/` dans le composeur
 - **Images en entrée** : coller ou déposer, envoyées en base64
-- **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes
+- **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
+  applicable à la conversation ouverte dès le message suivant
 - **Export markdown** de la conversation
 - **PWA** installable sur téléphone, thème sombre, responsive
 - **Raccourcis clavier** (`?` pour la liste)

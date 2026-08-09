@@ -49,6 +49,16 @@ export interface HermesCapabilities {
 	endpoints: Record<string, { method: string; path: string }>;
 }
 
+/** `runtime` block returned by the session model-lock endpoint. */
+export interface SessionRuntime {
+	provider: string;
+	model: string;
+	route_source: string;
+	requested?: { provider: string; model: string };
+	/** "accepted" once Hermes has confirmed the lock. */
+	model_lock?: string;
+}
+
 export interface ModelOptions {
 	model: string;
 	provider: string;
