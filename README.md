@@ -166,6 +166,23 @@ Pi**. `API_SERVER_KEY` est un secret équivalent-root :
 Placez `~/.hermes/state.db` et `data/` sur un SSD. Les écritures SQLite
 fréquentes usent rapidement une carte SD.
 
+## Amélioration automatique quotidienne
+
+Un timer systemd sur le Pi lance Claude Code chaque jour à 05:00. Il travaille
+dans un clone isolé du dépôt — jamais dans le déploiement — sur un thème qui
+tourne avec les jours de la semaine (robustesse, fonctionnalité, performance,
+simplification, accessibilité, tests, intégration Hermes), vérifie son travail
+avec `npm run check`, `npm test` et `npm run build`, puis ouvre une pull
+request et notifie Discord.
+
+Aucune fusion ni aucun déploiement n'est automatique : les PR attendent une
+relecture humaine. Le déploiement en cours n'est jamais modifié, et une
+sauvegarde horodatée est prise avant chaque exécution.
+
+Le runner vit dans `/opt/stacks/hermes-ui-bot/` (hors dépôt, pour qu'une
+mauvaise PR ne puisse pas casser le mécanisme) et sa documentation est dans
+`/opt/stacks/hermes-ui-bot/README.md`.
+
 ## Documentation développeur
 
 Voir [CLAUDE.md](CLAUDE.md) : contrat exact de l'API, pièges vérifiés

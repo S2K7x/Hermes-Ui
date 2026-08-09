@@ -266,6 +266,25 @@ docker compose logs -f
 Journaux Hermes : `journalctl --user -u hermes-gateway -f` et
 `~/.hermes/logs/gateway.log`.
 
+## Si tu lis ceci depuis l'exécution automatique de 05:00
+
+Un timer systemd (`hermes-ui-improve.timer`) lance Claude Code chaque jour dans
+un **clone isolé** du dépôt, sous `/opt/stacks/hermes-ui-bot/work/`. Tu n'es
+pas dans le déploiement.
+
+- Le déploiement en production est `/opt/stacks/Hermes-Ui` : **ne le touche
+  pas**. Il tourne, et un humain le met à jour après avoir fusionné ta PR.
+- Le runner (`/opt/stacks/hermes-ui-bot/`) ne fait pas partie du dépôt et ne
+  doit pas être modifié depuis une PR.
+- Ton travail est relu. Un diff clair et vérifié vaut mieux qu'un gros diff.
+- `git log --oneline -15` te dit ce que les exécutions précédentes ont fait :
+  ne recommence pas la même chose.
+- La source de vérité sur l'API Hermes est
+  `/mnt/data/hermes/hermes-agent/gateway/platforms/api_server.py`, en lecture
+  seule. La documentation en ligne est en retard sur cette version (0.20.0).
+
+Les consignes complètes sont dans `/opt/stacks/hermes-ui-bot/prompt.md`.
+
 ## Sécurité — non négociable
 
 - Le serveur API exécute **le toolset complet, terminal compris, sur le Pi**.
