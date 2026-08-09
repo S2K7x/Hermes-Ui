@@ -122,7 +122,9 @@ affiche pourquoi, plutôt que de laisser le tour échouer.
 
 `title`, `pinned`, `archived`, `end_reason`. Tout autre champ → 400
 `unsupported_session_field`. Le proxy filtre explicitement. Le modèle ne passe
-pas par là mais par `POST /api/sessions/{id}/model` (point 3).
+pas par là mais par `POST /api/sessions/{id}/model` (point 3). Poser
+`archived` est accepté, mais rend la conversation invisible à toute liste —
+voir le point 12.
 
 ### 7. Le fork ferme le parent
 
@@ -191,6 +193,42 @@ Routes : `GET|POST /api/skills/files` (liste / création) et
 `proxy()` — il ne connaît que `HermesError` — mais `skillsJson()`, son
 équivalent pour `SkillsFsError`.
 
+### 12. Archiver, c'est une porte à sens unique côté API
+
+`GET /api/sessions` ne peut **jamais** renvoyer une conversation archivée.
+`_handle_list_sessions` appelle `list_sessions_rich()` sans `include_archived`
+(défaut `False`) et n'expose aucun paramètre de requête pour le changer —
+`archived_only` non plus. Vérifié : zéro occurrence des deux dans
+`api_server.py` (0.20.0). Seul `GET /api/sessions/{id}` atteint une ligne
+archivée, car `get_session` ne filtre pas.
+
+Conséquence : filtrer la liste sur `archived` ne peut donner qu'un résultat
+vide. La sidebar tient donc **deux** listes distinctes — `chat.sessions`
+(vivantes, celles que l'amont renvoie) et `chat.archivedSessions` — et
+`toggleArchive()` déplace la ligne de l'une à l'autre au lieu de basculer un
+drapeau sur place.
+
+Le contournement pour retrouver les archivées :
+
+- `session_meta` (dans `data/hermes-web.db`, déjà là pour le cache de titres)
+  sert d'**index des identifiants déjà vus**. `GET /api/sessions` y enregistre
+  chaque id renvoyé (`rememberSessions()`, insertion seule : rafraîchir la
+  sidebar ne doit pas réécrire 200 lignes).
+- `GET /api/sessions?archived=true` prend les ids connus, retire ceux que la
+  liste vivante renvoie encore (`archivedCandidates()`, pur et testé), et
+  interroge chaque survivant par `GET /api/sessions/{id}`. Un 404 sort l'id de
+  l'index (supprimée ailleurs) ; une ligne non archivée était simplement hors
+  fenêtre de récence.
+- Le fan-out est plafonné à 60 sondes, 6 en parallèle, et la réponse porte
+  `truncated` pour que l'UI le dise au lieu de faire croire à un archivage
+  exhaustif. C'est aussi pourquoi cette vue est chargée **à la demande** et
+  jamais pendant un `refreshSessions()`.
+
+Limite assumée : une conversation archivée **avant** que son id soit entré dans
+l'index reste introuvable. Ça couvre l'archivage fait depuis l'UI, depuis le
+CLI, ou par la purge `sessions.auto_archive` de Hermes, tant que la
+conversation a été vue au moins une fois dans une liste.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -237,7 +275,8 @@ src/
 │   │   └── toast.svelte.ts   notifications
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
-│   ├── sessions.ts    groupement par date, recherche, libellés, usage
+│   ├── sessions.ts    groupement par date, recherche, libellés, usage,
+│   │                  candidats de la vue archivée
 │   ├── skills.ts      chemins de skills validés, gabarits, groupement
 │   ├── sse.ts         parseur SSE incrémental (partagé)
 │   ├── markdown.ts    rendu tolérant à l'incomplet

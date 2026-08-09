@@ -24,6 +24,18 @@ interface LastPrompt {
 
 class ChatStore {
 	sessions = $state<HermesSession[]>([]);
+	/**
+	 * Archived conversations, loaded on demand and kept apart from `sessions`.
+	 *
+	 * `GET /api/sessions` never returns an archived row, so filtering `sessions`
+	 * on `archived` — which is what this used to do — could only ever yield an
+	 * empty list once the sidebar had refreshed. The proxy rebuilds this one id
+	 * by id instead.
+	 */
+	archivedSessions = $state<HermesSession[]>([]);
+	loadingArchived = $state(false);
+	/** True when the archive probe hit its cap and may be missing older rows. */
+	archivedTruncated = $state(false);
 	sessionId = $state<string | null>(null);
 	messages = $state<UiMessage[]>([]);
 	streaming = $state(false);
@@ -52,7 +64,9 @@ class ChatStore {
 	#healthBackoff = 0;
 
 	get current(): HermesSession | undefined {
-		return this.sessions.find((s) => s.id === this.sessionId);
+		const id = this.sessionId;
+		if (!id) return undefined;
+		return this.sessions.find((s) => s.id === id) ?? this.archivedSessions.find((s) => s.id === id);
 	}
 
 	get canResend(): boolean {
@@ -166,6 +180,29 @@ class ChatStore {
 	}
 
 	/**
+	 * Load the archived conversations.
+	 *
+	 * Deliberately on demand: the proxy has to probe sessions one by one to
+	 * find them, so this is far more expensive than a normal listing and has
+	 * no business running on every sidebar refresh.
+	 */
+	async refreshArchived() {
+		this.loadingArchived = true;
+		try {
+			const res = await api<{ data: HermesSession[]; truncated?: boolean }>(
+				'/api/sessions?archived=true',
+				{ timeoutMs: 30_000 }
+			);
+			this.archivedSessions = res.data ?? [];
+			this.archivedTruncated = res.truncated === true;
+		} catch (err) {
+			toasts.error(err, { label: 'Réessayer', run: () => this.refreshArchived() });
+		} finally {
+			this.loadingArchived = false;
+		}
+	}
+
+	/**
 	 * Pick a model.
 	 *
 	 * It becomes the default for new conversations, and — when one is open and
@@ -248,6 +285,7 @@ class ChatStore {
 				// Deleted from the CLI, Telegram, or another tab. Re-sync
 				// rather than leaving a ghost row in the sidebar.
 				this.sessions = this.sessions.filter((s) => s.id !== id);
+				this.archivedSessions = this.archivedSessions.filter((s) => s.id !== id);
 				this.sessionId = null;
 				toasts.info("Cette conversation n'existe plus.");
 			} else {
@@ -295,11 +333,20 @@ class ChatStore {
 		}
 	}
 
+	/**
+	 * Archive or unarchive a conversation.
+	 *
+	 * The row moves between `sessions` and `archivedSessions` instead of just
+	 * flipping a flag: archiving removes it from every upstream listing, so
+	 * leaving it in `sessions` would make it reappear until the next refresh
+	 * and then vanish without explanation.
+	 */
 	async toggleArchive(id: string) {
-		const session = this.sessions.find((s) => s.id === id);
+		const session =
+			this.sessions.find((s) => s.id === id) ?? this.archivedSessions.find((s) => s.id === id);
 		if (!session) return;
 		const archived = !session.archived;
-		this.#patchLocal(id, { archived });
+		this.#placeSession(session, archived);
 		try {
 			await api(`/api/sessions/${encodeURIComponent(id)}`, {
 				method: 'PATCH',
@@ -307,14 +354,25 @@ class ChatStore {
 			});
 			toasts.success(archived ? 'Conversation archivée.' : 'Conversation désarchivée.');
 		} catch (err) {
-			this.#patchLocal(id, { archived: !archived });
+			this.#placeSession(session, !archived);
 			toasts.error(err);
 		}
 	}
 
+	/** Put a session in exactly one of the two lists, with `archived` set to match. */
+	#placeSession(session: HermesSession, archived: boolean) {
+		const row = { ...session, archived };
+		this.sessions = this.sessions.filter((s) => s.id !== row.id);
+		this.archivedSessions = this.archivedSessions.filter((s) => s.id !== row.id);
+		if (archived) this.archivedSessions = [row, ...this.archivedSessions];
+		else this.sessions = [row, ...this.sessions];
+	}
+
 	async deleteSession(id: string) {
 		const snapshot = this.sessions;
+		const archivedSnapshot = this.archivedSessions;
 		this.sessions = this.sessions.filter((s) => s.id !== id);
+		this.archivedSessions = this.archivedSessions.filter((s) => s.id !== id);
 		if (this.sessionId === id) {
 			this.sessionId = null;
 			this.messages = [];
@@ -325,6 +383,7 @@ class ChatStore {
 			// A 404 means it was already gone — the optimistic removal was right.
 			if (err instanceof ApiError && err.code === AppErrorCode.SessionGone) return;
 			this.sessions = snapshot;
+			this.archivedSessions = archivedSnapshot;
 			toasts.error(err);
 		}
 	}
@@ -345,8 +404,12 @@ class ChatStore {
 		}
 	}
 
+	/** Both lists: renaming or pinning works from the archived view too. */
 	#patchLocal(id: string, patch: Partial<HermesSession>) {
-		this.sessions = this.sessions.map((s) => (s.id === id ? { ...s, ...patch } : s));
+		const apply = (list: HermesSession[]) =>
+			list.map((s) => (s.id === id ? { ...s, ...patch } : s));
+		this.sessions = apply(this.sessions);
+		this.archivedSessions = apply(this.archivedSessions);
 	}
 
 	// -- the turn -----------------------------------------------------------

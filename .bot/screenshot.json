@@ -1,0 +1,5 @@
+{
+	"path": "/",
+	"js": "(async()=>{const wait=(ms)=>new Promise(r=>setTimeout(r,ms));const rail=document.querySelector('.rail-btn');if(rail){rail.click();await wait(400);}const btn=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Archivées');if(btn)btn.click();await wait(3000);return btn?'opened':'not-found'})()",
+	"caption": "La vue « Archivées » de la sidebar, désormais reconstruite à la demande : l'API Hermes exclut les conversations archivées de toutes ses listes, l'app les retrouve une par une à partir des identifiants déjà vus."
+}

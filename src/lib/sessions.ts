@@ -88,6 +88,29 @@ const normalize = (s: string) =>
 		.normalize('NFD')
 		.replace(/[\u0300-\u036f]/g, '');
 
+/**
+ * Session ids worth probing one by one to rebuild the archived list.
+ *
+ * `GET /api/sessions` can never return an archived conversation: Hermes calls
+ * `list_sessions_rich()` without `include_archived`, whose default is False,
+ * and exposes no query parameter for it. Only `GET /api/sessions/{id}` reaches
+ * an archived row. So the archived view is rebuilt from the ids this app has
+ * already seen in a listing, minus the ones the live listing still returns —
+ * whatever is left is archived, deleted, or aged past the recency window.
+ *
+ * `known` is expected newest-first; the cap bounds the fan-out, since each
+ * candidate costs one upstream round-trip on a Pi.
+ */
+export function archivedCandidates(known: string[], active: string[], limit: number): string[] {
+	const live = new Set(active);
+	const out: string[] = [];
+	for (const id of known) {
+		if (out.length >= limit) break;
+		if (!live.has(id)) out.push(id);
+	}
+	return out;
+}
+
 /** Compact token/cost summary for a session, or null when nothing ran yet. */
 export function usageSummary(s: HermesSession | undefined): string | null {
 	if (!s) return null;

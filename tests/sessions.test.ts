@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { groupSessions, matchesQuery, sessionLabel, usageSummary } from '../src/lib/sessions.ts';
+import {
+	archivedCandidates,
+	groupSessions,
+	matchesQuery,
+	sessionLabel,
+	usageSummary
+} from '../src/lib/sessions.ts';
 import { ApiError, AppErrorCode, humanizeError } from '../src/lib/errors.ts';
 import type { HermesSession } from '../src/lib/types.ts';
 
@@ -92,4 +98,19 @@ test('retryable classification drives the retry helper', () => {
 	// A rejected payload will be rejected again — replaying it is pointless.
 	assert.ok(!new ApiError(400, '', 'unsupported_content_type').retryable);
 	assert.ok(!new ApiError(404, '', AppErrorCode.SessionGone).retryable);
+});
+
+test('archive candidates are the known ids the live listing dropped', () => {
+	const known = ['e', 'd', 'c', 'b', 'a'];
+	// c and a are still listed, so they are not archived.
+	assert.deepEqual(archivedCandidates(known, ['c', 'a'], 10), ['e', 'd', 'b']);
+	// Order follows `known`, newest-first, and the cap bounds the fan-out.
+	assert.deepEqual(archivedCandidates(known, [], 2), ['e', 'd']);
+	// Nothing to probe when every known session is still live.
+	assert.deepEqual(archivedCandidates(known, known, 10), []);
+	assert.deepEqual(archivedCandidates([], ['a'], 10), []);
+	// A live id we have never recorded is simply irrelevant here.
+	assert.deepEqual(archivedCandidates(['a'], ['z'], 10), ['a']);
+	// A zero cap disables probing entirely rather than probing everything.
+	assert.deepEqual(archivedCandidates(known, [], 0), []);
 });

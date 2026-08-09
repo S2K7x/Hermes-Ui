@@ -76,4 +76,39 @@ export const cacheTitle = (sessionId: string, title: string) =>
 export const cachedTitle = (sessionId: string) => selTitle.get(sessionId)?.title_cache ?? null;
 export const forgetSession = (sessionId: string) => delMeta.run(sessionId);
 
+// ---------------------------------------------------------------------------
+// Index of session ids we have ever seen
+// ---------------------------------------------------------------------------
+
+/**
+ * `session_meta` doubles as the list of conversations this app knows about.
+ *
+ * Archiving is a one-way door in the Sessions API: `GET /api/sessions` filters
+ * archived rows out and offers no flag to include them, so once a conversation
+ * is archived — by this UI, by the CLI, or by Hermes' own stale sweep — there
+ * is no way to enumerate it again. Recording every id we see in a listing is
+ * what lets the archived view find them later, one `GET /api/sessions/{id}`
+ * at a time.
+ */
+const rememberOne = db.prepare(
+	`INSERT INTO session_meta (session_id, updated_at) VALUES (?, ?)
+	 ON CONFLICT(session_id) DO NOTHING`
+);
+// Insert-only on purpose: refreshing the sidebar must not rewrite 200 rows
+// every time. `updated_at` therefore means "first seen", which is good enough
+// to order archive probes newest-first.
+const rememberAll = db.transaction((ids: string[], now: number) => {
+	for (const id of ids) rememberOne.run(id, now);
+});
+
+export function rememberSessions(ids: string[]): void {
+	if (ids.length === 0) return;
+	rememberAll(ids, Date.now() / 1000);
+}
+
+const selKnown = db.prepare('SELECT session_id FROM session_meta ORDER BY updated_at DESC LIMIT ?');
+
+export const knownSessionIds = (limit: number): string[] =>
+	(selKnown.all(limit) as Array<{ session_id: string }>).map((row) => row.session_id);
+
 export default db;

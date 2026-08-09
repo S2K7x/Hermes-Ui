@@ -20,13 +20,18 @@
 	let renameValue = $state('');
 	let menuFor = $state<string | null>(null);
 
+	// Archived conversations come from a different list, not a filter: Hermes
+	// excludes them from every listing, so `chat.sessions` never holds one.
 	let visible = $derived(
-		chat.sessions
-			.filter((s) => Boolean(s.archived) === showArchived)
-			.filter((s) => matchesQuery(s, filter))
+		(showArchived ? chat.archivedSessions : chat.sessions).filter((s) => matchesQuery(s, filter))
 	);
 	let groups = $derived(groupSessions(visible));
-	let archivedCount = $derived(chat.sessions.filter((s) => s.archived).length);
+
+	/** Rebuilding the archive costs one request per candidate — load it on open. */
+	async function toggleArchived() {
+		showArchived = !showArchived;
+		if (showArchived) await chat.refreshArchived();
+	}
 
 	async function pick(id: string) {
 		await chat.openSession(id);
@@ -150,7 +155,9 @@
 
 			{#if visible.length === 0}
 				<p class="empty">
-					{#if chat.loadingSessions}
+					{#if showArchived && chat.loadingArchived}
+						Recherche des conversations archivées…
+					{:else if !showArchived && chat.loadingSessions}
 						Chargement…
 					{:else if filter}
 						Aucun résultat pour « {filter} ».
@@ -160,15 +167,22 @@
 						Aucune discussion pour l'instant.
 					{/if}
 				</p>
+			{:else if showArchived && chat.archivedTruncated}
+				<p class="empty">
+					Seules les conversations archivées les plus récentes sont listées : Hermes ne sait pas
+					les énumérer, elles sont retrouvées une par une.
+				</p>
 			{/if}
 		</nav>
 
 		<footer>
-			{#if archivedCount > 0 || showArchived}
-				<button class="archive-toggle" onclick={() => (showArchived = !showArchived)}>
-					{showArchived ? '← Discussions' : `Archivées (${archivedCount})`}
-				</button>
-			{/if}
+			<button
+				class="archive-toggle"
+				onclick={toggleArchived}
+				title="Les conversations archivées sont masquées des listes ; elles sont retrouvées à la demande."
+			>
+				{showArchived ? '← Discussions' : 'Archivées'}
+			</button>
 			<button class="archive-toggle" onclick={onopenSkills} title="Créer et modifier les skills">
 				📚 Skills
 			</button>

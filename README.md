@@ -13,6 +13,9 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Fil de conversation** avec streaming token par token et curseur de frappe
 - **Sidebar d'historique** groupée par date (Aujourd'hui / Hier / 7 jours / …),
   épinglage, renommage, archivage, suppression, branches, repli sur desktop
+- **Vue « Archivées »** reconstruite à la demande : l'API Hermes exclut les
+  conversations archivées de toutes ses listes, l'app les retrouve une par une
+  à partir des identifiants qu'elle a déjà vus
 - **Palette de commandes** `⌘K` : recherche insensible aux accents dans toutes
   les conversations + actions rapides
 - **Timeline des étapes de l'agent** : chaque appel d'outil (terminal, web,
