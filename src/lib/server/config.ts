@@ -34,6 +34,17 @@ export const WEB_DB_PATH = env.WEB_DB_PATH || './data/hermes-web.db';
 export const SESSION_SOURCE = 'api_server';
 
 /**
+ * Directory holding Hermes' skill tree (`<category>/<skill>/SKILL.md`).
+ *
+ * Optional on purpose. In Docker it is the `/skills` bind mount declared in
+ * docker-compose.yml; in `npm run dev` outside the container it is whatever
+ * the developer points it at, usually nothing. Unset — or set to something
+ * unreadable — simply turns the skills editor off in the UI, which is the
+ * right default for a path that sits outside this app's own data directory.
+ */
+export const SKILLS_DIR = env.SKILLS_DIR?.trim() || '';
+
+/**
  * Timeout for ordinary (non-streaming) Hermes calls. Generous, because
  * `/health/detailed` walks the disk and `/api/model/options` can hit a cold
  * model cache — but finite, so a wedged upstream cannot pin sockets forever.

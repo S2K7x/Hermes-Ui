@@ -21,6 +21,9 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   disque, gateway, plateformes), outils/skills exposés, tâches planifiées,
   tours en cours, coût et tokens de la conversation
 - **Palette de skills** : `/` dans le composeur
+- **Éditeur de skills** (📚 dans la sidebar, ou `⌘K` → « Modifier les skills ») :
+  liste des `SKILL.md` groupée par catégorie, édition en texte brut,
+  création guidée d'un nouveau skill
 - **Images en entrée** : coller ou déposer, envoyées en base64
 - **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
   applicable à la conversation ouverte dès le message suivant
@@ -37,6 +40,21 @@ que de recopier l'erreur amont. Les échecs transitoires sont retentés — mais
 seulement sur les lectures, jamais sur un tour d'agent. Un plafond local de
 tours simultanés (3 par défaut) protège le Pi avant que celui de Hermes (10)
 n'entre en jeu. Le détail est dans [CLAUDE.md](CLAUDE.md).
+
+### Skills : ce que l'éditeur fait, et ne fait pas
+
+L'éditeur travaille sur les **fichiers** de `~/.hermes/skills`
+(`<catégorie>/<skill>/SKILL.md`, plus un `DESCRIPTION.md` par catégorie), pas
+sur ce que Hermes a chargé en mémoire. Conséquence à connaître :
+**un skill créé ou renommé n'est pas forcément pris en compte tout de suite** —
+`systemctl --user restart hermes-gateway` lève le doute.
+
+Périmètre volontairement étroit : seuls `SKILL.md` et `DESCRIPTION.md` sont
+lisibles et modifiables, il n'y a pas de suppression, les fichiers dépassant
+256 Ko sont renvoyés vers la ligne de commande, et les fichiers cachés du
+tri automatique de Hermes (`.bundled_manifest`, `.curator_state`) ne sont ni
+listés ni accessibles. Sans le montage `/skills` (voir `docker-compose.yml`),
+le panneau s'affiche désactivé au lieu de casser.
 
 ### Une limite à connaître
 
@@ -97,6 +115,11 @@ cp .env.example .env
 $EDITOR .env          # HERMES_API_KEY = la même valeur que API_SERVER_KEY
 chmod 600 .env
 ```
+
+`HERMES_SKILLS_DIR` (défaut `/home/pi/.hermes/skills`) est le répertoire monté
+en lecture-écriture dans le conteneur pour l'éditeur de skills. Retirez le
+volume dans `docker-compose.yml` si vous préférez que l'app n'écrive nulle
+part hors de `data/`.
 
 ### 3. Lancer
 
@@ -161,6 +184,9 @@ Pi**. `API_SERVER_KEY` est un secret équivalent-root :
 - le conteneur ne publie que sur `127.0.0.1:3000`
 - la clé ne quitte jamais le proxy SvelteKit
 - aucun port n'est ouvert sur la box
+- l'éditeur de skills n'écrit que deux noms de fichiers, sous un chemin résolu
+  par `realpath` et vérifié comme étant à l'intérieur du répertoire monté :
+  ni `..`, ni lien symbolique, ni fichier caché n'en sortent
 
 ## Notes matérielles
 

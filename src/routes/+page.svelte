@@ -6,6 +6,7 @@
 	import ModelPicker from '$lib/components/ModelPicker.svelte';
 	import Shortcuts from '$lib/components/Shortcuts.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
+	import SkillsPanel from '$lib/components/SkillsPanel.svelte';
 	import StatusPanel from '$lib/components/StatusPanel.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { toasts } from '$lib/stores/toast.svelte';
@@ -17,6 +18,7 @@
 	let sidebarCollapsed = $state(false);
 	let paletteOpen = $state(false);
 	let statusOpen = $state(false);
+	let skillsOpen = $state(false);
 	let shortcutsOpen = $state(false);
 	let narrow = $state(false);
 
@@ -119,6 +121,7 @@
 	const commands = $derived([
 		{ id: 'new', label: 'Nouvelle discussion', hint: `${mod} ⇧O`, run: () => chat.newSession() },
 		{ id: 'status', label: 'État du système', hint: `${mod} /`, run: () => (statusOpen = true) },
+		{ id: 'skills', label: 'Modifier les skills', run: () => (skillsOpen = true) },
 		{ id: 'export', label: 'Exporter la conversation (markdown)', run: exportMarkdown },
 		{ id: 'reload', label: 'Recharger la conversation', run: () => chat.reload() },
 		...(chat.sessionId
@@ -130,6 +133,9 @@
 	]);
 
 	function onKeydown(event: KeyboardEvent) {
+		// The skills editor is modal and owns its own Escape / ⌘S while open;
+		// letting these shortcuts through would fire behind it.
+		if (skillsOpen) return;
 		const meta = hasMod(event);
 		const target = event.target as HTMLElement | null;
 		const typing =
@@ -184,6 +190,7 @@
 		onclose={() => (sidebarOpen = false)}
 		ontoggleCollapse={toggleCollapse}
 		onopenStatus={() => (statusOpen = true)}
+		onopenSkills={() => (skillsOpen = true)}
 	/>
 
 	{#if sidebarOpen}
@@ -269,6 +276,7 @@
 
 <CommandPalette open={paletteOpen} onclose={() => (paletteOpen = false)} {commands} />
 <StatusPanel open={statusOpen} onclose={() => (statusOpen = false)} />
+<SkillsPanel open={skillsOpen} onclose={() => (skillsOpen = false)} />
 <Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />
 
 <style>

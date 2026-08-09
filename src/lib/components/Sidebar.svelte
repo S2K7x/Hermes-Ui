@@ -9,8 +9,10 @@
 		onclose: () => void;
 		ontoggleCollapse: () => void;
 		onopenStatus: () => void;
+		onopenSkills: () => void;
 	}
-	let { open, collapsed, onclose, ontoggleCollapse, onopenStatus }: Props = $props();
+	let { open, collapsed, onclose, ontoggleCollapse, onopenStatus, onopenSkills }: Props =
+		$props();
 
 	let filter = $state('');
 	let showArchived = $state(false);
@@ -69,6 +71,7 @@
 				>＋</button
 			>
 			<div class="rail-spacer"></div>
+			<button class="rail-btn" onclick={onopenSkills} aria-label="Skills">📚</button>
 			<button class="rail-btn" onclick={onopenStatus} aria-label="État du système">
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
 				></span>
@@ -166,6 +169,9 @@
 					{showArchived ? '← Discussions' : `Archivées (${archivedCount})`}
 				</button>
 			{/if}
+			<button class="archive-toggle" onclick={onopenSkills} title="Créer et modifier les skills">
+				📚 Skills
+			</button>
 			<button class="status" onclick={onopenStatus} title="État du système">
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
 				></span>

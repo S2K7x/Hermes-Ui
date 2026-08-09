@@ -35,10 +35,21 @@ services:
       BODY_SIZE_LIMIT: 8M # inline images travel as base64 data: URLs
       HERMES_TIMEOUT_MS: ${HERMES_TIMEOUT_MS:-30000}
       MAX_CONCURRENT_TURNS: ${MAX_CONCURRENT_TURNS:-3}
+      # Path INSIDE the container of the skills bind mount below. Unset it (or
+      # remove the mount) and the skills editor simply disappears from the UI.
+      SKILLS_DIR: /skills
 
     volumes:
       # Put this path on the SSD. SQLite WAL churn kills SD cards.
       - ${WEB_DATA_DIR:-./data}:/data
+
+      # Hermes' skill tree, read-write: the in-app editor writes SKILL.md and
+      # DESCRIPTION.md here. Only those two filenames are ever touched, and
+      # only under a realpath-checked path (src/lib/server/skills.ts).
+      #
+      # The container runs as uid 1000 (`node`), which is `pi` on this host —
+      # that is why an ordinary bind mount is enough, with no `user:` override.
+      - ${HERMES_SKILLS_DIR:-/home/pi/.hermes/skills}:/skills
 
     logging:
       driver: json-file

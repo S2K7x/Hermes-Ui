@@ -21,7 +21,8 @@ Navigateur / PWA
 SvelteKit adapter-node — 127.0.0.1:3000  (conteneur Docker)
    ├── src/routes/api/**      proxy de confiance : injecte le Bearer
    ├── src/lib/server/sse.ts  relais SSE
-   └── data/hermes-web.db     préférences + cache de titres (UI seulement)
+   ├── data/hermes-web.db     préférences + cache de titres (UI seulement)
+   └── /skills                bind mount de ~/.hermes/skills (éditeur de skills)
    │  HTTP loopback + Authorization: Bearer
    ▼
 Hermes gateway (systemd --user hermes-gateway) — 127.0.0.1:8642
@@ -153,6 +154,43 @@ messages terminés.
 Après toute modification de `~/.hermes/.env` ou `config.yaml` :
 `systemctl --user restart hermes-gateway`.
 
+### 11. L'éditeur de skills touche des fichiers, pas l'API
+
+`GET /v1/skills` (proxifié par `/api/skills`) dit ce que Hermes **a chargé**.
+L'éditeur, lui, travaille sur le disque : `SKILLS_DIR` (le bind mount `/skills`
+en Docker, rien du tout ailleurs) pointe sur `~/.hermes/skills`, organisé en
+`<catégorie>/<skill>/SKILL.md` avec un `DESCRIPTION.md` par catégorie.
+
+Rien ici ne suppose que Hermes relit ses skills à chaud — l'UI dit simplement
+qu'un `systemctl --user restart hermes-gateway` peut être nécessaire. Ne pas
+prétendre le contraire sans l'avoir mesuré.
+
+Les invariants, tous dans `src/lib/skills.ts` (pur, testé) et
+`src/lib/server/skills.ts` (fs) :
+
+- Chaque composant de chemin passe par `skillSegments()` : noms validés
+  `^[a-z0-9][a-z0-9-]*$`, 64 caractères max. Ni `..`, ni `/`, ni fichier caché
+  ne peuvent en sortir — `.bundled_manifest` et `.curator_state` appartiennent
+  au tri automatique de Hermes et ne sont ni listés ni ouverts.
+- Seuls `SKILL.md` (niveau skill) et `DESCRIPTION.md` (niveau catégorie) sont
+  adressables, et chacun uniquement à son niveau.
+- Le répertoire porteur est **realpath-é** et doit rester dans le realpath de
+  la racine. C'est ce qui bloque un lien symbolique planté dans l'arbre
+  (vérifié : un `escaped -> /tmp/…` répond `invalid_skill_path` en lecture
+  comme en écriture). Les répertoires symlinkés ne sont pas non plus listés.
+- 256 Ko max en lecture comme en écriture, et l'écriture est atomique
+  (fichier temporaire **non caché** dans le même répertoire, puis `rename`).
+- Pas de suppression, et pas de création par écrasement : un skill existant
+  répond 409 `skill_exists`.
+- `SKILLS_DIR` absent ou illisible → `available: false` sur
+  `GET /api/skills/files`, et le panneau s'affiche désactivé. C'est le cas
+  normal en `npm run dev` hors Docker : ne pas le traiter comme une erreur.
+
+Routes : `GET|POST /api/skills/files` (liste / création) et
+`GET|PUT /api/skills/files/content` (lecture / écriture). Elles n'utilisent pas
+`proxy()` — il ne connaît que `HermesError` — mais `skillsJson()`, son
+équivalent pour `SkillsFsError`.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -184,19 +222,23 @@ src/
 │   │   ├── sse.ts       relais SSE + pont d'abort
 │   │   ├── db.ts        better-sqlite3 (prefs, cache de titres)
 │   │   ├── limits.ts    sémaphore de tours + token bucket
+│   │   ├── skills.ts    lecture/écriture des SKILL.md sur le disque
 │   │   └── respond.ts   HermesError → réponse JSON typée, `gate`, `readJson`
 │   ├── client/        helpers navigateur
 │   │   ├── api.ts       fetch typé → ApiError, `withRetry`
 │   │   ├── storage.ts   localStorage qui ne peut pas jeter
 │   │   └── platform.ts  ⌘ vs Ctrl
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
-│   │                  Markdown, CommandPalette, StatusPanel, Shortcuts, Toasts
+│   │                  Markdown, CommandPalette, StatusPanel, SkillsPanel,
+│   │                  Shortcuts, Toasts
 │   ├── stores/
 │   │   ├── chat.svelte.ts    tout l'état de conversation (runes Svelte 5)
+│   │   ├── skills.svelte.ts  état de l'éditeur de skills
 │   │   └── toast.svelte.ts   notifications
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage
+│   ├── skills.ts      chemins de skills validés, gabarits, groupement
 │   ├── sse.ts         parseur SSE incrémental (partagé)
 │   ├── markdown.ts    rendu tolérant à l'incomplet
 │   └── transcript.ts  regroupement du transcript persisté en tours UI
