@@ -4,6 +4,7 @@
 	import Composer from '$lib/components/Composer.svelte';
 	import Message from '$lib/components/Message.svelte';
 	import ModelPicker from '$lib/components/ModelPicker.svelte';
+	import ProvidersPanel from '$lib/components/ProvidersPanel.svelte';
 	import Shortcuts from '$lib/components/Shortcuts.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import SkillsPanel from '$lib/components/SkillsPanel.svelte';
@@ -19,6 +20,7 @@
 	let paletteOpen = $state(false);
 	let statusOpen = $state(false);
 	let skillsOpen = $state(false);
+	let providersOpen = $state(false);
 	let shortcutsOpen = $state(false);
 	let narrow = $state(false);
 
@@ -122,6 +124,7 @@
 		{ id: 'new', label: 'Nouvelle discussion', hint: `${mod} ⇧O`, run: () => chat.newSession() },
 		{ id: 'status', label: 'État du système', hint: `${mod} /`, run: () => (statusOpen = true) },
 		{ id: 'skills', label: 'Modifier les skills', run: () => (skillsOpen = true) },
+		{ id: 'providers', label: 'Providers (clés API et comptes)', run: () => (providersOpen = true) },
 		{ id: 'export', label: 'Exporter la conversation (markdown)', run: exportMarkdown },
 		{ id: 'reload', label: 'Recharger la conversation', run: () => chat.reload() },
 		...(chat.sessionId
@@ -133,9 +136,9 @@
 	]);
 
 	function onKeydown(event: KeyboardEvent) {
-		// The skills editor is modal and owns its own Escape / ⌘S while open;
-		// letting these shortcuts through would fire behind it.
-		if (skillsOpen) return;
+		// The skills and providers panels are modal and own their own Escape
+		// while open; letting these shortcuts through would fire behind them.
+		if (skillsOpen || providersOpen) return;
 		const meta = hasMod(event);
 		const target = event.target as HTMLElement | null;
 		const typing =
@@ -191,6 +194,7 @@
 		ontoggleCollapse={toggleCollapse}
 		onopenStatus={() => (statusOpen = true)}
 		onopenSkills={() => (skillsOpen = true)}
+		onopenProviders={() => (providersOpen = true)}
 	/>
 
 	{#if sidebarOpen}
@@ -277,6 +281,7 @@
 <CommandPalette open={paletteOpen} onclose={() => (paletteOpen = false)} {commands} />
 <StatusPanel open={statusOpen} onclose={() => (statusOpen = false)} />
 <SkillsPanel open={skillsOpen} onclose={() => (skillsOpen = false)} />
+<ProvidersPanel open={providersOpen} onclose={() => (providersOpen = false)} />
 <Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />
 
 <style>

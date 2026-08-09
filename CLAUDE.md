@@ -23,11 +23,21 @@ SvelteKit adapter-node — 127.0.0.1:3000  (conteneur Docker)
    ├── src/lib/server/sse.ts  relais SSE
    ├── data/hermes-web.db     préférences + cache de titres (UI seulement)
    └── /skills                bind mount de ~/.hermes/skills (éditeur de skills)
-   │  HTTP loopback + Authorization: Bearer
-   ▼
-Hermes gateway (systemd --user hermes-gateway) — 127.0.0.1:8642
-   └── ~/.hermes/state.db     sessions, transcripts, mémoire  ← source de vérité
+   │
+   ├─ HTTP loopback + Authorization: Bearer
+   │  ▼
+   │  Hermes gateway (systemd --user hermes-gateway) — 127.0.0.1:8642
+   │     └── ~/.hermes/state.db  sessions, transcripts, mémoire ← source de vérité
+   │
+   └─ HTTP loopback + X-Hermes-Session-Token
+      ▼
+      Hermes dashboard (systemd --user hermes-dashboard) — 127.0.0.1:9119
+         └── ~/.hermes/.env + config.yaml  identifiants des providers
 ```
+
+Deux serveurs amont, deux secrets distincts, deux rôles : le **gateway** fait
+tourner l'agent, le **dashboard** configure Hermes. Aucun des deux ne doit être
+patché — voir le point 13 pour ce que ça implique côté providers.
 
 Le navigateur ne parle **jamais** directement à Hermes. `HERMES_API_KEY` reste
 côté serveur ; aucune route ne la renvoie, aucun `$env/static/public` ne la
@@ -229,6 +239,82 @@ l'index reste introuvable. Ça couvre l'archivage fait depuis l'UI, depuis le
 CLI, ou par la purge `sessions.auto_archive` de Hermes, tant que la
 conversation a été vue au moins une fois dans une liste.
 
+### 13. Les providers passent par le dashboard, jamais par une écriture directe
+
+`~/.hermes/.env` n'est pas la seule copie d'une clé d'API. `config.yaml` en
+garde des miroirs dans `model.api_key`, `auxiliary.*.api_key` et
+`custom_providers[*]`, et ces miroirs sont **prioritaires**. Écrire `.env`
+nous-mêmes laisserait donc l'ancienne clé authentifier après une rotation.
+
+`PUT /api/env` du dashboard passe par `save_provider_env_credential`, qui écrit
+et réconcilie les deux. On proxifie, on ne recode pas. Idem pour la suppression
+(`remove_provider_env_credential`, qui nettoie aussi `auth.json` et le cache de
+modèles).
+
+Ce qui a été vérifié sur cette machine, contre `hermes_cli/web_server.py` :
+
+- **Toute route `/api/*` du dashboard exige le jeton**, y compris
+  `GET /api/providers/oauth/{id}/poll/{sid}` : le handler n'appelle pas
+  `_require_token`, mais `auth_middleware` gate tout ce qui n'est pas dans
+  `PUBLIC_API_PATHS`. Mesuré : `401 {"detail":"Unauthorized"}` sans en-tête.
+  Notre proxy envoie le jeton partout, donc ça ne change rien — mais ne pas
+  écrire dans l'UI qu'une route serait publique.
+- `GET /api/env` renvoie ~320 variables, dont 75 de `category == "provider"` et
+  40 avec `is_password`. `groupProviderKeys()` ne garde que ces 40 et tourne
+  **côté serveur** : les autres lignes (dont les secrets personnels rangés en
+  `category == "custom"`) ne doivent pas atteindre la page, même caviardées.
+- Les `*_BASE_URL` sont aussi des lignes `provider`, mais ce sont des réglages,
+  pas des identifiants. Le panneau les exclut : un champ « clé » et un champ
+  « URL » côte à côte, c'est une clé collée dans le mauvais champ.
+- `POST /api/providers/validate` ne sonde que OPENROUTER / OPENAI / XAI /
+  GEMINI. Partout ailleurs la réponse est `{ok: true, reachable: false}`, ce qui
+  veut dire « inconnu », pas « mauvais » : seul un `{ok: false, reachable:
+  true}` bloque l'enregistrement (`validationBlocks()`).
+- `flow == "external"` (qwen-oauth, copilot-acp, claude-code) : `POST
+  .../start` répond **400 avec la commande CLI à lancer**. Mesuré. Le panneau
+  affiche la commande et ne propose pas de bouton — ne pas prétendre gérer ce
+  flux.
+- `flow == "pkce"` n'existe que pour `anthropic`, et le `submit` est réservé à
+  lui. Les autres sont en `device_code` : code + URL de vérification, puis
+  sondage jusqu'à `approved | denied | expired | error`.
+- `POST /api/model/set` peut répondre `{ok: false, confirm_required: true,
+  confirm_message}` **sans rien écrire** quand le garde-fou de coût s'inquiète.
+  Le panneau affiche l'avertissement et rejoue avec
+  `confirm_expensive_model: true`. Ce modèle global ne vaut que pour les
+  **nouvelles** conversations — le changement à chaud reste le point 3.
+
+Ce que l'UI ne fait délibérément pas :
+
+- **`POST /api/env/reveal` n'est pas proxifié.** Le dashboard ne donne que
+  `redacted_value` (`sk-o...60c6`) et c'est tout ce qui atteint le navigateur.
+  Aucune valeur de clé n'est journalisée non plus.
+- `HERMES_DASHBOARD_TOKEN` ne quitte jamais le serveur. Absent → le panneau
+  s'affiche désactivé et le reste de l'application fonctionne, exactement comme
+  l'éditeur de skills sans son bind mount.
+- Les messages d'erreur du dashboard sont déjà en français quand ils viennent
+  de `dashboard.ts` (jeton, injoignable, timeout) ; ceux qui viennent de
+  FastAPI (`{"detail": ...}`) sont passés tels quels, parce que leur contenu
+  *est* l'information utile (« run `hermes auth add qwen-oauth` manually »).
+  D'où l'absence de cas supplémentaires dans `humanizeError()`.
+
+Le jeton vient de `HERMES_DASHBOARD_SESSION_TOKEN` dans
+`~/.hermes/dashboard.env`, que l'unité systemd `hermes-dashboard.service` lit
+via `EnvironmentFile` — il survit donc aux redémarrages du service.
+
+Routes : `GET /api/providers` (clés groupées + comptes, en un aller-retour),
+`PUT|DELETE /api/providers/keys`, `POST /api/providers/keys/validate`,
+`POST|DELETE /api/providers/oauth/{id}`,
+`GET /api/providers/oauth/{id}/poll/{sid}`,
+`POST /api/providers/oauth/{id}/submit`,
+`DELETE /api/providers/oauth/sessions/{sid}` et `POST /api/providers/model`.
+Elles n'utilisent pas `proxy()` mais `dashboardResponse()`, son équivalent pour
+`DashboardError`.
+
+Limite assumée : ces routes écrivent dans la configuration de Hermes sans
+authentification applicative. C'est le même modèle de menace que le reste de
+l'application — quiconque atteint cette UI pilote déjà un agent qui a un
+terminal sur le Pi — mais c'est à garder en tête si l'exposition change.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -257,6 +343,7 @@ src/
 │   ├── server/        code jamais envoyé au navigateur
 │   │   ├── config.ts    variables d'env + validation au démarrage
 │   │   ├── hermes.ts    client de l'API Hermes (Bearer, timeouts, retries)
+│   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
 │   │   ├── sse.ts       relais SSE + pont d'abort
 │   │   ├── db.ts        better-sqlite3 (prefs, cache de titres)
 │   │   ├── limits.ts    sémaphore de tours + token bucket
@@ -268,13 +355,16 @@ src/
 │   │   └── platform.ts  ⌘ vs Ctrl
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
 │   │                  Markdown, CommandPalette, StatusPanel, SkillsPanel,
-│   │                  Shortcuts, Toasts
+│   │                  ProvidersPanel, Shortcuts, Toasts
 │   ├── stores/
-│   │   ├── chat.svelte.ts    tout l'état de conversation (runes Svelte 5)
-│   │   ├── skills.svelte.ts  état de l'éditeur de skills
-│   │   └── toast.svelte.ts   notifications
+│   │   ├── chat.svelte.ts       tout l'état de conversation (runes Svelte 5)
+│   │   ├── skills.svelte.ts     état de l'éditeur de skills
+│   │   ├── providers.svelte.ts  état du panneau providers (dont le flux OAuth)
+│   │   └── toast.svelte.ts      notifications
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
+│   ├── providers.ts   groupement des clés par provider, statut des comptes,
+│   │                  machine à états du flux OAuth
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage,
 │   │                  candidats de la vue archivée
 │   ├── skills.ts      chemins de skills validés, gabarits, groupement
@@ -369,7 +459,8 @@ docker compose logs -f
 ```
 
 Journaux Hermes : `journalctl --user -u hermes-gateway -f` et
-`~/.hermes/logs/gateway.log`.
+`~/.hermes/logs/gateway.log`. Pour le dashboard (panneau Providers) :
+`journalctl --user -u hermes-dashboard -f`.
 
 ## Si tu lis ceci depuis l'exécution automatique de 05:00
 
@@ -397,7 +488,10 @@ Les consignes complètes sont dans `/opt/stacks/hermes-ui-bot/prompt.md`.
 
 - Le serveur API exécute **le toolset complet, terminal compris, sur le Pi**.
   `API_SERVER_KEY` est un secret équivalent-root.
-- `API_SERVER_HOST=127.0.0.1` — ne jamais binder 8642 ailleurs.
+- `API_SERVER_HOST=127.0.0.1` — ne jamais binder 8642 ailleurs. Idem pour le
+  dashboard sur 9119 : `HERMES_DASHBOARD_TOKEN` ouvre l'écriture de
+  `~/.hermes/.env` et de `config.yaml`, c'est un second secret du même ordre.
+  Il reste côté serveur, comme `HERMES_API_KEY`.
 - Le conteneur ne publie que sur `127.0.0.1:3000`. L'exposition passe par
   Tailscale Serve, pas par une redirection de port sur la box.
 - Ne pas activer `API_SERVER_CORS_ORIGINS` : le navigateur n'a aucune raison

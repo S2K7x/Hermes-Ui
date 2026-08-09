@@ -11,6 +11,7 @@ BASE="${BASE:-http://127.0.0.1:3000}"
 
 step() { printf '\n\033[1m▸ %s\033[0m\n' "$1"; }
 ok() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$1"; }
 fail() {
 	printf '  \033[31m✗\033[0m %s\n' "$1"
 	exit 1
@@ -26,6 +27,19 @@ ok "Hermes ${version}"
 step "model catalogue"
 model=$(curl -fsS "${BASE}/api/models" | python3 -c 'import sys,json;print(json.load(sys.stdin)["model"])')
 ok "default model: ${model}"
+
+step "providers panel"
+# Non-blocking on purpose: the Hermes dashboard is a separate service and an
+# unset HERMES_DASHBOARD_TOKEN is a supported configuration. What IS asserted
+# is that the route answers a well-formed payload rather than 500ing.
+providers=$(curl -fsS "${BASE}/api/providers" |
+	python3 -c 'import sys,json;d=json.load(sys.stdin);print(d["available"],len(d["keys"]),len(d["accounts"]),d["message"])')
+read -r available nkeys naccounts message <<<"${providers}"
+if [ "${available}" = "True" ]; then
+	ok "dashboard reachable: ${nkeys} providers, ${naccounts} accounts"
+else
+	warn "providers panel disabled: ${message}"
+fi
 
 step "session create"
 sid=$(curl -fsS -X POST -H 'Content-Type: application/json' \

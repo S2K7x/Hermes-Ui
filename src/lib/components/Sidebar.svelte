@@ -10,9 +10,17 @@
 		ontoggleCollapse: () => void;
 		onopenStatus: () => void;
 		onopenSkills: () => void;
+		onopenProviders: () => void;
 	}
-	let { open, collapsed, onclose, ontoggleCollapse, onopenStatus, onopenSkills }: Props =
-		$props();
+	let {
+		open,
+		collapsed,
+		onclose,
+		ontoggleCollapse,
+		onopenStatus,
+		onopenSkills,
+		onopenProviders
+	}: Props = $props();
 
 	let filter = $state('');
 	let showArchived = $state(false);
@@ -77,6 +85,7 @@
 			>
 			<div class="rail-spacer"></div>
 			<button class="rail-btn" onclick={onopenSkills} aria-label="Skills">📚</button>
+			<button class="rail-btn" onclick={onopenProviders} aria-label="Providers">🔑</button>
 			<button class="rail-btn" onclick={onopenStatus} aria-label="État du système">
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
 				></span>
@@ -185,6 +194,13 @@
 			</button>
 			<button class="archive-toggle" onclick={onopenSkills} title="Créer et modifier les skills">
 				📚 Skills
+			</button>
+			<button
+				class="archive-toggle"
+				onclick={onopenProviders}
+				title="Clés API, comptes OAuth et modèle par défaut"
+			>
+				🔑 Providers
 			</button>
 			<button class="status" onclick={onopenStatus} title="État du système">
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
@@ -396,7 +412,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 6px;
+		/* Four entries no longer fit on one line at the sidebar's width. */
+		flex-wrap: wrap;
+		gap: 4px;
 		padding: 7px 10px;
 		border-top: 1px solid var(--border-soft);
 		font-size: 11.5px;
@@ -410,6 +428,7 @@
 		border-radius: 6px;
 		color: var(--text-faint);
 		font-size: 11.5px;
+		white-space: nowrap;
 	}
 	.archive-toggle:hover,
 	.status:hover {

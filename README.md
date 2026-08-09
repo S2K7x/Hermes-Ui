@@ -27,6 +27,10 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Éditeur de skills** (📚 dans la sidebar, ou `⌘K` → « Modifier les skills ») :
   liste des `SKILL.md` groupée par catégorie, édition en texte brut,
   création guidée d'un nouveau skill
+- **Panneau Providers** (🔑 dans la sidebar, ou `⌘K` → « Providers ») : ajouter
+  ou remplacer une clé d'API avec vérification en ligne, connecter un compte en
+  OAuth (code d'appairage + sondage jusqu'à validation), déconnecter, et
+  changer le modèle par défaut de Hermes — sans SSH
 - **Images en entrée** : coller ou déposer, envoyées en base64
 - **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
   applicable à la conversation ouverte dès le message suivant
@@ -58,6 +62,29 @@ lisibles et modifiables, il n'y a pas de suppression, les fichiers dépassant
 tri automatique de Hermes (`.bundled_manifest`, `.curator_state`) ne sont ni
 listés ni accessibles. Sans le montage `/skills` (voir `docker-compose.yml`),
 le panneau s'affiche désactivé au lieu de casser.
+
+### Providers : où vont les clés
+
+Le panneau ne touche à aucun fichier lui-même. Il proxifie le **dashboard de
+Hermes** (`hermes-dashboard.service`, sur `127.0.0.1:9119`), qui est le seul à
+savoir écrire une clé correctement : `~/.hermes/.env` **et** les copies que
+`config.yaml` en garde (`model.api_key`, `auxiliary.*.api_key`,
+`custom_providers[*]`). Ces copies étant prioritaires, écrire `.env` tout seul
+laisserait l'ancienne clé authentifier après une rotation.
+
+Deux onglets, repris de la séparation du catalogue de Hermes : **Clés API**
+(une variable d'environnement à coller) et **Comptes** (une connexion OAuth).
+Un troisième onglet change le **modèle par défaut** — celui de `config.yaml`,
+qui ne s'applique qu'aux nouvelles discussions ; pour la conversation ouverte,
+c'est le sélecteur en haut de l'écran.
+
+Ce que le panneau ne fait pas : afficher une clé en clair. Le dashboard ne
+renvoie qu'une valeur caviardée (`sk-o...60c6`), sa route de révélation n'est
+pas proxifiée, et aucune valeur n'est journalisée. Les fournisseurs gérés par
+une CLI tierce (Qwen, GitHub Copilot, `claude setup-token`) affichent la
+commande à lancer plutôt qu'un bouton qui mentirait. Sans
+`HERMES_DASHBOARD_TOKEN`, le panneau s'affiche désactivé et le reste de l'app
+fonctionne normalement.
 
 ### Une limite à connaître
 
@@ -123,6 +150,18 @@ chmod 600 .env
 en lecture-écriture dans le conteneur pour l'éditeur de skills. Retirez le
 volume dans `docker-compose.yml` si vous préférez que l'app n'écrive nulle
 part hors de `data/`.
+
+Pour le panneau Providers, renseignez aussi `HERMES_DASHBOARD_TOKEN` avec la
+valeur de `HERMES_DASHBOARD_SESSION_TOKEN` du dashboard :
+
+```bash
+systemctl --user status hermes-dashboard      # doit être actif sur 9119
+grep HERMES_DASHBOARD_SESSION_TOKEN ~/.hermes/dashboard.env
+```
+
+Le jeton vient de ce fichier, que l'unité systemd lit via `EnvironmentFile` :
+il survit aux redémarrages du service. Laissez la variable vide et le panneau
+se désactive proprement.
 
 ### 3. Lancer
 
@@ -190,6 +229,10 @@ Pi**. `API_SERVER_KEY` est un secret équivalent-root :
 - l'éditeur de skills n'écrit que deux noms de fichiers, sous un chemin résolu
   par `realpath` et vérifié comme étant à l'intérieur du répertoire monté :
   ni `..`, ni lien symbolique, ni fichier caché n'en sortent
+- `HERMES_DASHBOARD_TOKEN` (dashboard sur `127.0.0.1:9119`) est un second
+  secret du même ordre — il ouvre l'écriture de la configuration de Hermes. Il
+  reste lui aussi côté serveur, et aucune clé d'API n'est renvoyée en clair au
+  navigateur ni écrite dans les journaux
 
 ## Notes matérielles
 

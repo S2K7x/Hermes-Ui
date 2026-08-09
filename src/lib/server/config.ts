@@ -45,6 +45,32 @@ export const SESSION_SOURCE = 'api_server';
 export const SKILLS_DIR = env.SKILLS_DIR?.trim() || '';
 
 /**
+ * Base URL of Hermes' own dashboard (`hermes_cli/web_server.py`), which runs
+ * here as the `hermes-dashboard` user service on 127.0.0.1:9119.
+ *
+ * It is a *different* server from the gateway on 8642, with its own token, and
+ * it owns provider credentials: `PUT /api/env` goes through
+ * `save_provider_env_credential`, which writes `~/.hermes/.env` AND reconciles
+ * every copy of the key config.yaml still holds (`model.api_key`,
+ * `auxiliary.*.api_key`, `custom_providers[*]`). Writing `.env` ourselves would
+ * leave a stale higher-precedence copy behind on a rotation — hence a proxy
+ * and no reimplementation.
+ */
+export const HERMES_DASHBOARD_URL = (
+	env.HERMES_DASHBOARD_URL || 'http://127.0.0.1:9119'
+).replace(/\/+$/, '');
+
+/**
+ * Session token for that dashboard, sent as `X-Hermes-Session-Token`.
+ *
+ * It comes from `HERMES_DASHBOARD_SESSION_TOKEN` in `~/.hermes/dashboard.env`,
+ * which the systemd unit passes to the dashboard — so it survives restarts.
+ * Optional on purpose: unset simply turns the providers panel off, the same
+ * way an unmounted SKILLS_DIR turns the skills editor off.
+ */
+export const HERMES_DASHBOARD_TOKEN = env.HERMES_DASHBOARD_TOKEN?.trim() || '';
+
+/**
  * Timeout for ordinary (non-streaming) Hermes calls. Generous, because
  * `/health/detailed` walks the disk and `/api/model/options` can hit a cold
  * model cache — but finite, so a wedged upstream cannot pin sockets forever.

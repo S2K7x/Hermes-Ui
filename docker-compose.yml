@@ -33,6 +33,11 @@ services:
       ORIGIN: ${HERMES_PUBLIC_ORIGIN}
       WEB_DB_PATH: /data/hermes-web.db
       BODY_SIZE_LIMIT: 8M # inline images travel as base64 data: URLs
+      # Hermes' own dashboard (hermes-dashboard.service, a second loopback
+      # server). It owns provider credentials — see CLAUDE.md §13. Leave the
+      # token empty and the Providers panel simply disables itself.
+      HERMES_DASHBOARD_URL: ${HERMES_DASHBOARD_URL:-http://127.0.0.1:9119}
+      HERMES_DASHBOARD_TOKEN: ${HERMES_DASHBOARD_TOKEN:-}
       HERMES_TIMEOUT_MS: ${HERMES_TIMEOUT_MS:-30000}
       MAX_CONCURRENT_TURNS: ${MAX_CONCURRENT_TURNS:-3}
       # Path INSIDE the container of the skills bind mount below. Unset it (or
