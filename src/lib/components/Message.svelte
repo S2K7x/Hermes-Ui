@@ -49,8 +49,13 @@
 
 			{#if message.detached}
 				<div class="detached">
-					Affichage interrompu. Hermes n'expose pas d'arrêt pour ce type de tour : l'agent
-					termine en arrière-plan et sa réponse sera dans la conversation.
+					{#if message.detached === 'truncated'}
+						Le flux s'est interrompu avant la fin du tour : ce texte est incomplet. L'agent
+						termine en arrière-plan et sa réponse entière sera dans la conversation.
+					{:else}
+						Affichage interrompu. Hermes n'expose pas d'arrêt pour ce type de tour : l'agent
+						termine en arrière-plan et sa réponse sera dans la conversation.
+					{/if}
 					<button onclick={onreload}>Recharger</button>
 				</div>
 			{/if}

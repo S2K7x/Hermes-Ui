@@ -408,6 +408,18 @@ Points de détail qui comptent :
   `/api/sessions/{id}/stream` avec un stream reader : un corps JSON d'erreur
   lui apparaîtrait comme un flux tronqué. `sseErrorResponse()` émet donc
   `event: error` + `event: done`, avec `status` et `code` dans la charge utile.
+- **Un flux qui s'arrête n'est pas un flux qui se termine.** Un corps SSE
+  coupé en plein tour ne lève rien : le lecteur voit une fin de flux normale.
+  Vérifié avec un serveur local qui coupe après deux frames — aucune exception,
+  aucune erreur, la réponse partielle s'affichait comme une réponse finie.
+  `#consume()` exige donc un événement terminal (`isTerminalTurnEvent` :
+  `done`, `error`, `run.completed`, `assistant.completed`) ; sans lui le tour
+  est marqué `detached: 'truncated'`, ce qui affiche « ce texte est incomplet »
+  et un bouton « Recharger », puisque l'agent continue en arrière-plan comme
+  après un détachement. Le côté Hermes qui produit ce cas est le `except
+  Exception` de la boucle d'écriture SSE (`api_server.py`) : la boucle sort et
+  rend la réponse proprement, alors que le `done` posé dans la file par le
+  `finally` de la tâche n'est plus écrit sur le fil.
 - **404 sur une session = re-synchroniser.** Une conversation peut être
   supprimée depuis le CLI, Telegram ou un autre onglet. `openSession` retire la
   ligne fantôme de la sidebar au lieu d'afficher une erreur.

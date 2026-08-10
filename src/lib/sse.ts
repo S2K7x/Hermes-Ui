@@ -34,3 +34,25 @@ export function parseSSEChunk(state: SSEParserState, chunk: string): ParsedSSE[]
 	}
 	return out;
 }
+
+/**
+ * Hermes turn events after which the stream may legitimately end.
+ *
+ * `done` is the normal terminator, `error` replaces it when the run threw, and
+ * both `run.completed` and `assistant.completed` mean the answer is already in
+ * hand — losing the socket after either is cosmetic.
+ */
+const TERMINAL_TURN_EVENTS = new Set(['done', 'error', 'run.completed', 'assistant.completed']);
+
+/**
+ * Did this event conclude the turn?
+ *
+ * Used to tell a finished stream from a truncated one. An SSE body that ends
+ * without any of these — the upstream write loop bailing out, a proxy closing
+ * the response — reaches the reader as a plain end of stream and throws
+ * nothing, so without this check a half-written answer would render exactly
+ * like a complete one.
+ */
+export function isTerminalTurnEvent(event: string): boolean {
+	return TERMINAL_TURN_EVENTS.has(event);
+}

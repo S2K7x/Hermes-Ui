@@ -2,7 +2,7 @@ import { api, withRetry } from '$lib/client/api';
 import { readJSON, writeJSON } from '$lib/client/storage';
 import { ApiError, AppErrorCode } from '$lib/errors';
 import { isModelAvailable, providerForModel, shortModelName } from '$lib/models';
-import { newSSEState, parseSSEChunk } from '$lib/sse';
+import { isTerminalTurnEvent, newSSEState, parseSSEChunk } from '$lib/sse';
 import { emptyAssistant, groupTranscript, uid, type UiMessage } from '$lib/transcript';
 import { toasts } from './toast.svelte';
 import type {
@@ -434,9 +434,31 @@ class ChatStore {
 		const last = this.messages.at(-1);
 		if (last?.streaming) {
 			last.streaming = false;
-			last.detached = true;
+			last.detached = 'stopped';
 			for (const step of last.steps) if (step.status === 'running') step.status = 'done';
 		}
+	}
+
+	/**
+	 * The stream ended before the turn did.
+	 *
+	 * Measured: an SSE body that stops mid-turn without `done` — the upstream
+	 * write loop bailing out of its `except Exception`, a proxy closing the
+	 * response — leaves the reader done and throws nothing. Left alone, the
+	 * half-written answer would render exactly like a finished one, which is
+	 * worse than an error: the user cannot tell it is not what Hermes said.
+	 *
+	 * The agent keeps running server-side (same measurement as detaching), so
+	 * the turn is flagged rather than failed, and the real answer is one reload
+	 * away.
+	 */
+	#truncated(assistant: UiMessage) {
+		this.detached = true;
+		assistant.detached = 'truncated';
+		for (const step of assistant.steps) if (step.status === 'running') step.status = 'done';
+		toasts.push('error', "Le flux s'est interrompu avant la fin du tour.", {
+			action: { label: 'Recharger', run: () => this.reload() }
+		});
 	}
 
 	/** Re-send the previous prompt as a new turn. */
@@ -499,7 +521,7 @@ class ChatStore {
 				signal: this.#abort.signal
 			});
 			if (!res.body) throw new Error('Réponse sans corps.');
-			await this.#consume(res.body, assistant);
+			if (!(await this.#consume(res.body, assistant))) this.#truncated(assistant);
 		} catch (err) {
 			if ((err as Error)?.name !== 'AbortError') {
 				assistant.error = err instanceof Error ? err.message : String(err);
@@ -520,10 +542,12 @@ class ChatStore {
 		}
 	}
 
-	async #consume(body: ReadableStream<Uint8Array>, assistant: UiMessage) {
+	/** @returns true if the turn reached a conclusion, false if the stream just stopped. */
+	async #consume(body: ReadableStream<Uint8Array>, assistant: UiMessage): Promise<boolean> {
 		const reader = body.getReader();
 		const decoder = new TextDecoder();
 		const state = newSSEState();
+		let terminated = false;
 
 		for (;;) {
 			const { done, value } = await reader.read();
@@ -536,9 +560,11 @@ class ChatStore {
 					continue; // a malformed frame must not kill the stream
 				}
 				this.#applyEvent(frame.event, data, assistant);
-				if (frame.event === 'done') return;
+				if (isTerminalTurnEvent(frame.event)) terminated = true;
+				if (frame.event === 'done') return true;
 			}
 		}
+		return terminated;
 	}
 
 	#applyEvent(event: string, data: Record<string, any>, assistant: UiMessage) {

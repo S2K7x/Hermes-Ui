@@ -10,8 +10,12 @@ export interface UiMessage {
 	steps: ToolStep[];
 	reasoning: string;
 	streaming: boolean;
-	/** The user stopped watching, but the agent kept going server-side. */
-	detached?: boolean;
+	/**
+	 * The turn is still running server-side but nothing is rendering it any
+	 * more: either the user detached (`stopped`) or the stream ended before the
+	 * turn did (`truncated`). Both offer a reload; only the wording differs.
+	 */
+	detached?: 'stopped' | 'truncated';
 	error?: string;
 	timestamp: number;
 }

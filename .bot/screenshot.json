@@ -1,5 +1,5 @@
 {
 	"path": "/",
-	"js": "(async()=>{const wait=(ms)=>new Promise(r=>setTimeout(r,ms));const find=()=>[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Providers')||b.getAttribute('aria-label')==='Providers');let btn=find();for(let i=0;i<20&&!btn;i++){await wait(250);btn=find();}if(!btn)return 'not-found';btn.click();await wait(3000);return 'opened'})()",
-	"caption": "Le nouveau panneau « Providers », onglet Clés API : chaque fournisseur de Hermes avec son statut, la clé configurée affichée caviardée, et de quoi la remplacer ou la vérifier sans passer par SSH. Les onglets Comptes (connexion OAuth) et Modèle par défaut sont à côté."
+	"js": "(async()=>{const wait=(ms)=>new Promise(r=>setTimeout(r,ms));await wait(1500);return 'idle'})()",
+	"caption": "L'écran de chat au repos : la correction du jour ne se voit qu'en cas de panne. Quand le flux SSE d'un tour s'arrête sans jamais dire qu'il est fini, la réponse partielle porte désormais un bandeau « ce texte est incomplet » et un bouton « Recharger », au lieu de s'afficher comme une réponse normale de Hermes."
 }
