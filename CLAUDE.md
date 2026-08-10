@@ -297,6 +297,10 @@ Ce que l'UI ne fait délibérément pas :
   *est* l'information utile (« run `hermes auth add qwen-oauth` manually »).
   D'où l'absence de cas supplémentaires dans `humanizeError()`.
 
+Une route de lecture supplémentaire vient du dashboard sans rapport avec les
+providers : `GET /api/cron/delivery-targets`, qui dit quelles plateformes ont un
+canal d'accueil configuré. Voir le point 14.
+
 Le jeton vient de `HERMES_DASHBOARD_SESSION_TOKEN` dans
 `~/.hermes/dashboard.env`, que l'unité systemd `hermes-dashboard.service` lit
 via `EnvironmentFile` — il survit donc aux redémarrages du service.
@@ -314,6 +318,55 @@ Limite assumée : ces routes écrivent dans la configuration de Hermes sans
 authentification applicative. C'est le même modèle de menace que le reste de
 l'application — quiconque atteint cette UI pilote déjà un agent qui a un
 terminal sur le Pi — mais c'est à garder en tête si l'exposition change.
+
+### 14. Les tâches planifiées : `/api/jobs`, avec trois pièges mesurés
+
+Le gateway expose le cron de Hermes en entier — `GET|POST /api/jobs`,
+`GET|PATCH|DELETE /api/jobs/{id}`, `POST /api/jobs/{id}/{pause|resume|run}` —
+et l'UI en utilise la liste, la création, les trois actions et la suppression
+(`ProvidersPanel` a son pendant : `JobsPanel`). Ce qui a été **mesuré** sur
+cette machine, contre `api_server.py` et `cron/jobs.py` (0.20.0) :
+
+- **Une tâche mise en pause disparaît de la liste par défaut.** `pause` retire
+  `enabled`, et `_handle_list_jobs` appelle `_cron_list()` sans
+  `include_disabled` (défaut `False`). Sans le paramètre, la ligne s'évanouit
+  au clic sur « Mettre en pause ». `listJobs()` envoie donc toujours
+  `?include_disabled=true` et l'UI affiche l'état elle-même.
+- **Un horaire invalide répond 500, pas 400.** `_handle_create_job` ne valide
+  que `name` et `prompt` ; `parse_schedule` lève un `ValueError` qui tombe dans
+  l'`except Exception` générique. D'où `parseSchedule()` dans `src/lib/jobs.ts`
+  (pur, testé), qui rejoue les règles amont côté navigateur *et* côté route :
+  `every <durée>` d'abord, puis 5+ champs cron, puis un timestamp ISO, puis une
+  durée nue. Les bornes des cinq champs cron sont vérifiées en plus, parce que
+  `croniter` refuserait `0 25 * * *` en 500 aussi.
+- **`schedule` est un objet, pas une chaîne** :
+  `{kind, expr|minutes|run_at, display}`. L'afficher tel quel imprime
+  `[object Object]` — c'est ce que faisait le `StatusPanel`. `schedule_display`
+  est la version lisible, mais elle est en anglais et en minutes brutes
+  (« every 720m ») : `scheduleDisplay()` repart des champs structurés et ne
+  retombe dessus qu'en dernier recours. De même, `state` est l'état réconcilié
+  par `effective_job_state()` (un job `enabled` n'est jamais affiché en pause) —
+  il n'existe pas de champ `paused`.
+
+La **livraison** ne se devine pas côté gateway : `deliver` est résolu au
+déclenchement à partir des `*_HOME_CHANNEL` de l'environnement, que l'API ne
+publie pas. La liste vient donc du dashboard,
+`GET /api/cron/delivery-targets`, dont seul `home_target_set` distingue une
+plateforme qui livrera vraiment d'une qui résoudrait vers rien
+(`usableTargets()`). Le dashboard injoignable ne casse pas le panneau : il ne
+reste que `local`, la seule promesse tenable sans cette information.
+
+`deliver = "origin"` n'est **pas** proposé : une tâche créée par cette UI porte
+un `origin` `{platform: "api_server", chat_id: "api"}`, qui n'est pas une
+destination livrable.
+
+Le gateway sans son module cron répond 501 `Cron module not available` : le
+panneau le dit et se désactive, comme l'éditeur de skills sans son bind mount.
+Ne pas se fier au drapeau `features.jobs_admin` de `/v1/capabilities` — il est
+codé en dur à `false` alors que les routes fonctionnent.
+
+Routes : `GET|POST /api/jobs` (liste + cibles de livraison en un aller-retour /
+création) et `POST|DELETE /api/jobs/{id}` (action / suppression).
 
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
@@ -355,13 +408,15 @@ src/
 │   │   └── platform.ts  ⌘ vs Ctrl
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
 │   │                  Markdown, CommandPalette, StatusPanel, SkillsPanel,
-│   │                  ProvidersPanel, Shortcuts, Toasts
+│   │                  ProvidersPanel, JobsPanel, Shortcuts, Toasts
 │   ├── stores/
 │   │   ├── chat.svelte.ts       tout l'état de conversation (runes Svelte 5)
 │   │   ├── skills.svelte.ts     état de l'éditeur de skills
 │   │   ├── providers.svelte.ts  état du panneau providers (dont le flux OAuth)
+│   │   ├── jobs.svelte.ts       état du panneau des tâches planifiées
 │   │   └── toast.svelte.ts      notifications
 │   ├── errors.ts      ApiError + codes + `humanizeError`
+│   ├── jobs.ts        horaires cron validés/traduits, état et tri des tâches
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
 │   ├── providers.ts   groupement des clés par provider, statut des comptes,
 │   │                  machine à états du flux OAuth

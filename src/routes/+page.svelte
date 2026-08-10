@@ -2,6 +2,7 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import Composer from '$lib/components/Composer.svelte';
+	import JobsPanel from '$lib/components/JobsPanel.svelte';
 	import Message from '$lib/components/Message.svelte';
 	import ModelPicker from '$lib/components/ModelPicker.svelte';
 	import ProvidersPanel from '$lib/components/ProvidersPanel.svelte';
@@ -21,6 +22,7 @@
 	let statusOpen = $state(false);
 	let skillsOpen = $state(false);
 	let providersOpen = $state(false);
+	let jobsOpen = $state(false);
 	let shortcutsOpen = $state(false);
 	let narrow = $state(false);
 
@@ -93,6 +95,12 @@
 		write('hermes-theme', next);
 	}
 
+	/** Two modals must never stack: the status panel steps aside. */
+	function openJobsFromStatus() {
+		statusOpen = false;
+		jobsOpen = true;
+	}
+
 	function toggleCollapse() {
 		sidebarCollapsed = !sidebarCollapsed;
 		writeJSON('hermes-sidebar-collapsed', sidebarCollapsed);
@@ -124,6 +132,7 @@
 		{ id: 'new', label: 'Nouvelle discussion', hint: `${mod} ⇧O`, run: () => chat.newSession() },
 		{ id: 'status', label: 'État du système', hint: `${mod} /`, run: () => (statusOpen = true) },
 		{ id: 'skills', label: 'Modifier les skills', run: () => (skillsOpen = true) },
+		{ id: 'jobs', label: 'Tâches planifiées', run: () => (jobsOpen = true) },
 		{ id: 'providers', label: 'Providers (clés API et comptes)', run: () => (providersOpen = true) },
 		{ id: 'export', label: 'Exporter la conversation (markdown)', run: exportMarkdown },
 		{ id: 'reload', label: 'Recharger la conversation', run: () => chat.reload() },
@@ -136,9 +145,10 @@
 	]);
 
 	function onKeydown(event: KeyboardEvent) {
-		// The skills and providers panels are modal and own their own Escape
-		// while open; letting these shortcuts through would fire behind them.
-		if (skillsOpen || providersOpen) return;
+		// The skills, providers and jobs panels are modal and own their own
+		// Escape while open; letting these shortcuts through would fire behind
+		// them.
+		if (skillsOpen || providersOpen || jobsOpen) return;
 		const meta = hasMod(event);
 		const target = event.target as HTMLElement | null;
 		const typing =
@@ -195,6 +205,7 @@
 		onopenStatus={() => (statusOpen = true)}
 		onopenSkills={() => (skillsOpen = true)}
 		onopenProviders={() => (providersOpen = true)}
+		onopenJobs={() => (jobsOpen = true)}
 	/>
 
 	{#if sidebarOpen}
@@ -279,7 +290,8 @@
 </div>
 
 <CommandPalette open={paletteOpen} onclose={() => (paletteOpen = false)} {commands} />
-<StatusPanel open={statusOpen} onclose={() => (statusOpen = false)} />
+<StatusPanel open={statusOpen} onclose={() => (statusOpen = false)} onopenJobs={openJobsFromStatus} />
+<JobsPanel open={jobsOpen} onclose={() => (jobsOpen = false)} />
 <SkillsPanel open={skillsOpen} onclose={() => (skillsOpen = false)} />
 <ProvidersPanel open={providersOpen} onclose={() => (providersOpen = false)} />
 <Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />

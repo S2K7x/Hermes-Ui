@@ -31,6 +31,9 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   ou remplacer une clé d'API avec vérification en ligne, connecter un compte en
   OAuth (code d'appairage + sondage jusqu'à validation), déconnecter, et
   changer le modèle par défaut de Hermes — sans SSH
+- **Tâches planifiées** (⏰ dans la sidebar, ou `⌘K` → « Tâches planifiées ») :
+  créer un rappel ou une tâche récurrente que Hermes exécute seul, la lancer
+  tout de suite, la mettre en pause ou la supprimer
 - **Images en entrée** : coller ou déposer, envoyées en base64
 - **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
   applicable à la conversation ouverte dès le message suivant
@@ -85,6 +88,25 @@ une CLI tierce (Qwen, GitHub Copilot, `claude setup-token`) affichent la
 commande à lancer plutôt qu'un bouton qui mentirait. Sans
 `HERMES_DASHBOARD_TOKEN`, le panneau s'affiche désactivé et le reste de l'app
 fonctionne normalement.
+
+### Tâches planifiées : ce que Hermes fera sans vous
+
+C'est le cron de Hermes, pas un minuteur maison : la tâche tourne côté Pi avec
+tous ses outils, et continue même app fermée. L'horaire accepte ce que Hermes
+accepte — `30m`, `2h`, `1d` pour une fois, `every 30m` pour un cycle,
+`0 8 * * *` pour une règle cron, ou une date `2026-08-11T09:00`. Six raccourcis
+couvrent les cas courants, et une phrase sous le champ traduit en français ce
+qui a été compris avant l'enregistrement (Hermes répond `500` à un horaire
+illisible : autant ne jamais l'envoyer).
+
+Deux choses à savoir. **L'instruction doit se suffire à elle-même** : la tâche
+s'exécute dans sa propre conversation, sans le contexte de celle qui est
+ouverte. Et **la livraison se choisit** : « Local » garde la sortie côté Hermes,
+sinon le résultat part sur une plateforme dont le canal d'accueil est configuré
+(Telegram, typiquement) — les autres ne sont pas proposées, parce qu'elles
+résoudraient vers rien.
+
+Le panneau se désactive proprement si le gateway tourne sans son module cron.
 
 ### Une limite à connaître
 

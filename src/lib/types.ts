@@ -93,14 +93,27 @@ export interface HermesHealthDetailed {
 	pid: number;
 }
 
+/**
+ * A cron job as `cron/jobs.py` stores it.
+ *
+ * Field names are the measured ones: `schedule` is an OBJECT
+ * (`{kind, expr|minutes|run_at, display}`) and `schedule_display` is its human
+ * form; `state` is the reconciled display state, not `paused`; the run stamps
+ * are ISO strings named `*_run_at`, not `next_run` / `last_run`.
+ */
 export interface HermesJob {
 	id?: string;
 	name?: string;
-	schedule?: string;
+	prompt?: string;
+	schedule?: Record<string, unknown> | string;
+	schedule_display?: string;
+	state?: string;
 	enabled?: boolean;
-	paused?: boolean;
-	next_run?: string | number | null;
-	last_run?: string | number | null;
+	deliver?: string;
+	next_run_at?: string | null;
+	last_run_at?: string | null;
+	last_status?: string | null;
+	last_error?: string | null;
 	[key: string]: unknown;
 }
 

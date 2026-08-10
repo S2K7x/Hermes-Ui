@@ -1,12 +1,29 @@
 <script lang="ts">
 	import { chat } from '$lib/stores/chat.svelte';
 	import { usageSummary } from '$lib/sessions';
+	import { jobState, nextRunLabel, scheduleDisplay, sortJobs } from '$lib/jobs';
+	import type { HermesJob } from '$lib/types';
 
 	interface Props {
 		open: boolean;
 		onclose: () => void;
+		onopenJobs: () => void;
 	}
-	let { open, onclose }: Props = $props();
+	let { open, onclose, onopenJobs }: Props = $props();
+
+	let jobs = $derived(sortJobs(chat.status?.jobs ?? []));
+
+	/**
+	 * Schedule plus next run, as one string.
+	 *
+	 * `job.schedule` is an object upstream, so it can never be printed
+	 * directly; and building this inline would let Svelte trim the leading
+	 * space of the conditional half and glue the two together.
+	 */
+	function jobLine(job: HermesJob): string {
+		const next = jobState(job).key === 'paused' ? '' : nextRunLabel(job);
+		return next ? `${scheduleDisplay(job)} · ${next}` : scheduleDisplay(job);
+	}
 
 	// Refresh on open only: /health/detailed stats the disk and reads the
 	// gateway runtime file, which is not something to poll on a Pi.
@@ -133,17 +150,25 @@
 				{/if}
 			</ul>
 
-			{#if chat.status?.jobsAvailable && chat.status.jobs.length}
-				<h3>Tâches planifiées</h3>
-				<ul class="checks">
-					{#each chat.status.jobs as job (job.id ?? job.name)}
-						<li>
-							<span>{job.paused ? '⏸' : '⏰'}</span>
-							<span class="name">{job.name ?? job.id}</span>
-							<span class="muted small">{job.schedule ?? ''}</span>
-						</li>
-					{/each}
-				</ul>
+			{#if chat.status?.jobsAvailable}
+				<h3>
+					Tâches planifiées
+					<button class="link" onclick={onopenJobs}>gérer</button>
+				</h3>
+				{#if jobs.length === 0}
+					<p class="muted small empty">Aucune tâche planifiée.</p>
+				{:else}
+					<ul class="checks">
+						{#each jobs as job (job.id ?? job.name)}
+							{@const state = jobState(job)}
+							<li>
+								<span title={state.label}>{state.icon}</span>
+								<span class="name">{job.name ?? job.id}</span>
+								<span class="muted small">{jobLine(job)}</span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			{/if}
 
 			{#if chat.mcpTools.length}
@@ -205,6 +230,21 @@
 	}
 	h3:first-of-type {
 		margin-top: 14px;
+	}
+	h3 .link {
+		margin-left: 8px;
+		font-size: 11px;
+		font-weight: 500;
+		letter-spacing: 0;
+		text-transform: none;
+		color: var(--text-muted);
+		text-decoration: underline;
+	}
+	h3 .link:hover {
+		color: var(--text);
+	}
+	.empty {
+		margin: 0;
 	}
 	.x {
 		color: var(--text-faint);

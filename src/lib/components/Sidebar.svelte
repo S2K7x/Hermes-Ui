@@ -11,6 +11,7 @@
 		onopenStatus: () => void;
 		onopenSkills: () => void;
 		onopenProviders: () => void;
+		onopenJobs: () => void;
 	}
 	let {
 		open,
@@ -19,7 +20,8 @@
 		ontoggleCollapse,
 		onopenStatus,
 		onopenSkills,
-		onopenProviders
+		onopenProviders,
+		onopenJobs
 	}: Props = $props();
 
 	let filter = $state('');
@@ -84,6 +86,7 @@
 				>＋</button
 			>
 			<div class="rail-spacer"></div>
+			<button class="rail-btn" onclick={onopenJobs} aria-label="Tâches planifiées">⏰</button>
 			<button class="rail-btn" onclick={onopenSkills} aria-label="Skills">📚</button>
 			<button class="rail-btn" onclick={onopenProviders} aria-label="Providers">🔑</button>
 			<button class="rail-btn" onclick={onopenStatus} aria-label="État du système">
@@ -191,6 +194,13 @@
 				title="Les conversations archivées sont masquées des listes ; elles sont retrouvées à la demande."
 			>
 				{showArchived ? '← Discussions' : 'Archivées'}
+			</button>
+			<button
+				class="archive-toggle"
+				onclick={onopenJobs}
+				title="Rappels et tâches récurrentes exécutées par Hermes"
+			>
+				⏰ Tâches
 			</button>
 			<button class="archive-toggle" onclick={onopenSkills} title="Créer et modifier les skills">
 				📚 Skills

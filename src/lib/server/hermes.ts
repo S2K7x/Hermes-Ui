@@ -299,7 +299,41 @@ export const sessionChatStream = (
 // Cron jobs
 // ---------------------------------------------------------------------------
 
-export const listJobs = () => hermesJson<{ jobs: HermesJob[] }>('/api/jobs', { retries: 1 });
+/**
+ * List cron jobs.
+ *
+ * `include_disabled` is not cosmetic: measured against 0.20.0, pausing a job
+ * clears `enabled` and `_cron_list()` drops it from the default listing — the
+ * row would vanish from the panel the moment the user paused it. The panel
+ * always asks for the full set and renders the paused state itself.
+ */
+export const listJobs = (includeDisabled = true) =>
+	hermesJson<{ jobs: HermesJob[] }>(
+		`/api/jobs${includeDisabled ? '?include_disabled=true' : ''}`,
+		{ retries: 1 }
+	);
+
+export interface CreateJobBody {
+	name: string;
+	schedule: string;
+	prompt: string;
+	deliver?: string;
+}
+
+/**
+ * Create a cron job.
+ *
+ * Never retried — a replayed POST is a second job on the schedule. Note that an
+ * unparseable `schedule` comes back as HTTP 500 with the ValueError text, not a
+ * 400: `_handle_create_job` only validates name/prompt itself and lets
+ * `parse_schedule` raise into the generic handler. The browser validates the
+ * schedule first (`parseSchedule` in `$lib/jobs`) so that path stays rare.
+ */
+export const createJob = (body: CreateJobBody) =>
+	hermesJson<{ job: HermesJob }>('/api/jobs', { method: 'POST', body });
+
+export const deleteJob = (id: string) =>
+	hermesJson<{ ok: boolean }>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 export const jobAction = (id: string, action: 'pause' | 'resume' | 'run') =>
 	hermesJson<Record<string, any>>(`/api/jobs/${encodeURIComponent(id)}/${action}`, {

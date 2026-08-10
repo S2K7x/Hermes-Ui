@@ -275,6 +275,27 @@ export const disconnectOauth = (id: string) =>
 	);
 
 // ---------------------------------------------------------------------------
+// Cron delivery targets
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a scheduled job can send its output.
+ *
+ * The gateway has no equivalent endpoint — `deliver` is resolved at fire time
+ * from `*_HOME_CHANNEL` env vars the API server never exposes — so this one
+ * read comes from the dashboard. `home_target_set` is what tells apart a
+ * platform that will actually deliver from one that would resolve to nothing.
+ *
+ * Read-only and carries no credential, which is why it is safe to surface even
+ * though the rest of the dashboard proxy guards writes.
+ */
+export const getCronDeliveryTargets = () =>
+	dashboardJson<{ targets: { id: string; name?: string; home_target_set?: boolean }[] }>(
+		'/api/cron/delivery-targets',
+		{ retries: 1, timeoutMs: 8000 }
+	);
+
+// ---------------------------------------------------------------------------
 // Global default model
 // ---------------------------------------------------------------------------
 
