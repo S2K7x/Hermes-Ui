@@ -15,6 +15,7 @@
 		onopenProviders: () => void;
 		onopenJobs: () => void;
 		onopenAgents: () => void;
+		onopenTheme: () => void;
 	}
 	let {
 		open,
@@ -25,7 +26,8 @@
 		onopenSkills,
 		onopenProviders,
 		onopenJobs,
-		onopenAgents
+		onopenAgents,
+		onopenTheme
 	}: Props = $props();
 
 	let filter = $state('');
@@ -94,6 +96,7 @@
 			<button class="rail-btn" onclick={onopenJobs} aria-label="Tâches planifiées">⏰</button>
 			<button class="rail-btn" onclick={onopenSkills} aria-label="Skills">📚</button>
 			<button class="rail-btn" onclick={onopenProviders} aria-label="Providers">🔑</button>
+			<button class="rail-btn" onclick={onopenTheme} aria-label="Apparence">◐</button>
 			<button class="rail-btn" onclick={onopenStatus} aria-label="État du système">
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
 				></span>
@@ -230,6 +233,9 @@
 			>
 				🔑 Providers
 			</button>
+			<button class="archive-toggle" onclick={onopenTheme} title="Palette, accents, clair / sombre">
+				◐ Apparence
+			</button>
 			<button class="status" onclick={onopenStatus} title="État du système">
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
 				></span>
@@ -251,59 +257,74 @@
 		font-size: 11px;
 		margin-right: 1px;
 	}
+	/* A floating panel of its own, not a strip glued to the thread. When
+	   collapsed it becomes the dark icon rail — the first column of the
+	   design — so the two states swap surface as well as width. */
 	.sidebar {
 		display: flex;
 		flex-direction: column;
 		width: 268px;
 		flex: 0 0 268px;
 		height: 100%;
-		background: var(--bg-sunken);
-		border-right: 1px solid var(--border-soft);
+		background: var(--bg-raised);
+		border-radius: var(--radius-panel);
+		box-shadow: var(--shadow);
+		overflow: hidden;
 		transition: flex-basis 0.16s ease, width 0.16s ease;
 	}
 	.sidebar.collapsed {
-		width: 52px;
-		flex-basis: 52px;
+		width: var(--rail-width);
+		flex-basis: var(--rail-width);
+		background: var(--rail);
+		border-radius: var(--radius-rail);
 	}
 	.rail {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 6px;
+		gap: 8px;
 		height: 100%;
-		padding: 10px 0;
+		padding: 14px 0;
+		color: var(--rail-ink);
 	}
 	.rail-spacer {
 		flex: 1;
 	}
 	.rail-btn {
-		width: 34px;
-		height: 34px;
-		border-radius: 9px;
-		color: var(--text-muted);
-		font-size: 15px;
+		width: 44px;
+		height: 44px;
+		border-radius: var(--radius-card);
+		color: var(--rail-ink);
+		opacity: 0.72;
+		font-size: 17px;
 		line-height: 1;
 	}
 	.rail-btn:hover {
-		background: var(--bg-hover);
-		color: var(--text);
+		background: var(--rail-hover);
+		opacity: 1;
 	}
 	.rail-btn.accent {
-		color: var(--accent);
-		border: 1px solid var(--border);
+		background: var(--accent);
+		color: var(--accent-ink);
+		opacity: 1;
+		border-radius: 50%;
+	}
+	.rail-btn.accent:hover {
+		background: var(--accent);
 	}
 	.top {
 		display: flex;
 		gap: 4px;
-		padding: 10px 10px 6px;
+		padding: 12px 12px 6px;
 	}
 	.new {
 		flex: 1;
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 9px 12px;
-		border-radius: 9px;
+		min-height: 44px;
+		padding: 9px 14px;
+		border-radius: var(--radius-pill);
 		border: 1px solid var(--border);
 		font-size: 14px;
 	}
@@ -317,7 +338,7 @@
 	.icon-btn {
 		padding: 0 8px;
 		color: var(--text-faint);
-		border-radius: 7px;
+		border-radius: var(--radius-pill);
 	}
 	.icon-btn:hover {
 		background: var(--bg-hover);
@@ -327,11 +348,11 @@
 		display: none;
 	}
 	.search {
-		margin: 4px 10px 8px;
-		padding: 7px 10px;
-		background: var(--bg);
+		margin: 4px 12px 8px;
+		padding: 9px 14px;
+		background: var(--bg-sunken);
 		border: 1px solid var(--border-soft);
-		border-radius: 8px;
+		border-radius: var(--radius-pill);
 		font-size: 13px;
 		outline: none;
 	}
@@ -355,13 +376,16 @@
 		position: relative;
 		display: flex;
 		align-items: center;
-		border-radius: 8px;
+		border-radius: var(--radius-card);
+		/* Reserved so the selected row's stripe does not shift the text. */
+		border-left: 3px solid transparent;
 	}
 	.row:hover {
 		background: var(--bg-hover);
 	}
 	.row.active {
 		background: var(--accent-soft);
+		border-left-color: var(--accent);
 	}
 	.entry {
 		flex: 1;
@@ -416,16 +440,16 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 158px;
-		padding: 4px;
+		padding: 6px;
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
-		border-radius: 9px;
+		border-radius: var(--radius-card);
 		box-shadow: var(--shadow);
 	}
 	.menu button {
-		padding: 7px 10px;
+		padding: 9px 12px;
 		text-align: left;
-		border-radius: 6px;
+		border-radius: 10px;
 		font-size: 13px;
 	}
 	.menu button:hover {
@@ -457,8 +481,8 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		padding: 4px 7px;
-		border-radius: 6px;
+		padding: 5px 10px;
+		border-radius: var(--radius-pill);
 		color: var(--text-faint);
 		font-size: 11.5px;
 		white-space: nowrap;
@@ -474,6 +498,13 @@
 		border-radius: 50%;
 		background: var(--text-faint);
 	}
+	/* On the dark rail, "unknown" has to be read against the rail, not the
+	   page — `--text-faint` disappears there. */
+	.rail .dot {
+		width: 9px;
+		height: 9px;
+		background: var(--rail-ink);
+	}
 	.dot.ok {
 		background: var(--ok);
 	}
@@ -488,6 +519,11 @@
 			z-index: 50;
 			width: min(84vw, 300px);
 			flex-basis: auto;
+			padding-top: env(safe-area-inset-top);
+			padding-bottom: env(safe-area-inset-bottom);
+			/* A drawer sliding in from the left edge: only the right corners
+			   are visible, so only they are rounded. */
+			border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
 			transform: translateX(-100%);
 			transition: transform 0.22s ease;
 			box-shadow: var(--shadow);
@@ -500,12 +536,20 @@
 		.sidebar.collapsed {
 			width: min(84vw, 300px);
 			flex-basis: auto;
+			background: var(--bg-raised);
+			border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
 		}
 		.close {
 			display: block;
+			min-width: 44px;
+			min-height: 44px;
 		}
 		.collapse {
 			display: none;
+		}
+		.archive-toggle,
+		.status {
+			min-height: 34px;
 		}
 	}
 </style>

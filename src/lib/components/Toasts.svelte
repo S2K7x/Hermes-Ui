@@ -50,17 +50,17 @@
 		padding: 10px 12px;
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
-		border-radius: 11px;
+		border-radius: var(--radius-card);
 		box-shadow: var(--shadow);
 		font-size: 13.5px;
 		line-height: 1.45;
 		pointer-events: auto;
 	}
 	.toast.error {
-		border-color: rgba(224, 82, 82, 0.5);
+		border-color: var(--danger);
 	}
 	.toast.success {
-		border-color: rgba(95, 168, 95, 0.5);
+		border-color: var(--ok);
 	}
 	.icon {
 		flex: 0 0 auto;

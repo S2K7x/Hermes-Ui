@@ -12,10 +12,12 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import SkillsPanel from '$lib/components/SkillsPanel.svelte';
 	import StatusPanel from '$lib/components/StatusPanel.svelte';
+	import ThemePanel from '$lib/components/ThemePanel.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { prompts } from '$lib/stores/prompts.svelte';
 	import { push } from '$lib/stores/push.svelte';
+	import { theme } from '$lib/stores/theme.svelte';
 	import { toasts } from '$lib/stores/toast.svelte';
 	import { read, readJSON, write, writeJSON } from '$lib/client/storage';
 	import { hasMod, modKey } from '$lib/client/platform';
@@ -31,7 +33,10 @@
 	let jobsOpen = $state(false);
 	let agentsOpen = $state(false);
 	let shortcutsOpen = $state(false);
+	let themeOpen = $state(false);
 	let narrow = $state(false);
+	/** How much of the layout viewport the soft keyboard is covering. */
+	let keyboard = $state(0);
 
 	let scroller = $state<HTMLDivElement | null>(null);
 	/** Autoscroll only while already at the bottom, so scrolling up to read
@@ -54,10 +59,32 @@
 		const onChange = (e: MediaQueryListEvent) => (narrow = e.matches);
 		mq.addEventListener('change', onChange);
 
+		/**
+		 * Keep the composer above the iOS keyboard.
+		 *
+		 * `interactive-widget=resizes-visual` is ignored in standalone mode, so
+		 * in an installed PWA the layout viewport keeps its full height and the
+		 * keyboard simply covers the bottom of the page — composer included.
+		 * The visual viewport is the only thing that reports the real, usable
+		 * area, hence this rather than a media query.
+		 */
+		const vv = window.visualViewport;
+		const onViewport = () => {
+			if (!vv) return;
+			const hidden = window.innerHeight - vv.height - vv.offsetTop;
+			// Small deltas are browser chrome (the Safari toolbar), not a keyboard.
+			keyboard = hidden > 24 ? Math.round(hidden) : 0;
+			if (pinnedToBottom) tick().then(() => scroller?.scrollTo({ top: scroller.scrollHeight }));
+		};
+		vv?.addEventListener('resize', onViewport);
+		vv?.addEventListener('scroll', onViewport);
+
 		void boot();
 
 		return () => {
 			mq.removeEventListener('change', onChange);
+			vv?.removeEventListener('resize', onViewport);
+			vv?.removeEventListener('scroll', onViewport);
 		};
 	});
 
@@ -103,13 +130,6 @@
 	function scrollToBottom() {
 		scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
 		pinnedToBottom = true;
-	}
-
-	function toggleTheme() {
-		const root = document.documentElement;
-		const next = root.dataset.theme === 'light' ? 'dark' : 'light';
-		root.dataset.theme = next;
-		write('hermes-theme', next);
 	}
 
 	/** Two modals must never stack: the status panel steps aside. */
@@ -165,15 +185,16 @@
 			label: `Prompt : ${p.title}`,
 			run: () => composer?.insert(p.text)
 		})),
-		{ id: 'theme', label: 'Basculer le thème clair / sombre', run: toggleTheme },
+		{ id: 'appearance', label: 'Apparence (palette et accents)', run: () => (themeOpen = true) },
+		{ id: 'theme', label: 'Basculer le thème clair / sombre', run: () => theme.toggleMode() },
 		{ id: 'shortcuts', label: 'Raccourcis clavier', hint: '?', run: () => (shortcutsOpen = true) }
 	]);
 
 	function onKeydown(event: KeyboardEvent) {
-		// The skills, providers, jobs and agents panels are modal and own their
-		// own Escape while open; letting these shortcuts through would fire
-		// behind them.
-		if (skillsOpen || providersOpen || jobsOpen || agentsOpen) return;
+		// The skills, providers, jobs, agents and theme panels are modal and own
+		// their own Escape while open; letting these shortcuts through would
+		// fire behind them.
+		if (skillsOpen || providersOpen || jobsOpen || agentsOpen || themeOpen) return;
 		const meta = hasMod(event);
 		const target = event.target as HTMLElement | null;
 		const typing =
@@ -223,7 +244,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="app">
+<div class="app" style="--keyboard: {keyboard}px">
 	<Sidebar
 		open={sidebarOpen}
 		collapsed={sidebarCollapsed && !narrow}
@@ -234,6 +255,7 @@
 		onopenProviders={() => (providersOpen = true)}
 		onopenJobs={() => (jobsOpen = true)}
 		onopenAgents={() => (agentsOpen = true)}
+		onopenTheme={() => (themeOpen = true)}
 	/>
 
 	{#if sidebarOpen}
@@ -254,7 +276,7 @@
 				>
 				<AgentPicker onmanage={() => (agentsOpen = true)} />
 				<ModelPicker />
-				<button class="icon" onclick={toggleTheme} aria-label="Thème">◐</button>
+				<button class="icon" onclick={() => (themeOpen = true)} aria-label="Apparence">◐</button>
 			</div>
 		</header>
 
@@ -358,12 +380,20 @@
 <AgentsPanel open={agentsOpen} onclose={() => (agentsOpen = false)} />
 <SkillsPanel open={skillsOpen} onclose={() => (skillsOpen = false)} />
 <ProvidersPanel open={providersOpen} onclose={() => (providersOpen = false)} />
+<ThemePanel open={themeOpen} onclose={() => (themeOpen = false)} />
 <Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />
 
 <style>
+	/* Panels float: the page background shows between them, which is what
+	   gives the layout its depth. On a phone that margin is just lost width,
+	   so the media query below takes it all back. */
 	.app {
 		display: flex;
+		gap: var(--gap-panel);
 		height: 100dvh;
+		padding: var(--gap-panel);
+		padding-top: max(var(--gap-panel), env(safe-area-inset-top));
+		padding-bottom: max(var(--gap-panel), env(safe-area-inset-bottom));
 		overflow: hidden;
 	}
 	main {
@@ -372,14 +402,17 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
+		background: var(--bg-raised);
+		border-radius: var(--radius-panel);
+		box-shadow: var(--shadow);
+		overflow: hidden;
 	}
 	header {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 10px 16px;
+		padding: 10px 18px;
 		border-bottom: 1px solid var(--border-soft);
-		padding-top: max(10px, env(safe-area-inset-top));
 	}
 	.heading {
 		flex: 1;
@@ -409,7 +442,7 @@
 	.icon {
 		padding: 4px 8px;
 		color: var(--text-muted);
-		border-radius: 7px;
+		border-radius: var(--radius-pill);
 		font-size: 15px;
 		line-height: 1.2;
 	}
@@ -428,14 +461,14 @@
 		justify-content: center;
 		gap: 12px;
 		padding: 7px 14px;
-		background: rgba(224, 82, 82, 0.12);
+		background: var(--danger-soft);
 		color: var(--danger);
 		font-size: 13px;
 	}
 	.banner button {
 		padding: 2px 10px;
 		border: 1px solid currentColor;
-		border-radius: 6px;
+		border-radius: var(--radius-pill);
 		font-size: 12.5px;
 	}
 	.scroll {
@@ -451,10 +484,10 @@
 	.to-bottom {
 		position: absolute;
 		left: 50%;
-		bottom: 104px;
+		bottom: calc(104px + var(--keyboard, 0px));
 		transform: translateX(-50%);
-		width: 32px;
-		height: 32px;
+		width: 36px;
+		height: 36px;
 		border-radius: 50%;
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
@@ -465,8 +498,11 @@
 	.to-bottom:hover {
 		color: var(--text);
 	}
+	/* `--keyboard` is what the visual viewport says the soft keyboard is
+	   covering; see the listener in onMount. It is 0 on the desktop. */
 	.composer-wrap {
-		padding: 6px 16px max(12px, env(safe-area-inset-bottom));
+		padding: 6px 16px 12px;
+		padding-bottom: calc(12px + var(--keyboard, 0px));
 	}
 	.disclaimer {
 		max-width: 780px;
@@ -512,9 +548,10 @@
 		max-width: 620px;
 	}
 	.chips button {
-		padding: 8px 14px;
+		padding: 10px 16px;
+		min-height: 44px;
 		border: 1px solid var(--border-soft);
-		border-radius: 20px;
+		border-radius: var(--radius-pill);
 		font-size: 13px;
 		color: var(--text-muted);
 		text-align: left;
@@ -536,9 +573,10 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		padding: 5px 12px;
+		padding: 7px 14px;
+		min-height: 36px;
 		border: 1px solid var(--border-soft);
-		border-radius: 20px;
+		border-radius: var(--radius-pill);
 		font-size: 12.5px;
 		color: var(--text-muted);
 	}
@@ -577,18 +615,41 @@
 		position: fixed;
 		inset: 0;
 		z-index: 40;
-		background: rgba(0, 0, 0, 0.45);
+		background: var(--scrim);
 	}
 
+	/* Phone: full bleed. Floating cards with 14px margins on a 390px screen
+	   are just lost width — same colours, same roundness, no gutters. */
 	@media (max-width: 820px) {
+		.app {
+			gap: 0;
+			padding: 0;
+		}
+		main {
+			border-radius: 0;
+			box-shadow: none;
+		}
+		header {
+			padding: 10px 12px;
+			padding-top: max(10px, env(safe-area-inset-top));
+		}
 		.burger {
 			display: block;
+			min-width: 44px;
+			min-height: 44px;
+		}
+		.icon {
+			min-width: 40px;
+			min-height: 40px;
 		}
 		.thread {
 			padding: 16px 12px 8px;
 		}
 		.composer-wrap {
-			padding: 6px 10px max(10px, env(safe-area-inset-bottom));
+			padding: 6px 10px 10px;
+			/* Only one of the two is ever non-zero: the keyboard covers the home
+			   indicator while it is up. */
+			padding-bottom: calc(10px + max(env(safe-area-inset-bottom), var(--keyboard, 0px)));
 		}
 		.chips button {
 			font-size: 12.5px;

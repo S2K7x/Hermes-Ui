@@ -42,7 +42,7 @@
 	a {
 		padding: 7px 14px;
 		border: 1px solid var(--border);
-		border-radius: 8px;
+		border-radius: var(--radius-card);
 		font-size: 14px;
 		color: var(--text);
 		text-decoration: none;

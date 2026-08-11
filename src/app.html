@@ -6,13 +6,35 @@
 			name="viewport"
 			content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
 		/>
-		<meta name="theme-color" content="#1c1b19" />
+		<meta name="theme-color" content="#141312" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<meta name="apple-mobile-web-app-title" content="Hermes" />
 		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
 		<link rel="icon" href="%sveltekit.assets%/icon.svg" type="image/svg+xml" />
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/icon-192.png" />
+		<!--
+			Repaint the saved theme before the first frame.
+
+			The store caches the *computed* custom properties, so this replays a
+			map and carries no derivation logic of its own — nothing here can
+			drift out of step with src/lib/theme.ts. Without it every launch of
+			the installed app flashes the default palette before hydration.
+		-->
+		<script>
+			try {
+				var cached = JSON.parse(localStorage.getItem('hermes-theme-cache') || 'null');
+				if (cached && cached.vars) {
+					var root = document.documentElement;
+					if (cached.mode === 'light' || cached.mode === 'dark') root.dataset.theme = cached.mode;
+					for (var name in cached.vars) root.style.setProperty(name, cached.vars[name]);
+					var meta = document.querySelector('meta[name="theme-color"]');
+					if (meta && cached.vars['--bg']) meta.setAttribute('content', cached.vars['--bg']);
+				}
+			} catch (e) {
+				/* private mode, quota, corrupt row — the default palette is fine */
+			}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

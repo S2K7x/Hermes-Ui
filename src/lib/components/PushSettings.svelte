@@ -102,7 +102,7 @@
 	.row button {
 		padding: 5px 12px;
 		border: 1px solid var(--border);
-		border-radius: 7px;
+		border-radius: 10px;
 		font-size: 13px;
 	}
 	.row button:hover:not(:disabled) {
@@ -128,7 +128,7 @@
 		align-items: baseline;
 		gap: 9px;
 		padding: 5px 8px;
-		border-radius: 7px;
+		border-radius: 10px;
 		font-size: 13.5px;
 	}
 	.checks li:nth-child(odd) {

@@ -72,7 +72,7 @@
 	.timeline {
 		margin: 0 0 10px;
 		border: 1px solid var(--border-soft);
-		border-radius: 10px;
+		border-radius: var(--radius-card);
 		background: var(--bg-sunken);
 		font-size: 13px;
 	}
@@ -148,7 +148,7 @@
 		padding: 0 6px;
 		font-size: 11px;
 		border-radius: 4px;
-		background: rgba(224, 82, 82, 0.16);
+		background: var(--danger-soft);
 		color: var(--danger);
 	}
 	.step.failed .name {

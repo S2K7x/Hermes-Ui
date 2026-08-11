@@ -352,7 +352,7 @@
 		padding: 8px;
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
-		border-radius: 16px;
+		border-radius: var(--radius-bubble);
 		box-shadow: var(--shadow);
 	}
 	.composer.dragging {
@@ -377,8 +377,12 @@
 	}
 	.attach {
 		flex: 0 0 auto;
-		padding: 5px 7px;
-		border-radius: 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 38px;
+		height: 38px;
+		border-radius: 50%;
 		cursor: pointer;
 		font-size: 16px;
 		opacity: 0.65;
@@ -397,22 +401,25 @@
 		opacity: 1;
 		background: var(--bg-hover);
 	}
+	/* Sending is the positive action of this screen, so it wears the second
+	   accent rather than the first. */
 	.send {
 		flex: 0 0 auto;
-		width: 34px;
-		height: 34px;
+		width: 38px;
+		height: 38px;
 		border-radius: 50%;
-		background: var(--accent);
-		color: #fff;
+		background: var(--accent-2);
+		color: var(--accent-2-ink);
 		font-size: 16px;
 		line-height: 1;
 	}
 	.send:disabled {
-		opacity: 0.3;
+		opacity: 0.35;
 		cursor: default;
 	}
 	.send.stop {
-		background: var(--text-muted);
+		background: var(--bg-hover);
+		color: var(--text-muted);
 		font-size: 11px;
 	}
 	.attachments {
@@ -428,7 +435,7 @@
 		width: 58px;
 		height: 58px;
 		object-fit: cover;
-		border-radius: 8px;
+		border-radius: var(--radius-card);
 		border: 1px solid var(--border);
 	}
 	.att button {
@@ -445,9 +452,9 @@
 	}
 	.notice {
 		margin: 0 4px 8px;
-		padding: 6px 10px;
+		padding: 7px 12px;
 		font-size: 12.5px;
-		border-radius: 8px;
+		border-radius: var(--radius-card);
 		background: var(--accent-soft);
 		color: var(--text-muted);
 	}
@@ -460,18 +467,18 @@
 		flex-direction: column;
 		max-height: 260px;
 		overflow-y: auto;
-		padding: 5px;
+		padding: 6px;
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
-		border-radius: 12px;
+		border-radius: var(--radius-card);
 		box-shadow: var(--shadow);
 	}
 	.palette button {
 		display: flex;
 		gap: 10px;
 		align-items: baseline;
-		padding: 7px 10px;
-		border-radius: 8px;
+		padding: 9px 12px;
+		border-radius: 10px;
 		text-align: left;
 	}
 	.palette button.sel,
@@ -511,10 +518,10 @@
 	}
 	.p-filter {
 		margin: 4px 6px 2px;
-		padding: 6px 8px;
+		padding: 8px 12px;
 		background: var(--bg-sunken);
 		border: 1px solid var(--border-soft);
-		border-radius: 8px;
+		border-radius: var(--radius-pill);
 		font-size: 13px;
 		outline: none;
 	}

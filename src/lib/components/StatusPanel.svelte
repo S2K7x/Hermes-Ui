@@ -193,7 +193,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 150;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 	}
 	.panel {
 		position: fixed;
@@ -207,7 +207,7 @@
 		flex-direction: column;
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
-		border-radius: 14px;
+		border-radius: var(--radius-panel);
 		box-shadow: var(--shadow);
 		overflow: hidden;
 	}
@@ -279,7 +279,7 @@
 	.err {
 		padding: 8px 11px;
 		border-radius: 8px;
-		background: rgba(224, 82, 82, 0.1);
+		background: var(--danger-soft);
 		color: var(--danger);
 		font-size: 13px;
 	}
@@ -332,5 +332,21 @@
 	}
 	footer button:hover {
 		background: var(--bg-hover);
+	}
+
+	/* Phone: come up from the bottom edge instead of floating in the middle,
+	   rounded on top only. Margins on a 390px screen are lost width. */
+	@media (max-width: 820px) {
+		.panel {
+			top: auto;
+			bottom: 0;
+			left: 0;
+			transform: none;
+			width: 100%;
+			max-height: 92dvh;
+			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+			border-bottom: none;
+			padding-bottom: env(safe-area-inset-bottom);
+		}
 	}
 </style>

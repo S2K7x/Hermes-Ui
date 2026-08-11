@@ -123,7 +123,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 150;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 	}
 	.palette {
 		position: fixed;
@@ -137,7 +137,7 @@
 		flex-direction: column;
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
-		border-radius: 14px;
+		border-radius: var(--radius-panel);
 		box-shadow: var(--shadow);
 		overflow: hidden;
 	}
@@ -205,5 +205,19 @@
 		border: 1px solid var(--border);
 		border-radius: 4px;
 		background: var(--bg-sunken);
+	}
+
+	/* Phone: full width, but still anchored near the top — this panel's first
+	   element is a text field, and a sheet rising from the bottom would put it
+	   exactly where the keyboard lands. */
+	@media (max-width: 820px) {
+		.palette {
+			top: max(8px, env(safe-area-inset-top));
+			left: 0;
+			transform: none;
+			width: 100%;
+			max-height: 60dvh;
+			border-radius: var(--radius-panel);
+		}
 	}
 </style>

@@ -2,14 +2,15 @@
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import Toasts from '$lib/components/Toasts.svelte';
-	import { read } from '$lib/client/storage';
+	import { theme } from '$lib/stores/theme.svelte';
 	import { toasts } from '$lib/stores/toast.svelte';
 
 	let { children } = $props();
 
 	onMount(() => {
-		const saved = read('hermes-theme');
-		if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+		// The cached palette is already painted by the early script in app.html;
+		// this reconciles it with the server, which is the truth.
+		void theme.init();
 
 		if ('serviceWorker' in navigator && location.protocol === 'https:') {
 			navigator.serviceWorker.register('/service-worker.js').catch(() => {});

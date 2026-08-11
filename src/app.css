@@ -1,45 +1,87 @@
 /* ---------------------------------------------------------------------------
-   Design tokens. Dark is the default (mobile PWA at night is the main use),
-   but both palettes are fully defined so the toggle works in both directions.
+   Design tokens.
+
+   These literals are the *default* theme (preset "Terracotta", dark) and exist
+   only so the very first paint of a fresh browser is not colourless. The real
+   values are computed by `src/lib/theme.ts` and written onto <html> as inline
+   custom properties — by the early script in app.html on a repeat visit, then
+   by the theme store. Anything themable must therefore be declared here AND
+   produced by `themeVariables()`; `tests/theme.test.ts` enforces that.
+
+   Shapes and type are not themable: they are the design, not a preference.
    --------------------------------------------------------------------------- */
 
 :root,
 :root[data-theme='dark'] {
-	--bg: #1c1b19;
-	--bg-raised: #262523;
-	--bg-sunken: #151412;
-	--bg-hover: #302e2b;
-	--border: #3a3835;
-	--border-soft: #2e2c29;
-	--text: #f0eee6;
-	--text-muted: #a5a196;
-	--text-faint: #6f6b62;
-	--accent: #d97757;
-	--accent-soft: rgba(217, 119, 87, 0.14);
-	--danger: #e05252;
-	--ok: #5fa85f;
-	--code-bg: #121110;
-	--user-bubble: #2f2d29;
+	--bg: #141312;
+	--bg-raised: #221f1c;
+	--bg-sunken: #191614;
+	--bg-hover: #2e2a26;
+	--border: #3a3531;
+	--border-soft: #2a2622;
+	--text: #f2ebe2;
+	--text-muted: #a79c91;
+	--text-faint: #78706a;
+	--accent: #ee7c2b;
+	--accent-ink: #1b1613;
+	--accent-soft: #3d2b1c;
+	--accent-2: #a6be79;
+	--accent-2-ink: #1b1613;
+	--accent-2-soft: #2f3324;
+	--danger: #e0705a;
+	--danger-soft: #3b2320;
+	--ok: #86ae62;
+	--code-bg: #191614;
+	--user-bubble: #ae5d23;
+	--user-ink: #ffffff;
+	--assistant-bubble: #2b2723;
+	--rail: #312d2a;
+	--rail-ink: #ffffff;
+	--rail-hover: #4e4a48;
 	--shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+	--scrim: rgba(0, 0, 0, 0.58);
 }
 
 :root[data-theme='light'] {
-	--bg: #faf9f5;
-	--bg-raised: #ffffff;
-	--bg-sunken: #f0eee6;
-	--bg-hover: #eeece4;
-	--border: #dedbd1;
-	--border-soft: #e8e5dc;
-	--text: #26241f;
-	--text-muted: #63605a;
-	--text-faint: #928f87;
-	--accent: #c25f3c;
-	--accent-soft: rgba(194, 95, 60, 0.1);
-	--danger: #c33;
-	--ok: #3f7d3f;
-	--code-bg: #f3f1ea;
-	--user-bubble: #eceadf;
-	--shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
+	--bg: #dcdbd9;
+	--bg-raised: #fdfbf7;
+	--bg-sunken: #f5f1ea;
+	--bg-hover: #efe9e0;
+	--border: #e6dfd4;
+	--border-soft: #f0eae1;
+	--text: #2c211b;
+	--text-muted: #7a6e64;
+	--text-faint: #a79c91;
+	--accent: #ee7c2b;
+	--accent-ink: #1b1613;
+	--accent-soft: #fcebdc;
+	--accent-2: #a6be79;
+	--accent-2-ink: #1b1613;
+	--accent-2-soft: #eaf0dd;
+	--danger: #d2563f;
+	--danger-soft: #f8e2dd;
+	--ok: #6e9a4e;
+	--code-bg: #f5f1ea;
+	--user-bubble: #ab5c25;
+	--user-ink: #ffffff;
+	--assistant-bubble: #efe9e2;
+	--rail: #2e211b;
+	--rail-ink: #ffffff;
+	--rail-hover: #4b403b;
+	--shadow: 0 8px 28px rgba(60, 45, 35, 0.1);
+	--scrim: rgba(44, 33, 27, 0.35);
+}
+
+/* Shapes: floating panels, soft cards, pill-shaped actions. */
+:root {
+	--radius-panel: 26px;
+	--radius-rail: 30px;
+	--radius-bubble: 20px;
+	--radius-card: 14px;
+	--radius-pill: 999px;
+	/* The gap that makes panels read as floating rather than as one surface. */
+	--gap-panel: 14px;
+	--rail-width: 64px;
 }
 
 * {
@@ -51,17 +93,22 @@ body {
 	margin: 0;
 	padding: 0;
 	height: 100%;
-	overscroll-behavior-y: none;
+	overscroll-behavior: none;
 }
 
 body {
 	background: var(--bg);
 	color: var(--text);
+	/* Rounded system faces first: free on Apple platforms, and exactly the
+	   shape of the design. No webfont — this runs on a Pi. */
 	font-family:
-		ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+		ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', ui-sans-serif, -apple-system,
+		'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 	font-size: 15px;
 	line-height: 1.6;
 	-webkit-font-smoothing: antialiased;
+	/* iOS paints a grey box on every tap otherwise. */
+	-webkit-tap-highlight-color: transparent;
 }
 
 button {
@@ -141,14 +188,15 @@ a {
 	font-size: 0.88em;
 	background: var(--code-bg);
 	padding: 0.15em 0.38em;
-	border-radius: 4px;
+	border-radius: 6px;
 }
+/* Blocks inside a message are cards in their own right, not flat insets. */
 .md pre {
 	margin: 0 0 0.9em;
 	padding: 0;
-	background: var(--code-bg);
+	background: var(--bg-raised);
 	border: 1px solid var(--border-soft);
-	border-radius: 10px;
+	border-radius: var(--radius-card);
 	overflow: hidden;
 }
 .md pre code {
@@ -166,10 +214,13 @@ a {
 	border-collapse: collapse;
 	margin: 0 0 0.9em;
 	font-size: 0.92em;
+	background: var(--bg-raised);
+	border: 1px solid var(--border-soft);
+	border-radius: var(--radius-card);
 }
 .md th,
 .md td {
-	border: 1px solid var(--border);
+	border: 1px solid var(--border-soft);
 	padding: 0.4em 0.7em;
 	text-align: left;
 }
@@ -179,7 +230,7 @@ a {
 }
 .md img {
 	max-width: 100%;
-	border-radius: 8px;
+	border-radius: var(--radius-card);
 }
 .md hr {
 	border: none;

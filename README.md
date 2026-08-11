@@ -49,7 +49,13 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
   applicable à la conversation ouverte dès le message suivant
 - **Export markdown** de la conversation
-- **PWA** installable sur téléphone, thème sombre, responsive
+- **Apparence** (◐ dans l'entête, ou `⌘K` → « Apparence ») : quatre palettes
+  nommées, mode clair / sombre, et deux couleurs d'accent choisissables — le
+  reste en est dérivé. Le choix est enregistré côté serveur, donc le téléphone
+  et le bureau sont d'accord
+- **PWA** installable sur téléphone : plein cadre, feuilles qui montent du bas,
+  encoche et barre d'accueil respectées, composeur qui reste au-dessus du
+  clavier iOS
 - **Raccourcis clavier** (`?` pour la liste)
 - **Détachement** d'un tour en cours (voir la limite ci-dessous)
 

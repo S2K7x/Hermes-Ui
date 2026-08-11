@@ -21,7 +21,7 @@ Navigateur / PWA
 SvelteKit adapter-node — 127.0.0.1:3000  (conteneur Docker)
    ├── src/routes/api/**      proxy de confiance : injecte le Bearer
    ├── src/lib/server/turns.ts tours en vol (survivent au départ du client)
-   ├── data/hermes-web.db     prefs, prompts, titres, agents, abonnements push
+   ├── data/hermes-web.db     prefs, prompts, thème, titres, agents, push
    └── /skills                bind mount de ~/.hermes/skills (éditeur de skills)
    │
    ├─ HTTPS sortant → service de push (Apple / Google / Mozilla)
@@ -577,6 +577,80 @@ Routes : `GET|POST /api/agents`, `PATCH|DELETE /api/agents/{id}` et
 `null` pour la détacher — effectif au message suivant, comme le verrou de
 modèle du point 3).
 
+### 19. Le thème : dix couleurs déclarées, tout le reste dérivé
+
+L'apparence est un réglage à part entière, pas une bascule clair/sombre. Un
+**préréglage** (`PRESETS` dans `src/lib/theme.ts`) déclare **dix couleurs par
+mode** et rien de plus : fond, surface, surface creusée, texte, texte
+secondaire, deux accents, tonalité profonde (`rail`), danger, succès. Survols,
+bordures, texte discret, fonds doux et bulle de l'assistant sont **calculés**
+par `themeVariables()` en `color-mix(in oklab, …)`. C'est ce qui fait qu'un
+accent choisi ne peut pas laisser un survol périmé derrière lui : la couleur
+n'est écrite qu'à un seul endroit.
+
+Deux choses ne sont **pas** laissées au CSS, parce qu'elles demandent un calcul
+qu'aucune feuille de style ne sait faire, et sont donc des fonctions pures
+testées :
+
+- `readableInk()` choisit, entre une encre sombre et le blanc, celle qui a le
+  meilleur contraste WCAG sur une couleur. C'est ce qui pose le texte des
+  badges, du bouton d'envoi et du rail.
+- `ensureContrast()` **assombrit un accent juste assez** pour que le blanc
+  dessus atteigne 4,5:1, et pas plus. C'est la bulle utilisateur : « orange
+  plein, texte blanc » reste vrai même si l'utilisateur choisit un jaune. Le
+  test rejoue tous les accents des préréglages plus les cas pathologiques
+  (`#ffff00`, `#ffffff`, `#7f7f7f`).
+
+Points de détail qui comptent :
+
+- **Le stockage est serveur** (`prefs`, clé `theme`, `GET|PUT /api/theme`),
+  pour la même raison que les prompts enregistrés (point 15) : une palette
+  choisie sur le bureau doit être celle qu'ouvre le téléphone. `normalizeTheme()`
+  est la seule validation — préréglage inconnu, mode inconnu, accent qui n'est
+  pas un `#rrggbb` : tout retombe sur le défaut, donc rien d'arbitraire ne peut
+  atteindre `style.setProperty()`.
+- **Le navigateur garde une copie**, mais des **variables calculées**, pas des
+  réglages : le script inline d'`app.html` rejoue une table clé → valeur et ne
+  porte aucune logique. Il n'existe donc pas de seconde copie des règles de
+  dérivation à tenir à jour. Sans ce cache, chaque ouverture de la PWA flashe
+  la palette par défaut avant l'hydratation.
+- `src/app.css` déclare les mêmes noms avec des littéraux : c'est le rendu
+  d'avant hydratation, et seulement ça. Un token déclaré là mais absent de
+  `themeVariables()` garderait sa couleur d'usine au changement de
+  préréglage — `tests/theme.test.ts` **lit la feuille de style** pour qu'aucun
+  ne passe entre les mailles. Les formes (`--radius-*`, `--gap-panel`,
+  `--rail-width`) sont exclues : ce sont le design, pas une préférence.
+- Le rail sombre du design n'a de sens qu'en mode clair. En sombre, `p.rail`
+  serait une colonne presque noire sur une page presque noire : `--rail` y est
+  au contraire **relevé au-dessus de la surface**. `p.rail` reste dans les deux
+  cas la tonalité vers laquelle on assombrit.
+- **`color-mix` est requis** (Safari 16.2+, Chrome 111+). Tout appareil capable
+  des notifications push de cette app (iOS 16.4+) en dispose ; ne pas le
+  supposer ailleurs sans vérifier.
+
+### 20. iPhone : le clavier ne redimensionne pas le viewport en PWA installée
+
+`interactive-widget=resizes-visual` est **ignoré** en mode standalone. Dans
+l'app installée sur l'écran d'accueil, le viewport de mise en page garde toute
+sa hauteur et le clavier recouvre simplement le bas de la page — composeur
+compris. La seule mesure fiable est l'**API `visualViewport`** :
+`window.innerHeight - visualViewport.height - visualViewport.offsetTop`, écouté
+sur `resize` **et** `scroll`, publié par `+page.svelte` en variable CSS
+`--keyboard` sur `.app`. Les petits écarts (< 24 px) sont de la barre d'outils
+Safari, pas un clavier, et sont ignorés.
+
+Le reste des contraintes tactiles : `viewport-fit=cover` est déjà dans
+`app.html` (sans lui `env(safe-area-inset-*)` renvoie 0), l'encoche est gérée
+par le `padding-top` de l'entête, la barre d'accueil par le composeur, les
+cibles font 44 px, et `-webkit-tap-highlight-color: transparent` retire le
+carré gris d'iOS.
+
+Sur téléphone, la refonte en panneaux flottants est **délibérément
+désactivée** : des cartes à 14 px de marge sur 390 px de large, c'est de la
+place perdue. En dessous de 820 px, `.app` reprend ses gouttières, `main`
+perd son rayon, et les panneaux modaux deviennent des **feuilles qui montent du
+bas**, arrondies en haut seulement.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -611,7 +685,7 @@ src/
 │   │   ├── turns.ts     registre des tours en vol, présence, notification
 │   │   ├── push.ts      envoi Web Push (abonnements, 410 → oubli)
 │   │   ├── push-crypto.ts RFC 8291 + RFC 8292, sans dépendance
-│   │   ├── db.ts        better-sqlite3 (prefs, prompts, titres, abonnements)
+│   │   ├── db.ts        better-sqlite3 (prefs, prompts, thème, titres, push)
 │   │   │                  — la table `agents` vit dans server/agents.ts
 │   │   ├── limits.ts    sémaphore de tours + token bucket
 │   │   ├── skills.ts    lecture/écriture des SKILL.md sur le disque
@@ -623,7 +697,7 @@ src/
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
 │   │                  AgentPicker, Markdown, CommandPalette, StatusPanel,
 │   │                  SkillsPanel, ProvidersPanel, JobsPanel, AgentsPanel,
-│   │                  PushSettings, Shortcuts, Toasts
+│   │                  PushSettings, ThemePanel, Shortcuts, Toasts
 │   ├── stores/
 │   │   ├── chat.svelte.ts       tout l'état de conversation (runes Svelte 5)
 │   │   ├── agents.svelte.ts     équipe d'agents personnalisés
@@ -632,6 +706,7 @@ src/
 │   │   ├── providers.svelte.ts  état du panneau providers (dont le flux OAuth)
 │   │   ├── jobs.svelte.ts       état du panneau des tâches planifiées
 │   │   ├── push.svelte.ts       abonnement Web Push + report de présence
+│   │   ├── theme.svelte.ts      palette active + cache d'avant-rendu
 │   │   └── toast.svelte.ts      notifications dans la page
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
 │   ├── errors.ts      ApiError + codes + `humanizeError`
@@ -645,6 +720,7 @@ src/
 │   │                  candidats de la vue archivée
 │   ├── skills.ts      chemins de skills validés, gabarits, groupement
 │   ├── sse.ts         parseur SSE incrémental (partagé)
+│   ├── theme.ts       préréglages, dérivation color-mix, contraste WCAG
 │   ├── turns.ts       résumé d'un tour + « faut-il notifier ? »
 │   ├── markdown.ts    rendu tolérant à l'incomplet
 │   └── transcript.ts  regroupement du transcript persisté en tours UI
@@ -727,8 +803,11 @@ Points de détail qui comptent :
   étape de build. N'y mettez que de la logique pure (pas de DOM) — c'est
   pourquoi `renderMarkdown` n'est pas testé directement, seulement
   `closeOpenConstructs` et la sortie de `marked`.
-- Thème piloté par des tokens CSS dans `src/app.css`, sombre par défaut,
-  `data-theme` sur `<html>`.
+- Thème piloté par des tokens CSS. Les littéraux d'`src/app.css` ne sont que
+  le rendu d'avant hydratation ; la source est `src/lib/theme.ts`, appliquée
+  en propriétés inline sur `<html>` avec `data-theme` pour le mode. Toute
+  nouvelle couleur passe par un token, jamais par un littéral dans un
+  composant — voir le point 19.
 
 ## Commandes
 

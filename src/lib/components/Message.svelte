@@ -83,9 +83,10 @@
 	}
 	.bubble {
 		max-width: min(78%, 640px);
-		padding: 10px 15px;
+		padding: 11px 17px;
 		background: var(--user-bubble);
-		border-radius: 16px 16px 4px 16px;
+		color: var(--user-ink);
+		border-radius: var(--radius-bubble) var(--radius-bubble) 6px var(--radius-bubble);
 	}
 	.user-text {
 		white-space: pre-wrap;
@@ -100,12 +101,17 @@
 	.images img {
 		max-width: 180px;
 		max-height: 180px;
-		border-radius: 8px;
+		border-radius: var(--radius-card);
 		object-fit: cover;
 	}
+	/* The assistant answers in a bubble too, so the white cards a reply
+	   contains (code blocks, tables) read as cards rather than as the page. */
 	.assistant {
 		width: 100%;
 		min-width: 0;
+		padding: 12px 16px;
+		background: var(--assistant-bubble);
+		border-radius: var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) 6px;
 	}
 	/* Blinking caret after the last rendered character, like Claude's. The
 	   markdown re-render is debounced, so the caret is what tells the user
@@ -137,16 +143,16 @@
 		gap: 10px;
 		flex-wrap: wrap;
 		margin-top: 8px;
-		padding: 8px 12px;
-		border-radius: 8px;
-		background: var(--bg-sunken);
+		padding: 9px 14px;
+		border-radius: var(--radius-card);
+		background: var(--bg-raised);
 		color: var(--text-muted);
 		font-size: 13px;
 	}
 	.detached button {
-		padding: 3px 10px;
+		padding: 5px 12px;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-pill);
 		font-size: 12.5px;
 		color: var(--text);
 	}
@@ -155,9 +161,9 @@
 	}
 	.error {
 		margin-top: 8px;
-		padding: 8px 12px;
-		border-radius: 8px;
-		background: rgba(224, 82, 82, 0.1);
+		padding: 9px 14px;
+		border-radius: var(--radius-card);
+		background: var(--danger-soft);
 		color: var(--danger);
 		font-size: 13.5px;
 	}
@@ -178,11 +184,11 @@
 		}
 	}
 	.actions button {
-		padding: 3px 9px;
+		padding: 4px 12px;
 		font-size: 12px;
 		color: var(--text-faint);
 		border: 1px solid var(--border-soft);
-		border-radius: 6px;
+		border-radius: var(--radius-pill);
 	}
 	.actions button:hover {
 		color: var(--text);

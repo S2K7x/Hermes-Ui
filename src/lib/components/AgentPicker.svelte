@@ -82,7 +82,7 @@
 		font-size: 12.5px;
 		color: var(--text-muted);
 		border: 1px solid var(--border-soft);
-		border-radius: 20px;
+		border-radius: var(--radius-pill);
 		max-width: 170px;
 		overflow: hidden;
 		white-space: nowrap;
@@ -138,7 +138,7 @@
 		padding: 8px;
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
-		border-radius: 12px;
+		border-radius: var(--radius-card);
 		box-shadow: var(--shadow);
 	}
 	.items {
@@ -152,7 +152,7 @@
 		flex-direction: column;
 		gap: 1px;
 		padding: 6px 9px;
-		border-radius: 7px;
+		border-radius: 10px;
 		text-align: left;
 		font-size: 13px;
 	}
@@ -185,7 +185,7 @@
 		line-height: 1.45;
 		color: var(--text-muted);
 		background: var(--bg-sunken);
-		border-radius: 7px;
+		border-radius: 10px;
 	}
 	.hint.team {
 		margin: 6px 0 0;
