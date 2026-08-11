@@ -2,8 +2,15 @@ import type { RequestHandler } from './$types';
 import { deleteSession, getSession, patchSession } from '$lib/server/hermes';
 import { proxy } from '$lib/server/respond';
 import { cacheTitle, forgetSession } from '$lib/server/db';
+import { sessionAgentId } from '$lib/server/agents';
 
-export const GET: RequestHandler = ({ params }) => proxy(() => getSession(params.id));
+export const GET: RequestHandler = ({ params }) =>
+	proxy(async () => {
+		const res = await getSession(params.id);
+		// `agent_id` is this app's own field — Hermes knows nothing of personas.
+		const agentId = sessionAgentId(params.id);
+		return agentId ? { ...res, session: { ...res.session, agent_id: agentId } } : res;
+	});
 
 export const PATCH: RequestHandler = async ({ params, request }) =>
 	proxy(async () => {

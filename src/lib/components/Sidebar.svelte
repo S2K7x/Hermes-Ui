@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { chat } from '$lib/stores/chat.svelte';
+	import { agents } from '$lib/stores/agents.svelte';
+	import { agentColor } from '$lib/agents';
 	import { groupSessions, matchesQuery, relativeTime, sessionLabel, activityAt } from '$lib/sessions';
 	import type { HermesSession } from '$lib/types';
 
@@ -12,6 +14,7 @@
 		onopenSkills: () => void;
 		onopenProviders: () => void;
 		onopenJobs: () => void;
+		onopenAgents: () => void;
 	}
 	let {
 		open,
@@ -21,7 +24,8 @@
 		onopenStatus,
 		onopenSkills,
 		onopenProviders,
-		onopenJobs
+		onopenJobs,
+		onopenAgents
 	}: Props = $props();
 
 	let filter = $state('');
@@ -86,6 +90,7 @@
 				>＋</button
 			>
 			<div class="rail-spacer"></div>
+			<button class="rail-btn" onclick={onopenAgents} aria-label="Équipe d'agents">👥</button>
 			<button class="rail-btn" onclick={onopenJobs} aria-label="Tâches planifiées">⏰</button>
 			<button class="rail-btn" onclick={onopenSkills} aria-label="Skills">📚</button>
 			<button class="rail-btn" onclick={onopenProviders} aria-label="Providers">🔑</button>
@@ -129,9 +134,15 @@
 								}}
 							/>
 						{:else}
+							{@const agent = agents.byId(entry.agent_id)}
 							<button class="entry" onclick={() => pick(entry.id)} title={entry.preview ?? ''}>
 								<span class="title">
 									{#if entry.parent_session_id}<span class="branch" title="branche">⑂</span>{/if}
+									{#if agent}<span
+											class="agent"
+											style="--agent: {agentColor(agent)}"
+											title="Agent : {agent.name}">{agent.emoji || '●'}</span
+										>{/if}
 									{sessionLabel(entry)}
 								</span>
 								<span class="when">{relativeTime(activityAt(entry))}</span>
@@ -197,6 +208,13 @@
 			</button>
 			<button
 				class="archive-toggle"
+				onclick={onopenAgents}
+				title="Créer et modifier les agents, et leurs équipes"
+			>
+				👥 Agents
+			</button>
+			<button
+				class="archive-toggle"
 				onclick={onopenJobs}
 				title="Rappels et tâches récurrentes exécutées par Hermes"
 			>
@@ -228,6 +246,11 @@
 </aside>
 
 <style>
+	.agent {
+		color: var(--agent);
+		font-size: 11px;
+		margin-right: 1px;
+	}
 	.sidebar {
 		display: flex;
 		flex-direction: column;

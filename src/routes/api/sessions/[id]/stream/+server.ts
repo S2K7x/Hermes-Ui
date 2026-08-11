@@ -3,6 +3,7 @@ import { sessionChatStream } from '$lib/server/hermes';
 import { sseErrorResponse, sseHeaders } from '$lib/server/sse';
 import { beginTurn } from '$lib/server/turns';
 import { releaseTurn, tryAcquireTurn, turnLimit } from '$lib/server/limits';
+import { systemPromptForSession } from '$lib/server/agents';
 import { AppErrorCode } from '$lib/errors';
 
 /**
@@ -18,9 +19,17 @@ import { AppErrorCode } from '$lib/errors';
  * stream has (or could have) started: the client reads this endpoint with a
  * stream reader, so a bare 500 body would surface as "unexpected end of
  * stream" instead of a message. `sseErrorResponse` keeps one shape for both.
+ *
+ * This is also the single place that decides an agent's persona. Hermes never
+ * reads back the `system_prompt` stored on a session — `system_message` in the
+ * request body is the only prompt a turn sees — so the conversation's agent is
+ * looked up and its prompt re-composed here, on every message. The browser
+ * does not get a say: a persona the client could override would drift the
+ * moment two tabs disagreed, and switching a session's model even clears the
+ * stored column upstream.
  */
 export const POST: RequestHandler = async ({ params, request }) => {
-	let body: { message?: unknown; system_message?: string };
+	let body: { message?: unknown };
 	try {
 		body = await request.json();
 	} catch {
@@ -55,7 +64,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	try {
 		const upstream = await sessionChatStream(
 			params.id,
-			{ message: body.message, system_message: body.system_message },
+			{ message: body.message, system_message: systemPromptForSession(params.id) },
 			abort.signal
 		);
 		if (!upstream.ok || !upstream.body) {

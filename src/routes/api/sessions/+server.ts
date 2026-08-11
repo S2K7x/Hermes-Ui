@@ -8,8 +8,25 @@ import {
 } from '$lib/server/hermes';
 import { gate, proxy, readJson } from '$lib/server/respond';
 import { cacheTitle, forgetSession, knownSessionIds, rememberSessions } from '$lib/server/db';
+import { bindSessionAgent, findAgent, listAgents, sessionAgentMap } from '$lib/server/agents';
 import { archivedCandidates } from '$lib/sessions';
+import { composeSystemPrompt } from '$lib/agents';
 import type { HermesSession } from '$lib/types';
+
+/**
+ * Tag each row with the agent that owns the conversation.
+ *
+ * `agent_id` is ours, not Hermes' — the gateway has no idea what a persona is
+ * — so it is added on the way out rather than stored upstream. The sidebar and
+ * the thread header read it to show whose conversation this is.
+ */
+function withAgents<T extends HermesSession>(rows: T[]): T[] {
+	const bindings = sessionAgentMap();
+	return rows.map((row) => {
+		const agentId = bindings.get(row.id);
+		return agentId ? { ...row, agent_id: agentId } : row;
+	});
+}
 
 /**
  * Titles are UNIQUE in Hermes' schema: creating a second session titled from
@@ -71,7 +88,7 @@ async function listArchivedSessions() {
 
 	return {
 		object: 'list',
-		data: found,
+		data: withAgents(found),
 		// The client says so rather than pretending this is the whole archive.
 		truncated: candidates.length >= ARCHIVE_PROBE_LIMIT
 	};
@@ -96,7 +113,7 @@ export const GET: RequestHandler = ({ url }) => {
 		// Seeing a conversation here is the only chance to record its id before
 		// archiving hides it from every future listing.
 		rememberSessions((res.data ?? []).map((s) => s.id));
-		return res;
+		return { ...res, data: withAgents(res.data ?? []) };
 	});
 };
 
@@ -104,23 +121,45 @@ export const POST: RequestHandler = async ({ request }) => {
 	const limited = gate('sessions:write', 2, 8);
 	if (limited) return limited;
 
-	const parsed = await readJson<{ title?: string; model?: string; system_prompt?: string }>(request);
+	const parsed = await readJson<{ title?: string; model?: string; agent_id?: string }>(request);
 	if ('response' in parsed) return parsed.response;
 
 	return proxy(async () => {
+		const agent = findAgent(parsed.body.agent_id);
+		// Only ask the gateway for its catalogue when the answer changes
+		// something: to vet an agent's preferred model, or to resolve the
+		// default when the client named none. Fetching it unconditionally would
+		// make a new conversation fail on a listing the caller did not need.
+		const options = agent?.model || !parsed.body.model ? await getModelOptions() : null;
+		// The agent's preferred model wins over the picker: choosing an agent is
+		// the more specific decision. It is checked against what the gateway can
+		// actually route first — a stale model id on a session row makes every
+		// turn fail with a 400 from the provider (point 1).
+		const routable = new Set(options?.providers?.flatMap((p) => p.models ?? []) ?? []);
+		const preferred = agent?.model && routable.has(agent.model) ? agent.model : '';
 		// Resolve the gateway's configured default rather than letting Hermes
 		// fall back to the virtual model name, which would poison the session
 		// row (see createSession's doc comment).
-		const model = parsed.body.model || (await getModelOptions()).model;
+		const model = preferred || parsed.body.model || options?.model;
+
+		// Recorded for `has_system_prompt` and for fork propagation only: this
+		// column is never read back on a turn, which is why the stream route
+		// re-composes the prompt every time (see src/lib/agents.ts).
+		const systemPrompt = agent ? composeSystemPrompt(listAgents(), agent.id) : undefined;
+
 		const created = await createSessionTolerantOfTitleClash({
 			title: parsed.body.title,
 			model,
-			system_prompt: parsed.body.system_prompt,
+			system_prompt: systemPrompt || undefined,
 			source: 'api_server'
 		});
 		if (created.session?.id) {
 			rememberSessions([created.session.id]);
 			if (created.session.title) cacheTitle(created.session.id, created.session.title);
+			if (agent) {
+				bindSessionAgent(created.session.id, agent.id);
+				return { ...created, session: { ...created.session, agent_id: agent.id } };
+			}
 		}
 		return created;
 	});

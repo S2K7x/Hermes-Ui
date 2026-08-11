@@ -21,7 +21,7 @@ Navigateur / PWA
 SvelteKit adapter-node — 127.0.0.1:3000  (conteneur Docker)
    ├── src/routes/api/**      proxy de confiance : injecte le Bearer
    ├── src/lib/server/turns.ts tours en vol (survivent au départ du client)
-   ├── data/hermes-web.db     prefs, prompts, titres, abonnements push (UI)
+   ├── data/hermes-web.db     prefs, prompts, titres, agents, abonnements push
    └── /skills                bind mount de ~/.hermes/skills (éditeur de skills)
    │
    ├─ HTTPS sortant → service de push (Apple / Google / Mozilla)
@@ -497,6 +497,86 @@ réponse est de toute façon dans le transcript.
 Routes : `GET|POST|DELETE /api/push` (configuration + liste / abonnement /
 retrait), `POST /api/push/test`, `POST /api/push/presence`.
 
+### 18. Les agents personnalisés : le prompt part à CHAQUE tour
+
+Une conversation appartient à un **agent** — un nom, un emoji, un métier, un
+prompt système, un modèle préféré facultatif, et la liste des agents qu'il a le
+droit de piloter. Tout vit dans `data/hermes-web.db` (table `agents`, plus une
+colonne `agent_id` ajoutée à `session_meta`) : Hermes n'a aucune notion de
+persona, et lui en ajouter une voudrait dire le patcher.
+
+Le point qui commande tout le reste, **vérifié** dans `api_server.py` (0.20.0) :
+
+- `_handle_session_chat_stream` (~ligne 3782) construit son prompt système
+  **uniquement** depuis `body.get("system_message") or body.get("instructions")`.
+  La colonne `sessions.system_prompt`, elle, n'est jamais relue pour un tour :
+  elle ne sert qu'à `has_system_prompt` et à la propagation lors d'un fork.
+- `POST /api/sessions/{id}/model` met même cette colonne à NULL.
+
+**Conséquence** : la persona doit être renvoyée dans `system_message` à chaque
+message, sinon elle disparaît au deuxième tour — et un changement de modèle
+l'effacerait pour de bon. C'est `/api/sessions/{id}/stream` qui la recompose,
+via `systemPromptForSession()`, et **le navigateur n'a pas voix au chapitre** :
+la route ignore délibérément tout `system_message` reçu dans le corps. Deux
+onglets ne peuvent donc pas être en désaccord sur qui parle.
+
+La hiérarchie n'est pas réimplémentée : c'est celle de Hermes. L'outil
+`delegate_task` (toolset `delegation`, `tools/delegate_tool.py`) prend `goal`,
+`context`, `tasks[]`, `output_schema` et surtout `role: "leaf" | "orchestrator"`
+— un enfant `orchestrator` garde le toolset de délégation et peut spawner à son
+tour, dans les bornes de `delegation.max_spawn_depth` /
+`max_concurrent_children` de `~/.hermes/config.yaml`. Ne pas construire un
+système de sous-agents par-dessus.
+
+Ce que ça implique dans le code :
+
+- `composeSystemPrompt()` (`src/lib/agents.ts`, pur et testé) écrit la section
+  « Ton équipe » **à partir des fiches des agents enfants**, pas d'un texte
+  saisi à la main : modifier le métier d'un spécialiste change ce que son chef
+  sait de lui, sans rien réécrire. C'est ça, « facilement personnalisable ».
+- Un enfant délégué démarre d'une conversation vide. Sa persona ne peut donc
+  arriver que par le texte de l'appel — d'où la consigne, dans le prompt du
+  chef, de recopier la fiche du spécialiste dans `context`. La fiche est bornée
+  à `CHILD_BRIEF_CHARS` (800) : ce prompt repart à chaque message.
+- Les seuls enfants annoncés comme `role: "orchestrator"` sont ceux qui sont
+  eux-mêmes marqués orchestrateurs **et** ont une équipe. Un enfant `leaf` se
+  voit retirer `delegate_task` par `DELEGATE_BLOCKED_TOOLS` : lui promettre une
+  équipe serait un mensonge. `teamTree()` applique la même règle à l'affichage.
+- Aucun chiffre de `config.yaml` n'est cité dans le prompt composé
+  (profondeur, enfants simultanés) : aucun endpoint ne les publie, et un chiffre
+  périmé dans un prompt système est pire que pas de chiffre. Le prompt dit
+  seulement quoi faire si Hermes refuse l'appel.
+- Une boucle dans l'équipe serait un prompt qui récurse à l'infini. Deux
+  garde-fous, pas un : `validateAgent()` refuse le cycle à l'entrée en affichant
+  la chaîne fautive (`Chef → Recherche → Chef`), et `normalizeAgents()` **casse**
+  les arêtes fautives à la lecture, pour qu'une ligne écrite à la main ne puisse
+  pas figer le serveur. `composeSystemPrompt()` et `teamTree()` sont bornés par
+  ailleurs.
+- Supprimer un agent le retire des équipes qui le citaient et délie ses
+  conversations (`removeAgent`, transaction) ; leur transcript est intact, elles
+  repassent simplement au prompt par défaut de Hermes.
+- Le modèle préféré d'un agent l'emporte sur le sélecteur à la création d'une
+  conversation, **mais seulement s'il est routable** : un id de modèle périmé sur
+  une ligne de session fait échouer chaque tour (point 1).
+- Le fork reprend l'agent du parent : c'est la même conversation continuée.
+- `agent_id` sur une ligne de session **n'est pas un champ Hermes**. C'est le
+  proxy `/api/sessions*` qui l'ajoute à la sortie, à partir de `session_meta`.
+
+**Ce qui n'est PAS fait, et ne doit pas être promis** : les sous-agents ne sont
+pas streamés. Sur la Sessions API une délégation n'apparaît que comme une étape
+d'outil `delegate_task` ; les événements `subagent.start` / `subagent.complete`
+/ `subagent.text` n'existent que sur le flux de la Runs API, écartée au point 2.
+Hermes écrit bien un journal par sous-tâche dans
+`<hermes_home>/cache/delegation/live/<delegation_id>/task-<n>.log`
+(`tools/delegation_live_log.py`), mais ce répertoire n'est pas monté dans le
+conteneur : soit on le monte en lecture seule et on le lit vraiment, soit on ne
+promet rien. Pas d'entre-deux.
+
+Routes : `GET|POST /api/agents`, `PATCH|DELETE /api/agents/{id}` et
+`POST /api/sessions/{id}/agent` (relier une conversation ouverte à un agent, ou
+`null` pour la détacher — effectif au message suivant, comme le verrou de
+modèle du point 3).
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -527,10 +607,12 @@ src/
 │   │   ├── hermes.ts    client de l'API Hermes (Bearer, timeouts, retries)
 │   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
 │   │   ├── sse.ts       en-têtes SSE + enveloppe d'erreur
+│   │   ├── agents.ts    magasin d'agents + lien conversation → agent
 │   │   ├── turns.ts     registre des tours en vol, présence, notification
 │   │   ├── push.ts      envoi Web Push (abonnements, 410 → oubli)
 │   │   ├── push-crypto.ts RFC 8291 + RFC 8292, sans dépendance
 │   │   ├── db.ts        better-sqlite3 (prefs, prompts, titres, abonnements)
+│   │   │                  — la table `agents` vit dans server/agents.ts
 │   │   ├── limits.ts    sémaphore de tours + token bucket
 │   │   ├── skills.ts    lecture/écriture des SKILL.md sur le disque
 │   │   └── respond.ts   HermesError → réponse JSON typée, `gate`, `readJson`
@@ -539,17 +621,19 @@ src/
 │   │   ├── storage.ts   localStorage qui ne peut pas jeter
 │   │   └── platform.ts  ⌘ vs Ctrl
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
-│   │                  Markdown, CommandPalette, StatusPanel, SkillsPanel,
-│   │                  ProvidersPanel, JobsPanel, PushSettings, Shortcuts,
-│   │                  Toasts
+│   │                  AgentPicker, Markdown, CommandPalette, StatusPanel,
+│   │                  SkillsPanel, ProvidersPanel, JobsPanel, AgentsPanel,
+│   │                  PushSettings, Shortcuts, Toasts
 │   ├── stores/
 │   │   ├── chat.svelte.ts       tout l'état de conversation (runes Svelte 5)
+│   │   ├── agents.svelte.ts     équipe d'agents personnalisés
 │   │   ├── skills.svelte.ts     état de l'éditeur de skills
 │   │   ├── prompts.svelte.ts    bibliothèque de prompts enregistrés
 │   │   ├── providers.svelte.ts  état du panneau providers (dont le flux OAuth)
 │   │   ├── jobs.svelte.ts       état du panneau des tâches planifiées
 │   │   ├── push.svelte.ts       abonnement Web Push + report de présence
 │   │   └── toast.svelte.ts      notifications dans la page
+│   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── jobs.ts        horaires cron validés/traduits, état et tri des tâches
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)

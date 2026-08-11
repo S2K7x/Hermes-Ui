@@ -28,6 +28,10 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   enregistrer le message en cours pour le réutiliser d'un tap ; la
   bibliothèque est stockée côté serveur, donc la même sur le téléphone et sur
   le desktop
+- **Équipe d'agents** (👥 dans la sidebar, ou `⌘K` → « Équipe d'agents ») :
+  des personas ayant chacune son nom, son métier et son prompt système ; une
+  conversation appartient à un agent, et un « chef d'équipe » peut confier du
+  travail aux autres via la délégation native de Hermes
 - **Éditeur de skills** (📚 dans la sidebar, ou `⌘K` → « Modifier les skills ») :
   liste des `SKILL.md` groupée par catégorie, édition en texte brut,
   création guidée d'un nouveau skill
@@ -57,6 +61,38 @@ que de recopier l'erreur amont. Les échecs transitoires sont retentés — mais
 seulement sur les lectures, jamais sur un tour d'agent. Un plafond local de
 tours simultanés (3 par défaut) protège le Pi avant que celui de Hermes (10)
 n'entre en jeu. Le détail est dans [CLAUDE.md](CLAUDE.md).
+
+### Agents : une équipe, et ce qu'elle coûte
+
+Un agent, c'est un nom, un emoji, un métier en une ligne, un prompt système et
+— si vous voulez — un modèle préféré. Quatre exemples sont créés à la première
+ouverture : un généraliste, un chef d'équipe et deux spécialistes. Tout est
+modifiable, duplicable et supprimable.
+
+Ce prompt est renvoyé à Hermes **à chaque message**, depuis le serveur. Ce n'est
+pas un détail d'implémentation : la Sessions API ne relit jamais le
+`system_prompt` enregistré à la création d'une conversation, et changer le
+modèle d'une conversation l'efface même. Sans ce renvoi, la personnalité
+disparaîtrait au deuxième message.
+
+Cocher « peut piloter d'autres agents » compose automatiquement, à partir de la
+fiche des agents choisis, la partie du prompt qui décrit l'équipe et explique
+quand appeler `delegate_task` — l'outil de délégation de Hermes, avec sa
+récursion (`role: "orchestrator"`). Le bouton « Voir le prompt envoyé à chaque
+message » montre exactement le texte produit, et le panneau dessine l'arbre de
+l'équipe. Un agent ne peut pas se piloter lui-même, ni former une boucle : la
+chaîne fautive est affichée au lieu d'être enregistrée.
+
+**Ce que ça coûte.** Chaque sous-agent est un agent Hermes complet — terminal
+compris — lancé sur le même Raspberry Pi 5 à quatre cœurs. Deux ou trois en
+parallèle se sentent passer. Et un sous-agent ne voit rien de la conversation :
+c'est au chef d'équipe de tout lui écrire.
+
+**Ce que ça ne fait pas.** Les sous-agents ne sont pas streamés dans le fil :
+sur la Sessions API, une délégation apparaît comme une étape d'outil
+`delegate_task` avec son résultat — les événements `subagent.*` n'existent que
+sur la Runs API, écartée par ailleurs. La profondeur et le nombre de sous-agents
+simultanés sont réglés dans `~/.hermes/config.yaml` (`delegation.*`), pas ici.
 
 ### Skills : ce que l'éditeur fait, et ne fait pas
 

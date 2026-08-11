@@ -54,6 +54,8 @@ class ChatStore {
 	models = $state<ModelOptions | null>(null);
 	/** Model used for a NEW session, and the default the picker shows. */
 	nextModel = $state('');
+	/** Agent a NEW conversation starts with. '' means Hermes' default prompt. */
+	nextAgent = $state('');
 	skills = $state<Array<{ name: string; description?: string }>>([]);
 	toolCount = $state(0);
 	mcpTools = $state<string[]>([]);
@@ -83,10 +85,17 @@ class ChatStore {
 		return this.features.session_model_lock === true;
 	}
 
+	/** Agent the next message will run as: the open conversation's, else nextAgent. */
+	get activeAgentId(): string {
+		if (this.sessionId) return this.current?.agent_id ?? '';
+		return this.nextAgent;
+	}
+
 	// -- bootstrap ----------------------------------------------------------
 
 	async init() {
 		this.nextModel = readJSON('hermes-next-model', '');
+		this.nextAgent = readJSON('hermes-next-agent', '');
 		await Promise.allSettled([this.refreshHealth(), this.refreshSessions(), this.refreshCatalog()]);
 		this.#scheduleHealth();
 	}
@@ -248,13 +257,49 @@ class ChatStore {
 		}
 	}
 
+	/**
+	 * Pick the agent a conversation runs as.
+	 *
+	 * Same shape as `setModel()`: it becomes the default for new conversations
+	 * and, when one is open, is re-bound on it right away. The persona is
+	 * re-composed server-side on every turn, so the switch takes effect from the
+	 * next message — what is already in the transcript keeps its author.
+	 */
+	async setAgent(agentId: string) {
+		if (agentId === this.activeAgentId) return;
+		const previousNext = this.nextAgent;
+		this.nextAgent = agentId;
+		writeJSON('hermes-next-agent', agentId);
+
+		const id = this.sessionId;
+		if (!id) return;
+
+		const previous = this.current?.agent_id ?? '';
+		this.#patchLocal(id, { agent_id: agentId || undefined });
+		try {
+			await api(`/api/sessions/${encodeURIComponent(id)}/agent`, {
+				method: 'POST',
+				body: JSON.stringify({ agent_id: agentId || null })
+			});
+		} catch (err) {
+			this.#patchLocal(id, { agent_id: previous || undefined });
+			this.nextAgent = previousNext;
+			writeJSON('hermes-next-agent', previousNext);
+			toasts.error(err);
+		}
+	}
+
 	// -- session lifecycle --------------------------------------------------
 
 	async newSession(title?: string): Promise<string | null> {
 		try {
 			const res = await api<{ session: HermesSession }>('/api/sessions', {
 				method: 'POST',
-				body: JSON.stringify({ title, model: this.nextModel || undefined })
+				body: JSON.stringify({
+					title,
+					model: this.nextModel || undefined,
+					agent_id: this.nextAgent || undefined
+				})
 			});
 			this.sessions = [res.session, ...this.sessions];
 			this.sessionId = res.session.id;

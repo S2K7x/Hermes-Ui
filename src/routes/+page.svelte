@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick } from 'svelte';
+	import AgentPicker from '$lib/components/AgentPicker.svelte';
+	import AgentsPanel from '$lib/components/AgentsPanel.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import Composer from '$lib/components/Composer.svelte';
 	import JobsPanel from '$lib/components/JobsPanel.svelte';
@@ -10,6 +12,7 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import SkillsPanel from '$lib/components/SkillsPanel.svelte';
 	import StatusPanel from '$lib/components/StatusPanel.svelte';
+	import { agents } from '$lib/stores/agents.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { prompts } from '$lib/stores/prompts.svelte';
 	import { push } from '$lib/stores/push.svelte';
@@ -17,6 +20,7 @@
 	import { read, readJSON, write, writeJSON } from '$lib/client/storage';
 	import { hasMod, modKey } from '$lib/client/platform';
 	import { usageSummary } from '$lib/sessions';
+	import { agentColor, agentLabel, directReports } from '$lib/agents';
 
 	let sidebarOpen = $state(false);
 	let sidebarCollapsed = $state(false);
@@ -25,6 +29,7 @@
 	let skillsOpen = $state(false);
 	let providersOpen = $state(false);
 	let jobsOpen = $state(false);
+	let agentsOpen = $state(false);
 	let shortcutsOpen = $state(false);
 	let narrow = $state(false);
 
@@ -60,6 +65,10 @@
 		// Load the saved prompts alongside the session list so the command
 		// palette can offer them right away; a failure here is silent.
 		void prompts.ensureLoaded();
+		// The roster decorates the sidebar and the header, so it is wanted as
+		// early as the session list; a failure here leaves conversations
+		// unlabelled, nothing more.
+		void agents.ensureLoaded();
 		// Not for the settings panel — this is what starts reporting whether the
 		// app is on screen, which decides if a finished turn notifies.
 		void push.init();
@@ -140,6 +149,7 @@
 		{ id: 'new', label: 'Nouvelle discussion', hint: `${mod} ⇧O`, run: () => chat.newSession() },
 		{ id: 'status', label: 'État du système', hint: `${mod} /`, run: () => (statusOpen = true) },
 		{ id: 'skills', label: 'Modifier les skills', run: () => (skillsOpen = true) },
+		{ id: 'agents', label: "Équipe d'agents", run: () => (agentsOpen = true) },
 		{ id: 'jobs', label: 'Tâches planifiées', run: () => (jobsOpen = true) },
 		{ id: 'providers', label: 'Providers (clés API et comptes)', run: () => (providersOpen = true) },
 		{ id: 'export', label: 'Exporter la conversation (markdown)', run: exportMarkdown },
@@ -160,10 +170,10 @@
 	]);
 
 	function onKeydown(event: KeyboardEvent) {
-		// The skills, providers and jobs panels are modal and own their own
-		// Escape while open; letting these shortcuts through would fire behind
-		// them.
-		if (skillsOpen || providersOpen || jobsOpen) return;
+		// The skills, providers, jobs and agents panels are modal and own their
+		// own Escape while open; letting these shortcuts through would fire
+		// behind them.
+		if (skillsOpen || providersOpen || jobsOpen || agentsOpen) return;
 		const meta = hasMod(event);
 		const target = event.target as HTMLElement | null;
 		const typing =
@@ -207,6 +217,8 @@
 
 	let title = $derived(chat.current?.title || 'Hermes');
 	let usage = $derived(usageSummary(chat.current));
+	let activeAgent = $derived(agents.byId(chat.activeAgentId));
+	let activeTeam = $derived(activeAgent ? directReports(agents.items, activeAgent) : []);
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -221,6 +233,7 @@
 		onopenSkills={() => (skillsOpen = true)}
 		onopenProviders={() => (providersOpen = true)}
 		onopenJobs={() => (jobsOpen = true)}
+		onopenAgents={() => (agentsOpen = true)}
 	/>
 
 	{#if sidebarOpen}
@@ -239,6 +252,7 @@
 				<button class="icon" onclick={() => (paletteOpen = true)} aria-label="Rechercher (⌘K)"
 					>⌕</button
 				>
+				<AgentPicker onmanage={() => (agentsOpen = true)} />
 				<ModelPicker />
 				<button class="icon" onclick={toggleTheme} aria-label="Thème">◐</button>
 			</div>
@@ -257,11 +271,45 @@
 					<p class="status">Chargement…</p>
 				{:else if chat.messages.length === 0}
 					<div class="welcome">
-						<h2>Hermes</h2>
+						<h2>{activeAgent ? agentLabel(activeAgent) : 'Hermes'}</h2>
 						<p>
-							Agent complet — terminal, navigateur, mémoire, skills et serveurs MCP — exécuté sur
-							le Raspberry&nbsp;Pi.
+							{#if activeAgent}
+								{activeAgent.role || 'Agent personnalisé.'}
+							{:else}
+								Agent complet — terminal, navigateur, mémoire, skills et serveurs MCP — exécuté sur
+								le Raspberry&nbsp;Pi.
+							{/if}
 						</p>
+
+						{#if agents.items.length > 0}
+							<div class="who">
+								{#each agents.items as agent (agent.id)}
+									<button
+										class="agent-chip"
+										class:sel={agent.id === chat.activeAgentId}
+										style="--agent: {agentColor(agent)}"
+										title={agent.role}
+										onclick={() => chat.setAgent(agent.id)}
+									>
+										<span class="dot"></span>{agentLabel(agent)}
+									</button>
+								{/each}
+								<button
+									class="agent-chip"
+									class:sel={!chat.activeAgentId}
+									onclick={() => chat.setAgent('')}>Sans agent</button
+								>
+								<button class="agent-chip ghost" onclick={() => (agentsOpen = true)}>＋ Gérer</button>
+							</div>
+							{#if activeTeam.length > 0}
+								<p class="team">
+									Chef d'équipe : peut confier du travail à {activeTeam
+										.map((a) => a.name)
+										.join(', ')} via <code>delegate_task</code>.
+								</p>
+							{/if}
+						{/if}
+
 						<div class="chips">
 							{#each SUGGESTIONS as suggestion (suggestion)}
 								<button onclick={() => chat.send(suggestion)}>{suggestion}</button>
@@ -307,6 +355,7 @@
 <CommandPalette open={paletteOpen} onclose={() => (paletteOpen = false)} {commands} />
 <StatusPanel open={statusOpen} onclose={() => (statusOpen = false)} onopenJobs={openJobsFromStatus} />
 <JobsPanel open={jobsOpen} onclose={() => (jobsOpen = false)} />
+<AgentsPanel open={agentsOpen} onclose={() => (agentsOpen = false)} />
 <SkillsPanel open={skillsOpen} onclose={() => (skillsOpen = false)} />
 <ProvidersPanel open={providersOpen} onclose={() => (providersOpen = false)} />
 <Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />
@@ -474,6 +523,50 @@
 		background: var(--bg-hover);
 		color: var(--text);
 		border-color: var(--border);
+	}
+	.who {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 7px;
+		margin: 22px auto 0;
+		max-width: 620px;
+	}
+	.agent-chip {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 5px 12px;
+		border: 1px solid var(--border-soft);
+		border-radius: 20px;
+		font-size: 12.5px;
+		color: var(--text-muted);
+	}
+	.agent-chip:hover {
+		background: var(--bg-hover);
+		color: var(--text);
+	}
+	.agent-chip.sel {
+		border-color: var(--agent, var(--accent));
+		color: var(--text);
+	}
+	.agent-chip.ghost {
+		border-style: dashed;
+	}
+	.agent-chip .dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--agent);
+	}
+	.team {
+		max-width: 520px;
+		margin: 12px auto 0 !important;
+		font-size: 12px !important;
+		color: var(--text-faint);
+	}
+	.team code {
+		font-size: 11.5px;
 	}
 	.meta {
 		margin-top: 22px !important;

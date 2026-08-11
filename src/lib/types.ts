@@ -22,6 +22,13 @@ export interface HermesSession {
 	archived?: boolean;
 	has_system_prompt?: boolean;
 	has_model_config?: boolean;
+	/**
+	 * The custom agent this conversation belongs to.
+	 *
+	 * NOT a Hermes field: the binding lives in this app's SQLite and the
+	 * `/api/sessions*` proxy adds it to every row on the way out.
+	 */
+	agent_id?: string;
 }
 
 export interface HermesMessage {
