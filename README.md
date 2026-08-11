@@ -283,6 +283,18 @@ Le runner vit dans `/opt/stacks/hermes-ui-bot/` (hors dépôt, pour qu'une
 mauvaise PR ne puisse pas casser le mécanisme) et sa documentation est dans
 `/opt/stacks/hermes-ui-bot/README.md`.
 
+Pour lancer une amélioration **à la main**, sans passer par la routine :
+[AMELIORER.md](AMELIORER.md) décrit la même procédure de bout en bout —
+sauvegarde, vérification, déploiement, push, capture et notification Discord.
+Le prompt à coller dans une session Claude Code neuve :
+
+```
+Tu travailles sur Hermes-Ui, mon interface web pour Hermes Agent, sur ce Raspberry Pi.
+Lis /opt/stacks/Hermes-Ui/CLAUDE.md puis /opt/stacks/Hermes-Ui/AMELIORER.md,
+et applique AMELIORER.md de bout en bout.
+Ce que je veux : <ta demande, ou « choisis toi-même »>
+```
+
 ## Documentation développeur
 
 Voir [CLAUDE.md](CLAUDE.md) : contrat exact de l'API, pièges vérifiés
