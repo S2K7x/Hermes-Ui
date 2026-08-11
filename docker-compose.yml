@@ -40,6 +40,14 @@ services:
       HERMES_DASHBOARD_TOKEN: ${HERMES_DASHBOARD_TOKEN:-}
       HERMES_TIMEOUT_MS: ${HERMES_TIMEOUT_MS:-30000}
       MAX_CONCURRENT_TURNS: ${MAX_CONCURRENT_TURNS:-3}
+      MAX_TURN_MS: ${MAX_TURN_MS:-1200000}
+      # Web Push identity (RFC 8292). The PUBLIC key is served to the browser
+      # on purpose — pushManager.subscribe needs it. The PRIVATE one signs the
+      # requests to the push service and never leaves this container. All three
+      # empty simply turns notifications off in the UI.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       # Path INSIDE the container of the skills bind mount below. Unset it (or
       # remove the mount) and the skills editor simply disappears from the UI.
       SKILLS_DIR: /skills

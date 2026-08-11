@@ -1,19 +1,18 @@
 /**
- * SSE relay: Hermes upstream stream -> browser.
+ * SSE response plumbing for the turn endpoint.
  *
- * The bytes are forwarded untouched (Hermes already frames valid SSE and sends
- * `: keepalive` comments), so the relay is a pass-through with the right
- * response headers plus an abort bridge that releases the upstream socket when
- * the browser goes away.
+ * The relay itself moved to `src/lib/server/turns.ts`, because forwarding the
+ * bytes turned out to be the easy half: what matters is that the server keeps
+ * reading Hermes after the browser leaves. A Sessions API turn cannot be
+ * interrupted anyway (CLAUDE.md §2 — `/v1/runs/{id}/stop` only knows runs
+ * submitted through `POST /v1/runs`, and dropping the SSE socket does not
+ * cancel the run: measured, a turn cut at 6 s still ran its three tool calls
+ * and persisted its answer ~25 s later). Since the work happens regardless,
+ * following it to the end is free, and it is what makes a notification
+ * possible. The UI still calls this "detaching", never "stopping".
  *
- * What the abort bridge does NOT do is stop the agent. A Sessions API turn
- * cannot be interrupted: `/v1/runs/{id}/stop` only knows runs submitted via
- * `POST /v1/runs` (they alone land in `_active_run_agents`), and although the
- * stream handler calls `task.cancel()` when a write fails, that never lands in
- * time — measured on this Pi, a turn whose client disconnected at 6 s still ran
- * its three tool calls and persisted its answer ~25 s later. Freeing the socket
- * is worth doing; treating it as cancellation is not. The UI reflects this by
- * marking the turn detached rather than stopped.
+ * What stays here is the header set and the error envelope, both of which the
+ * route needs before any turn exists.
  */
 
 const SSE_HEADERS: Record<string, string> = {
@@ -24,6 +23,9 @@ const SSE_HEADERS: Record<string, string> = {
 	// to buffer. Tailscale Serve flushes text/event-stream on its own.
 	'X-Accel-Buffering': 'no'
 };
+
+/** A fresh copy of the SSE response headers. */
+export const sseHeaders = (): Record<string, string> => ({ ...SSE_HEADERS });
 
 /**
  * Report a failure inside the SSE envelope.
@@ -37,56 +39,4 @@ export function sseErrorResponse(message: string, status = 500, code?: string): 
 		`event: error\ndata: ${JSON.stringify({ message, code, status })}\n\n` +
 		`event: done\ndata: {}\n\n`;
 	return new Response(body, { status, headers: SSE_HEADERS });
-}
-
-/**
- * Wrap an upstream SSE response for the browser.
- *
- * @param upstream  the Hermes response (must have a body)
- * @param onClose   invoked once the client goes away or the stream ends
- */
-export function relaySSE(upstream: Response, onClose?: () => void): Response {
-	if (!upstream.ok || !upstream.body) {
-		return sseErrorResponse(
-			`Hermes refused the stream (HTTP ${upstream.status})`,
-			upstream.status || 502
-		);
-	}
-
-	const reader = upstream.body.getReader();
-	let closed = false;
-	const finish = () => {
-		if (closed) return;
-		closed = true;
-		onClose?.();
-	};
-
-	const stream = new ReadableStream<Uint8Array>({
-		async pull(controller) {
-			try {
-				const { done, value } = await reader.read();
-				if (done) {
-					finish();
-					controller.close();
-					return;
-				}
-				controller.enqueue(value);
-			} catch (err) {
-				finish();
-				controller.error(err);
-			}
-		},
-		cancel() {
-			// Browser disconnected (Stop button, tab close, navigation).
-			// Cancelling the reader propagates to the upstream fetch, which
-			// makes Hermes cancel the agent task.
-			finish();
-			reader.cancel().catch(() => {});
-		}
-	});
-
-	const headers = new Headers(SSE_HEADERS);
-	const sid = upstream.headers.get('X-Hermes-Session-Id');
-	if (sid) headers.set('X-Hermes-Session-Id', sid);
-	return new Response(stream, { status: 200, headers });
 }

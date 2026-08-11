@@ -28,6 +28,15 @@ db.exec(`
 		title_cache TEXT,
 		updated_at  REAL NOT NULL
 	);
+	CREATE TABLE IF NOT EXISTS push_subscriptions (
+		endpoint   TEXT PRIMARY KEY,
+		p256dh     TEXT NOT NULL,
+		auth       TEXT NOT NULL,
+		label      TEXT NOT NULL DEFAULT '',
+		created_at REAL NOT NULL,
+		last_ok_at REAL,
+		last_error TEXT
+	);
 `);
 
 const selPref = db.prepare<[string], { value: string }>('SELECT value FROM prefs WHERE key = ?');
@@ -110,5 +119,62 @@ const selKnown = db.prepare('SELECT session_id FROM session_meta ORDER BY update
 
 export const knownSessionIds = (limit: number): string[] =>
 	(selKnown.all(limit) as Array<{ session_id: string }>).map((row) => row.session_id);
+
+// ---------------------------------------------------------------------------
+// Web Push subscriptions
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per device, not one row per user.
+ *
+ * A subscription is a capability URL plus two keys — knowing the endpoint is
+ * enough to push to that device — so it never leaves the server: the settings
+ * panel is given a digest of the endpoint as an id, plus the push service host
+ * for display.
+ */
+export interface PushSubscriptionRow {
+	endpoint: string;
+	p256dh: string;
+	auth: string;
+	label: string;
+	created_at: number;
+	last_ok_at: number | null;
+	last_error: string | null;
+}
+
+const upsertSub = db.prepare(
+	`INSERT INTO push_subscriptions (endpoint, p256dh, auth, label, created_at)
+	 VALUES (?, ?, ?, ?, ?)
+	 ON CONFLICT(endpoint) DO UPDATE SET
+	   p256dh = excluded.p256dh,
+	   auth = excluded.auth,
+	   label = excluded.label,
+	   last_error = NULL`
+);
+const allSubs = db.prepare('SELECT * FROM push_subscriptions ORDER BY created_at ASC');
+const delSub = db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?');
+const markOk = db.prepare(
+	'UPDATE push_subscriptions SET last_ok_at = ?, last_error = NULL WHERE endpoint = ?'
+);
+const markError = db.prepare('UPDATE push_subscriptions SET last_error = ? WHERE endpoint = ?');
+
+export function savePushSubscription(sub: {
+	endpoint: string;
+	p256dh: string;
+	auth: string;
+	label: string;
+}): void {
+	upsertSub.run(sub.endpoint, sub.p256dh, sub.auth, sub.label, Date.now() / 1000);
+}
+
+export const listPushSubscriptions = (): PushSubscriptionRow[] =>
+	allSubs.all() as PushSubscriptionRow[];
+
+export const deletePushSubscription = (endpoint: string): boolean =>
+	delSub.run(endpoint).changes > 0;
+
+export const markPushDelivered = (endpoint: string) => markOk.run(Date.now() / 1000, endpoint);
+export const markPushFailed = (endpoint: string, error: string) =>
+	markError.run(error.slice(0, 200), endpoint);
 
 export default db;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PushSettings from './PushSettings.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { usageSummary } from '$lib/sessions';
 	import { jobState, nextRunLabel, scheduleDisplay, sortJobs } from '$lib/jobs';
@@ -149,6 +150,8 @@
 					</li>
 				{/if}
 			</ul>
+
+			<PushSettings />
 
 			{#if chat.status?.jobsAvailable}
 				<h3>

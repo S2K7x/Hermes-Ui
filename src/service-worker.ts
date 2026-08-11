@@ -1,5 +1,6 @@
 /// <reference types="@sveltejs/kit" />
 import { build, files, version } from '$service-worker';
+import { base64UrlToBytes } from '$lib/push';
 
 /**
  * App-shell cache only.
@@ -27,6 +28,101 @@ sw.addEventListener('activate', (event) => {
 			.then(() => sw.clients.claim())
 	);
 });
+
+// ---------------------------------------------------------------------------
+// Web Push
+// ---------------------------------------------------------------------------
+
+/**
+ * Every push MUST show a notification.
+ *
+ * `userVisibleOnly: true` is not a formality: Safari revokes the subscription
+ * outright if a push is handled without displaying anything, and Chrome shows
+ * its own "site updated in the background" notice. So the handler always ends
+ * in `showNotification`, even when the payload is missing or unparseable.
+ */
+sw.addEventListener('push', (event) => {
+	let title = 'Hermes';
+	let body = 'Le tour est terminé.';
+	let url = '/';
+	let tag = 'hermes';
+	try {
+		const data = event.data?.json() as Partial<{
+			title: string;
+			body: string;
+			url: string;
+			tag: string;
+		}> | null;
+		if (data) {
+			if (typeof data.title === 'string' && data.title) title = data.title;
+			if (typeof data.body === 'string' && data.body) body = data.body;
+			if (typeof data.url === 'string' && data.url.startsWith('/')) url = data.url;
+			if (typeof data.tag === 'string' && data.tag) tag = data.tag;
+		}
+	} catch {
+		/* fall back to the generic notification below */
+	}
+
+	event.waitUntil(
+		sw.registration.showNotification(title, {
+			body,
+			tag,
+			icon: '/icon-192.png',
+			badge: '/icon-192.png',
+			data: { url }
+		})
+	);
+});
+
+/** Focus an open window on the conversation, or open one at the deep link. */
+sw.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const target = (event.notification.data as { url?: string } | undefined)?.url || '/';
+	event.waitUntil(
+		(async () => {
+			const clients = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
+			for (const client of clients) {
+				if (new URL(client.url).origin !== location.origin) continue;
+				await client.focus();
+				// Same window, right conversation. navigate() is rejected by
+				// some platforms (and by Safari when the client is not
+				// controlled), so a failure just leaves the window focused.
+				await client.navigate(target).catch(() => undefined);
+				return;
+			}
+			await sw.clients.openWindow(target);
+		})()
+	);
+});
+
+/**
+ * The push service rotated our subscription.
+ *
+ * Fired without a page open, so re-subscribing has to happen here or the device
+ * silently stops receiving anything. The VAPID key comes back from the server,
+ * which is also where the new endpoint has to be recorded.
+ */
+sw.addEventListener('pushsubscriptionchange', ((event: ExtendableEvent) => {
+	event.waitUntil(
+		(async () => {
+			try {
+				const config = await fetch('/api/push').then((r) => r.json());
+				if (!config?.publicKey) return;
+				const subscription = await sw.registration.pushManager.subscribe({
+					userVisibleOnly: true,
+					applicationServerKey: base64UrlToBytes(config.publicKey)
+				});
+				await fetch('/api/push', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(subscription.toJSON())
+				});
+			} catch {
+				/* the settings panel will offer to re-enable on the next visit */
+			}
+		})()
+	);
+}) as EventListener);
 
 sw.addEventListener('fetch', (event) => {
 	const request = event.request;

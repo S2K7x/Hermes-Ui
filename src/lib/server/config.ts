@@ -87,3 +87,33 @@ export const REQUEST_TIMEOUT_MS = Number(env.HERMES_TIMEOUT_MS || 30_000);
  * beats letting the box swap.
  */
 export const MAX_CONCURRENT_TURNS = Number(env.MAX_CONCURRENT_TURNS || 3);
+
+/**
+ * Hard ceiling on one agent turn, in milliseconds.
+ *
+ * The server now follows a turn to its end even after the browser leaves
+ * (src/lib/server/turns.ts), so nothing else would ever release its slot if
+ * the upstream stream simply stopped producing. Long enough that a real
+ * research turn is never cut, short enough that a wedged run frees the Pi.
+ */
+export const MAX_TURN_MS = Number(env.MAX_TURN_MS || 20 * 60_000);
+
+/**
+ * VAPID identity for Web Push (RFC 8292).
+ *
+ * The public key is *meant* to reach the browser — `pushManager.subscribe`
+ * needs it as `applicationServerKey`, and it is what proves to the push service
+ * that later messages come from this server. The private key is a signing key
+ * and stays here, like every other secret in this file.
+ *
+ * All three optional: unset simply turns notifications off in the UI, the same
+ * way an empty dashboard token turns the Providers panel off.
+ */
+export const VAPID_PUBLIC_KEY = env.VAPID_PUBLIC_KEY?.trim() || '';
+export const VAPID_PRIVATE_KEY = env.VAPID_PRIVATE_KEY?.trim() || '';
+/** `mailto:` or `https:` contact the push service can complain to. */
+export const VAPID_SUBJECT = env.VAPID_SUBJECT?.trim() || '';
+
+/** Can this server send a push notification at all? */
+export const pushConfigured = (): boolean =>
+	Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && VAPID_SUBJECT);

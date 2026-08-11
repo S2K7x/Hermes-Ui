@@ -93,6 +93,10 @@ export function humanizeError(err: unknown): string {
 			return "Hermes ne sait pas router ce modèle. Vérifiez que le fournisseur est configuré (`hermes model`).";
 		case 'missing_model':
 			return 'Aucun modèle sélectionné.';
+		case 'push_unavailable':
+			return "Les notifications ne sont pas configurées sur le serveur (clés VAPID absentes).";
+		case 'device_not_found':
+			return "Cet appareil n'est plus abonné aux notifications.";
 	}
 
 	if (err.status === 401 || err.status === 403) {

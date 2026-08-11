@@ -20,9 +20,12 @@ Navigateur / PWA
    ▼
 SvelteKit adapter-node — 127.0.0.1:3000  (conteneur Docker)
    ├── src/routes/api/**      proxy de confiance : injecte le Bearer
-   ├── src/lib/server/sse.ts  relais SSE
-   ├── data/hermes-web.db     prefs, prompts enregistrés, cache de titres (UI)
+   ├── src/lib/server/turns.ts tours en vol (survivent au départ du client)
+   ├── data/hermes-web.db     prefs, prompts, titres, abonnements push (UI)
    └── /skills                bind mount de ~/.hermes/skills (éditeur de skills)
+   │
+   ├─ HTTPS sortant → service de push (Apple / Google / Mozilla)
+   │     └── notification chiffrée quand un tour finit sans spectateur
    │
    ├─ HTTP loopback + Authorization: Bearer
    │  ▼
@@ -76,6 +79,10 @@ Deux constats **mesurés**, pas déduits de la doc :
 pose `detached` sur le tour, affiche une explication et un bouton
 « Recharger » (`chat.reload()`), puisque la réponse finira dans `state.db` de
 toute façon. Ne pas rebaptiser ça « Stop » ni tenter `/v1/runs/*/stop`.
+
+Côté serveur, cette même mesure est ce qui justifie le point 16 : puisque
+l'agent finit son travail de toute façon, le serveur suit le tour jusqu'au bout
+au lieu de couper le `fetch` amont.
 
 **Et l'alternative Runs API ?** Elle donne un vrai stop *et* les événements
 d'approbation, mais elle a été testée et rejetée : `POST /v1/runs` accepte un
@@ -393,6 +400,103 @@ dans le code :
 Côté UI, un prompt choisi est **ajouté** au composeur, jamais substitué : un
 message à moitié écrit doit survivre à un tap malheureux sur la bibliothèque.
 
+### 16. Le serveur possède le tour, pas le navigateur
+
+C'est le renversement qui rend les notifications possibles. Avant, le relais SSE
+annulait le `fetch` amont dès que le navigateur partait : le serveur n'apprenait
+jamais comment le tour s'était terminé. Or on savait déjà (point 2) que
+**l'agent, lui, continue** — annuler ne servait donc à rien et coûtait la seule
+chose utile : la réponse, au moment où elle arrive, pendant que l'utilisateur
+est ailleurs.
+
+`src/lib/server/turns.ts` tient donc un registre des tours en vol. La route
+`/api/sessions/{id}/stream` démarre le tour, `beginTurn()` lit le flux amont
+**jusqu'à son événement terminal quoi qu'il arrive** et le recopie vers le
+navigateur tant qu'il est attaché. Ce qui change concrètement :
+
+- Le signal d'abandon du navigateur n'est **plus** câblé sur le `fetch` amont.
+  Fermer l'onglet ou taper le bouton carré détache l'affichage, exactement comme
+  avant côté UI, mais la boucle de lecture continue.
+- Le créneau du sémaphore `MAX_CONCURRENT_TURNS` est tenu pour **toute** la
+  durée du tour, plus seulement pendant que quelqu'un regarde. C'est plus juste
+  (le Pi travaille vraiment) mais se détacher puis renvoyer aussitôt peut
+  atteindre le plafond.
+- Plus rien ne libérerait un tour amont bloqué, d'où `MAX_TURN_MS` (20 min par
+  défaut) qui abandonne la lecture et rend le créneau.
+- Le flux poussé vers le navigateur utilise une `ByteLengthQueuingStrategy` : un
+  client qui ne lit plus (téléphone endormi, socket morte) est lâché au-delà
+  d'un mégaoctet en attente au lieu de faire gonfler la mémoire du Pi.
+- Aucun événement terminal n'est fabriqué à la fermeture : un flux qui s'arrête
+  sans `done` reste ce que le client lit déjà comme « tronqué » (point du
+  contrat d'erreurs), avec son bouton « Recharger ».
+
+Un tour lancé sans en-tête `Origin` n'est **pas** notifiable : les navigateurs
+en envoient un sur tout POST (c'est l'invariant sur lequel repose déjà
+`hooks.server.ts`), donc son absence signifie un script — `scripts/smoke.sh`
+joue un vrai tour après chaque déploiement et personne ne veut ça sur son écran
+verrouillé à 5 h du matin.
+
+### 17. Notifications push : ce qui est mesuré, ce qui ne l'est pas
+
+Quand un tour se termine et que personne ne regardait, le serveur envoie une
+notification Web Push. `shouldNotifyTurn()` (`src/lib/turns.ts`, pur et testé)
+combine deux signaux, et **l'un des deux suffit** :
+
+- **Aucun lecteur attaché** au flux SSE. iOS suspend une PWA en arrière-plan et
+  la connexion tombe : ce signal seul couvre le téléphone.
+- **`document.visibilityState`**, remonté par la page sur
+  `POST /api/push/presence` (`visibilitychange` et `pagehide`, en `keepalive`).
+  Sans lui, un onglet de bureau en arrière-plan garde son flux ouvert et
+  ressemblerait à quelqu'un qui lit. La présence est **globale** au serveur —
+  application mono-utilisateur — et ignorée passé 10 minutes.
+
+Le chiffrement est écrit avec `node:crypto` (`src/lib/server/push-crypto.ts`),
+sans dépendance : ECDH P-256, HKDF-SHA256, AES-128-GCM, et un JWT ES256 signé
+avec `dsaEncoding: 'ieee-p1363'` — c'est ce qui évite la conversion DER → JOSE à
+la main. `tests/push-crypto.test.ts` le confronte au **vecteur de test de la
+RFC 8291 §5** : secret ECDH, PRK, CEK, nonce, en-tête de 86 octets et
+chiffré, valeur par valeur. Ne pas modifier ce module sans que ce test passe.
+
+Les contraintes iOS, à respecter sous peine de silence :
+
+- La permission se demande depuis un **geste utilisateur**. `push.enable()`
+  appelle `Notification.requestPermission()` en première instruction, avant tout
+  `await` : Safari n'honore la demande que tant que le geste est sur la pile.
+- Web Push n'existe que pour une PWA **installée sur l'écran d'accueil**. En
+  onglet Safari, `subscribe` lève. `needsHomeScreenInstall()` détecte le cas et
+  le panneau explique l'étape au lieu d'afficher un bouton condamné.
+- **Chaque push affiche une notification.** Le handler `push` du service worker
+  se termine toujours par `showNotification`, même sur charge utile absente ou
+  illisible : Safari révoque l'abonnement d'un push silencieux.
+- `410` et `404` du service de push suppriment la ligne ;
+  `pushsubscriptionchange` se réabonne depuis le service worker (la clé publique
+  revient de `GET /api/push`).
+
+Ce qui a été vérifié sur cette machine, contre l'application construite et un
+faux service de push qui déchiffre ce qu'il reçoit : client coupé à 1 s → tour
+terminé côté serveur puis notification livrée et déchiffrée avec le bon titre de
+conversation et le lien `/?s=<id>` ; client resté jusqu'au bout → aucune
+notification ; client attaché mais présence « caché » → notification ; abonnement
+malformé → ligne supprimée ; endpoint injoignable → `last_error` enregistré.
+**Ce qui n'est pas vérifié** : la livraison réelle sur un iPhone. Elle dépend
+d'APNs et de l'installation sur l'écran d'accueil — c'est le bouton « Envoyer un
+test » du panneau d'état qui le dira.
+
+Stockage : table `push_subscriptions` de `data/hermes-web.db`, une ligne par
+appareil. L'endpoint est une **capacité** (le connaître suffit pour pousser vers
+l'appareil) et ne sort donc jamais du serveur : l'UI ne voit qu'un condensé
+(`deviceId`) et l'hôte du service de push.
+
+**Hors périmètre, ne pas le laisser croire** : les réponses produites par les
+tâches planifiées (`/api/jobs`) ou par Telegram ne passent pas par ce flux et ne
+déclencheront aucune notification. Un tour dont le flux est tronqué, ou coupé
+par `MAX_TURN_MS`, n'en déclenche pas non plus : on ne sait pas ce que Hermes a
+répondu, et « quelque chose est peut-être prêt » vaut moins que le silence — la
+réponse est de toute façon dans le transcript.
+
+Routes : `GET|POST|DELETE /api/push` (configuration + liste / abonnement /
+retrait), `POST /api/push/test`, `POST /api/push/presence`.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -422,8 +526,11 @@ src/
 │   │   ├── config.ts    variables d'env + validation au démarrage
 │   │   ├── hermes.ts    client de l'API Hermes (Bearer, timeouts, retries)
 │   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
-│   │   ├── sse.ts       relais SSE + pont d'abort
-│   │   ├── db.ts        better-sqlite3 (prefs, prompts, cache de titres)
+│   │   ├── sse.ts       en-têtes SSE + enveloppe d'erreur
+│   │   ├── turns.ts     registre des tours en vol, présence, notification
+│   │   ├── push.ts      envoi Web Push (abonnements, 410 → oubli)
+│   │   ├── push-crypto.ts RFC 8291 + RFC 8292, sans dépendance
+│   │   ├── db.ts        better-sqlite3 (prefs, prompts, titres, abonnements)
 │   │   ├── limits.ts    sémaphore de tours + token bucket
 │   │   ├── skills.ts    lecture/écriture des SKILL.md sur le disque
 │   │   └── respond.ts   HermesError → réponse JSON typée, `gate`, `readJson`
@@ -433,24 +540,28 @@ src/
 │   │   └── platform.ts  ⌘ vs Ctrl
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
 │   │                  Markdown, CommandPalette, StatusPanel, SkillsPanel,
-│   │                  ProvidersPanel, JobsPanel, Shortcuts, Toasts
+│   │                  ProvidersPanel, JobsPanel, PushSettings, Shortcuts,
+│   │                  Toasts
 │   ├── stores/
 │   │   ├── chat.svelte.ts       tout l'état de conversation (runes Svelte 5)
 │   │   ├── skills.svelte.ts     état de l'éditeur de skills
 │   │   ├── prompts.svelte.ts    bibliothèque de prompts enregistrés
 │   │   ├── providers.svelte.ts  état du panneau providers (dont le flux OAuth)
 │   │   ├── jobs.svelte.ts       état du panneau des tâches planifiées
-│   │   └── toast.svelte.ts      notifications
+│   │   ├── push.svelte.ts       abonnement Web Push + report de présence
+│   │   └── toast.svelte.ts      notifications dans la page
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── jobs.ts        horaires cron validés/traduits, état et tri des tâches
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
 │   ├── prompts.ts     prompts enregistrés : titres, bornes, recherche
+│   ├── push.ts        charge utile d'une notification, libellés, capacités
 │   ├── providers.ts   groupement des clés par provider, statut des comptes,
 │   │                  machine à états du flux OAuth
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage,
 │   │                  candidats de la vue archivée
 │   ├── skills.ts      chemins de skills validés, gabarits, groupement
 │   ├── sse.ts         parseur SSE incrémental (partagé)
+│   ├── turns.ts       résumé d'un tour + « faut-il notifier ? »
 │   ├── markdown.ts    rendu tolérant à l'incomplet
 │   └── transcript.ts  regroupement du transcript persisté en tours UI
 ├── hooks.server.ts    contrôle d'origine à l'exécution + en-têtes de sécurité
@@ -458,7 +569,7 @@ src/
 │   ├── +page.svelte   l'écran de chat (`?s=<id>` ouvre une conversation)
 │   ├── api/**         proxy authentifié
 │   └── health/        sonde du healthcheck Docker
-└── service-worker.ts  cache de l'app shell (jamais /api)
+└── service-worker.ts  cache de l'app shell (jamais /api) + handlers push
 ```
 
 ## Gestion des erreurs — le contrat
@@ -592,3 +703,7 @@ Les consignes complètes sont dans `/opt/stacks/hermes-ui-bot/prompt.md`.
   de joindre Hermes directement, et l'activer signifierait exposer la clé.
 - Pas d'auth applicative : l'identité est garantie par le tailnet. Ne pas
   bricoler un mot de passe maison.
+- `VAPID_PRIVATE_KEY` est une clé de signature : elle reste côté serveur, n'est
+  jamais journalisée et ne doit jamais entrer dans le dépôt. `VAPID_PUBLIC_KEY`,
+  elle, **doit** être servie au navigateur — c'est son rôle. Les endpoints
+  d'abonnement sont eux aussi des secrets porteurs : l'UI ne voit qu'un condensé.

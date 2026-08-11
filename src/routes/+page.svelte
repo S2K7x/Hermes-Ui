@@ -12,6 +12,7 @@
 	import StatusPanel from '$lib/components/StatusPanel.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { prompts } from '$lib/stores/prompts.svelte';
+	import { push } from '$lib/stores/push.svelte';
 	import { toasts } from '$lib/stores/toast.svelte';
 	import { read, readJSON, write, writeJSON } from '$lib/client/storage';
 	import { hasMod, modKey } from '$lib/client/platform';
@@ -59,6 +60,9 @@
 		// Load the saved prompts alongside the session list so the command
 		// palette can offer them right away; a failure here is silent.
 		void prompts.ensureLoaded();
+		// Not for the settings panel — this is what starts reporting whether the
+		// app is on screen, which decides if a finished turn notifies.
+		void push.init();
 		await chat.init();
 		// ?s=<id> deep-links a conversation; otherwise resume the last one
 		// that was open, like reopening Claude.ai.

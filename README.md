@@ -38,6 +38,9 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Tâches planifiées** (⏰ dans la sidebar, ou `⌘K` → « Tâches planifiées ») :
   créer un rappel ou une tâche récurrente que Hermes exécute seul, la lancer
   tout de suite, la mettre en pause ou la supprimer
+- **Notifications push** (panneau d'état → « Notifications ») : quand un tour se
+  termine alors que l'app n'est pas à l'écran, la réponse arrive sur l'iPhone ou
+  le desktop, et un tap ouvre la bonne conversation
 - **Images en entrée** : coller ou déposer, envoyées en base64
 - **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
   applicable à la conversation ouverte dès le message suivant
@@ -112,6 +115,26 @@ résoudraient vers rien.
 
 Le panneau se désactive proprement si le gateway tourne sans son module cron.
 
+### Notifications : ce qu'il faut faire une fois
+
+Sur **iPhone**, le Web Push n'existe que pour une app **installée sur l'écran
+d'accueil** : ouvrez Hermes dans Safari, bouton Partager → « Sur l'écran
+d'accueil », puis rouvrez-la depuis l'icône. Le panneau d'état (`⌘/`) affiche
+alors « Activer sur cet appareil » ; l'autorisation se demande depuis ce bouton,
+jamais toute seule. Le bouton « Envoyer un test » permet de vérifier tout de
+suite, sans attendre un vrai tour. Chaque appareil s'abonne séparément et peut
+être retiré depuis la liste.
+
+Côté serveur il faut une paire de clés VAPID dans `.env` (`VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — voir `.env.example` pour la commande de
+génération). Sans elles, la section s'affiche désactivée et le reste de l'app
+fonctionne normalement.
+
+Ce qui déclenche une notification : **un tour lancé depuis cette interface** qui
+se termine alors que personne ne le regardait — app fermée, écran verrouillé, ou
+onglet en arrière-plan. Ce qui n'en déclenche **pas** : les tâches planifiées et
+les conversations Telegram, qui ne passent pas par ce flux.
+
 ### Une limite à connaître
 
 Le bouton carré pendant la génération **arrête l'affichage, pas l'agent**.
@@ -119,6 +142,8 @@ L'API de Hermes n'expose aucun moyen d'interrompre un tour lancé par la
 Sessions API : le tour se termine en arrière-plan et sa réponse apparaît dans
 la conversation (bouton « Recharger »). Le détail et l'alternative écartée sont
 documentés dans [CLAUDE.md](CLAUDE.md#2-un-tour-de-la-sessions-api-ne-peut-pas-être-interrompu).
+Le serveur, lui, suit désormais le tour jusqu'au bout même sans navigateur —
+c'est ce qui lui permet de notifier à la fin.
 
 L'historique reste dans `~/.hermes/state.db` — le même que celui du CLI et du
 bot Telegram. Les conversations démarrées ailleurs apparaissent ici.
@@ -188,6 +213,17 @@ grep HERMES_DASHBOARD_SESSION_TOKEN ~/.hermes/dashboard.env
 Le jeton vient de ce fichier, que l'unité systemd lit via `EnvironmentFile` :
 il survit aux redémarrages du service. Laissez la variable vide et le panneau
 se désactive proprement.
+
+Pour les notifications push, générez une paire de clés VAPID une bonne fois :
+
+```bash
+node -e "const {createECDH}=require('node:crypto');const k=createECDH('prime256v1');k.generateKeys();console.log('VAPID_PUBLIC_KEY='+k.getPublicKey().toString('base64url'));console.log('VAPID_PRIVATE_KEY='+k.getPrivateKey().toString('base64url'))"
+```
+
+Collez les deux lignes dans `.env`, ajoutez `VAPID_SUBJECT=mailto:vous@exemple.fr`.
+La clé publique est servie au navigateur (c'est son rôle) ; la privée signe les
+requêtes vers le service de push et ne quitte pas le serveur. Les regénérer
+invalide tous les abonnements : chaque appareil devra être réactivé.
 
 ### 3. Lancer
 
@@ -259,6 +295,11 @@ Pi**. `API_SERVER_KEY` est un secret équivalent-root :
   secret du même ordre — il ouvre l'écriture de la configuration de Hermes. Il
   reste lui aussi côté serveur, et aucune clé d'API n'est renvoyée en clair au
   navigateur ni écrite dans les journaux
+- `VAPID_PRIVATE_KEY` ne quitte pas le serveur non plus, et les adresses
+  d'abonnement push (qui suffiraient à pousser vers un appareil) ne sont jamais
+  renvoyées au navigateur : la liste des appareils n'affiche qu'un condensé et
+  le nom du service de push. Le contenu des notifications est chiffré de bout en
+  bout (RFC 8291) : le service d'Apple ou de Google relaie sans pouvoir lire
 
 ## Notes matérielles
 
