@@ -11,6 +11,7 @@
 	import SkillsPanel from '$lib/components/SkillsPanel.svelte';
 	import StatusPanel from '$lib/components/StatusPanel.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
+	import { prompts } from '$lib/stores/prompts.svelte';
 	import { toasts } from '$lib/stores/toast.svelte';
 	import { read, readJSON, write, writeJSON } from '$lib/client/storage';
 	import { hasMod, modKey } from '$lib/client/platform';
@@ -55,6 +56,9 @@
 	});
 
 	async function boot() {
+		// Load the saved prompts alongside the session list so the command
+		// palette can offer them right away; a failure here is silent.
+		void prompts.ensureLoaded();
 		await chat.init();
 		// ?s=<id> deep-links a conversation; otherwise resume the last one
 		// that was open, like reopening Claude.ai.
@@ -140,6 +144,13 @@
 			? [{ id: 'fork', label: 'Brancher la conversation', run: () => chat.forkSession(chat.sessionId!) }]
 			: []),
 		...(chat.canResend ? [{ id: 'resend', label: 'Renvoyer le dernier message', run: () => chat.resend() }] : []),
+		// One entry per saved prompt: ⌘K then a few letters is the fastest way
+		// to reuse one on the desktop.
+		...prompts.items.map((p) => ({
+			id: `prompt:${p.id}`,
+			label: `Prompt : ${p.title}`,
+			run: () => composer?.insert(p.text)
+		})),
 		{ id: 'theme', label: 'Basculer le thème clair / sombre', run: toggleTheme },
 		{ id: 'shortcuts', label: 'Raccourcis clavier', hint: '?', run: () => (shortcutsOpen = true) }
 	]);

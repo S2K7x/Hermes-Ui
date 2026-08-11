@@ -21,7 +21,7 @@ Navigateur / PWA
 SvelteKit adapter-node — 127.0.0.1:3000  (conteneur Docker)
    ├── src/routes/api/**      proxy de confiance : injecte le Bearer
    ├── src/lib/server/sse.ts  relais SSE
-   ├── data/hermes-web.db     préférences + cache de titres (UI seulement)
+   ├── data/hermes-web.db     prefs, prompts enregistrés, cache de titres (UI)
    └── /skills                bind mount de ~/.hermes/skills (éditeur de skills)
    │
    ├─ HTTP loopback + Authorization: Bearer
@@ -368,6 +368,31 @@ codé en dur à `false` alors que les routes fonctionnent.
 Routes : `GET|POST /api/jobs` (liste + cibles de livraison en un aller-retour /
 création) et `POST|DELETE /api/jobs/{id}` (action / suppression).
 
+### 15. Les prompts enregistrés sont de l'état d'UI, pas de l'état Hermes
+
+Hermes n'a aucun endpoint de bibliothèque de prompts — ni dans
+`api_server.py`, ni dans le dashboard. Les prompts enregistrés vivent donc dans
+la table `prefs` de `data/hermes-web.db`, sous la clé `saved_prompts`, derrière
+`GET|PUT /api/prompts`. Ne pas chercher à les faire porter par une session ni
+par la mémoire long-terme de Hermes : ce sont des raccourcis d'interface.
+
+Le stockage est **serveur** et non `localStorage`, et c'est tout l'intérêt : un
+prompt enregistré depuis le desktop est là sur le téléphone. Deux conséquences
+dans le code :
+
+- La ligne prefs est un seul blob JSON, donc les bornes sont appliquées
+  **côté serveur** par `normalizePrompts()` (`src/lib/prompts.ts`, pur et
+  testé) : 40 prompts, 4 000 caractères par prompt, 60 pour le titre. La même
+  fonction sert de garde-fou au navigateur et de réparateur d'une ligne écrite
+  par une version antérieure — elle ne jette jamais.
+- `PUT /api/prompts` **refuse** un corps dont `prompts` n'est pas une liste
+  (400 `invalid_body`) au lieu de le normaliser en `[]` : un bug côté client ne
+  doit pas pouvoir effacer la bibliothèque. L'écriture est un remplacement
+  complet, et le store adopte la réponse du serveur — c'est la version bornée.
+
+Côté UI, un prompt choisi est **ajouté** au composeur, jamais substitué : un
+message à moitié écrit doit survivre à un tap malheureux sur la bibliothèque.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -398,7 +423,7 @@ src/
 │   │   ├── hermes.ts    client de l'API Hermes (Bearer, timeouts, retries)
 │   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
 │   │   ├── sse.ts       relais SSE + pont d'abort
-│   │   ├── db.ts        better-sqlite3 (prefs, cache de titres)
+│   │   ├── db.ts        better-sqlite3 (prefs, prompts, cache de titres)
 │   │   ├── limits.ts    sémaphore de tours + token bucket
 │   │   ├── skills.ts    lecture/écriture des SKILL.md sur le disque
 │   │   └── respond.ts   HermesError → réponse JSON typée, `gate`, `readJson`
@@ -412,12 +437,14 @@ src/
 │   ├── stores/
 │   │   ├── chat.svelte.ts       tout l'état de conversation (runes Svelte 5)
 │   │   ├── skills.svelte.ts     état de l'éditeur de skills
+│   │   ├── prompts.svelte.ts    bibliothèque de prompts enregistrés
 │   │   ├── providers.svelte.ts  état du panneau providers (dont le flux OAuth)
 │   │   ├── jobs.svelte.ts       état du panneau des tâches planifiées
 │   │   └── toast.svelte.ts      notifications
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── jobs.ts        horaires cron validés/traduits, état et tri des tâches
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
+│   ├── prompts.ts     prompts enregistrés : titres, bornes, recherche
 │   ├── providers.ts   groupement des clés par provider, statut des comptes,
 │   │                  machine à états du flux OAuth
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage,

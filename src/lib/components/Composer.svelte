@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { chat } from '$lib/stores/chat.svelte';
+	import { prompts } from '$lib/stores/prompts.svelte';
+	import { toasts } from '$lib/stores/toast.svelte';
+	import { matchPrompts } from '$lib/prompts';
 	import { uid } from '$lib/transcript';
 	import type { Attachment } from '$lib/types';
 
@@ -18,6 +21,13 @@
 			? chat.skills.filter((s) => s.name.toLowerCase().includes(paletteQuery)).slice(0, 8)
 			: []
 	);
+
+	// Saved prompts: the library lives server-side, so it is the same on the
+	// phone and on the desktop.
+	let promptsOpen = $state(false);
+	let promptFilter = $state('');
+	let promptMatches = $derived(matchPrompts(prompts.items, promptFilter));
+	const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
 
 	const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
@@ -89,6 +99,14 @@
 	}
 
 	function onKeydown(event: KeyboardEvent) {
+		// Escape closes the prompt library first — without stopping here it
+		// would reach the page handler and detach a running turn.
+		if (promptsOpen && event.key === 'Escape') {
+			event.preventDefault();
+			event.stopPropagation();
+			promptsOpen = false;
+			return;
+		}
 		if (paletteOpen && paletteMatches.length) {
 			if (event.key === 'ArrowDown') {
 				event.preventDefault();
@@ -137,6 +155,31 @@
 		textarea?.focus();
 	}
 
+	/**
+	 * Drop a saved prompt into the composer. Appended, never substituted: a
+	 * half-typed message must survive a mistaken tap on the library.
+	 */
+	export function insert(value: string) {
+		const kept = text.replace(/\s+$/, '');
+		text = kept ? `${kept}\n\n${value}` : value;
+		promptsOpen = false;
+		paletteOpen = false;
+		textarea?.focus();
+		queueMicrotask(autosize);
+	}
+
+	function togglePrompts() {
+		promptsOpen = !promptsOpen;
+		if (promptsOpen) {
+			promptFilter = '';
+			void prompts.ensureLoaded();
+		}
+	}
+
+	async function saveCurrent() {
+		if (await prompts.add(text)) toasts.success('Prompt enregistré.');
+	}
+
 	async function submit() {
 		if (chat.streaming) return;
 		const payload = text;
@@ -145,6 +188,7 @@
 		text = '';
 		attachments = [];
 		paletteOpen = false;
+		promptsOpen = false;
 		queueMicrotask(autosize);
 		await chat.send(payload, files);
 	}
@@ -165,7 +209,63 @@
 		<div class="notice">{notice}</div>
 	{/if}
 
-	{#if paletteOpen && paletteMatches.length}
+	{#if promptsOpen}
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+		<div class="pscrim" onclick={() => (promptsOpen = false)}></div>
+		<div class="palette prompts">
+			<div class="p-head">
+				<span>Prompts enregistrés</span>
+				<button class="p-x" onclick={() => (promptsOpen = false)} aria-label="Fermer">✕</button>
+			</div>
+
+			{#if text.trim()}
+				<button class="p-save" onclick={saveCurrent} disabled={prompts.saving}>
+					＋ Enregistrer le message en cours
+				</button>
+			{/if}
+
+			{#if prompts.items.length > 5}
+				<input
+					class="p-filter"
+					bind:value={promptFilter}
+					placeholder="Filtrer…"
+					aria-label="Filtrer les prompts"
+				/>
+			{/if}
+
+			<div class="p-list">
+				{#each promptMatches as prompt (prompt.id)}
+					<div class="p-row">
+						<button class="p-use" onclick={() => insert(prompt.text)}>
+							<span class="p-title">{prompt.title}</span>
+							<!-- A one-line prompt IS its title: printing it twice says nothing. -->
+							{#if oneLine(prompt.text) !== prompt.title}
+								<span class="p-body">{oneLine(prompt.text)}</span>
+							{/if}
+						</button>
+						<button
+							class="p-del"
+							onclick={() => prompts.remove(prompt.id)}
+							disabled={prompts.saving}
+							aria-label="Supprimer ce prompt">✕</button
+						>
+					</div>
+				{/each}
+
+				{#if prompts.items.length === 0}
+					<p class="p-none">
+						{prompts.loaded
+							? 'Aucun prompt enregistré. Écrivez un message, puis enregistrez-le ici pour le retrouver sur tous vos appareils.'
+							: 'Chargement…'}
+					</p>
+				{:else if promptMatches.length === 0}
+					<p class="p-none">Aucun prompt ne correspond.</p>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
+	{#if paletteOpen && !promptsOpen && paletteMatches.length}
 		<div class="palette">
 			{#each paletteMatches as skill, i (skill.name)}
 				<button class:sel={i === paletteIndex} onclick={() => choose(skill.name)}>
@@ -204,6 +304,15 @@
 				}}
 			/>
 		</label>
+
+		<button
+			class="attach prompt-btn"
+			class:on={promptsOpen}
+			onclick={togglePrompts}
+			title="Prompts enregistrés"
+			aria-label="Prompts enregistrés"
+			aria-expanded={promptsOpen}>🔖</button
+		>
 
 		<textarea
 			bind:this={textarea}
@@ -280,6 +389,13 @@
 	}
 	.attach input {
 		display: none;
+	}
+	.prompt-btn {
+		line-height: 1;
+	}
+	.prompt-btn.on {
+		opacity: 1;
+		background: var(--bg-hover);
 	}
 	.send {
 		flex: 0 0 auto;
@@ -361,6 +477,89 @@
 	.palette button.sel,
 	.palette button:hover {
 		background: var(--bg-hover);
+	}
+	/* Saved prompts ------------------------------------------------------- */
+	.pscrim {
+		position: fixed;
+		inset: 0;
+		z-index: 5;
+	}
+	.palette.prompts {
+		z-index: 6;
+		max-height: min(340px, 55vh);
+	}
+	.p-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 4px 8px 6px;
+		font-size: 12px;
+		color: var(--text-faint);
+	}
+	.palette .p-x {
+		padding: 0 4px;
+		color: var(--text-faint);
+	}
+	.palette .p-save {
+		display: block;
+		width: 100%;
+		font-size: 13px;
+		color: var(--accent);
+	}
+	.palette .p-save:disabled {
+		opacity: 0.5;
+	}
+	.p-filter {
+		margin: 4px 6px 2px;
+		padding: 6px 8px;
+		background: var(--bg-sunken);
+		border: 1px solid var(--border-soft);
+		border-radius: 8px;
+		font-size: 13px;
+		outline: none;
+	}
+	.p-list {
+		overflow-y: auto;
+	}
+	.p-row {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+	}
+	.palette .p-use {
+		flex: 1;
+		min-width: 0;
+		flex-direction: column;
+		gap: 2px;
+		align-items: stretch;
+	}
+	.p-title {
+		font-size: 13.5px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.p-body {
+		font-size: 12px;
+		color: var(--text-faint);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.palette .p-del {
+		flex: 0 0 auto;
+		padding: 6px 8px;
+		font-size: 11px;
+		color: var(--text-faint);
+	}
+	.palette .p-del:hover {
+		color: var(--danger);
+	}
+	.p-none {
+		margin: 0;
+		padding: 12px 10px;
+		font-size: 12.5px;
+		color: var(--text-faint);
 	}
 	.sk-name {
 		flex: 0 0 auto;

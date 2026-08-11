@@ -24,6 +24,10 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   disque, gateway, plateformes), outils/skills exposés, tâches planifiées,
   tours en cours, coût et tokens de la conversation
 - **Palette de skills** : `/` dans le composeur
+- **Prompts enregistrés** (🔖 dans le composeur, ou `⌘K` → « Prompt : … ») :
+  enregistrer le message en cours pour le réutiliser d'un tap ; la
+  bibliothèque est stockée côté serveur, donc la même sur le téléphone et sur
+  le desktop
 - **Éditeur de skills** (📚 dans la sidebar, ou `⌘K` → « Modifier les skills ») :
   liste des `SKILL.md` groupée par catégorie, édition en texte brut,
   création guidée d'un nouveau skill

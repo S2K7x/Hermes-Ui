@@ -28,6 +28,13 @@ step "model catalogue"
 model=$(curl -fsS "${BASE}/api/models" | python3 -c 'import sys,json;print(json.load(sys.stdin)["model"])')
 ok "default model: ${model}"
 
+step "saved prompts"
+# Read-only on purpose: the library is user data, and a smoke test must not
+# write into it. What matters is that the prefs-backed route answers a list.
+nprompts=$(curl -fsS "${BASE}/api/prompts" |
+	python3 -c 'import sys,json;d=json.load(sys.stdin);assert isinstance(d["prompts"],list);print(len(d["prompts"]))')
+ok "prompt library: ${nprompts} entries"
+
 step "providers panel"
 # Non-blocking on purpose: the Hermes dashboard is a separate service and an
 # unset HERMES_DASHBOARD_TOKEN is a supported configuration. What IS asserted
