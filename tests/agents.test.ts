@@ -488,3 +488,28 @@ test('every starter agent validates as if it had just been typed', () => {
 		assert.deepEqual(validateAgent(others.concat(a), a.id, { ...a }), [], a.name);
 	}
 });
+
+test('a specialist piloted by two chiefs gets a unique key per position', () => {
+	// `id + depth` collides here: Chercheur sits at depth 1 under both chiefs.
+	// A repeated {#each} key throws at render time — invisible to check, tests
+	// and build, which is exactly how it reached production once.
+	const list: Agent[] = [
+		agent('boss', { orchestrator: true, children: ['chief-a', 'chief-b'] }),
+		agent('chief-a', { orchestrator: true, children: ['seeker'] }),
+		agent('chief-b', { orchestrator: true, children: ['seeker'] }),
+		agent('seeker')
+	];
+	const keys = teamTree(list, 'boss').map((n) => n.key);
+	assert.equal(new Set(keys).size, keys.length, `clés dupliquées : ${keys.join(', ')}`);
+	assert.ok(keys.includes('boss/chief-a/seeker'));
+	assert.ok(keys.includes('boss/chief-b/seeker'));
+});
+
+test('the same child listed twice is walked once', () => {
+	const list: Agent[] = [
+		agent('boss', { orchestrator: true, children: ['seeker', 'seeker'] }),
+		agent('seeker')
+	];
+	const nodes = teamTree(list, 'boss');
+	assert.equal(nodes.filter((n) => n.agent.id === 'seeker').length, 1);
+});

@@ -217,6 +217,14 @@ export interface TeamNode {
 	depth: number;
 	/** True when this node was reached again on the same branch — not expanded. */
 	repeated: boolean;
+	/**
+	 * Unique per position in the tree: the chain of ids from the root.
+	 *
+	 * `id + depth` is NOT unique — two orchestrators at the same depth may
+	 * pilot the same specialist, which is a perfectly normal team — and a
+	 * repeated `{#each}` key throws at render time.
+	 */
+	key: string;
 }
 
 /**
@@ -230,20 +238,23 @@ export function teamTree(list: Agent[], rootId: string, maxDepth = MAX_TEAM_DEPT
 	const byId = new Map(list.map((a) => [a.id, a]));
 	const out: TeamNode[] = [];
 
-	const walk = (id: string, depth: number, branch: Set<string>) => {
+	const walk = (id: string, depth: number, branch: Set<string>, path: string) => {
 		const agent = byId.get(id);
 		if (!agent) return;
+		const key = path ? `${path}/${id}` : id;
 		if (branch.has(id)) {
-			out.push({ agent, depth, repeated: true });
+			out.push({ agent, depth, repeated: true, key });
 			return;
 		}
-		out.push({ agent, depth, repeated: false });
+		out.push({ agent, depth, repeated: false, key });
 		if (depth >= maxDepth || !agent.orchestrator) return;
 		const next = new Set(branch).add(id);
-		for (const child of agent.children) walk(child, depth + 1, next);
+		// Deduplicated: the same id listed twice among the children means the
+		// same agent, and would produce two nodes sharing a path.
+		for (const child of new Set(agent.children)) walk(child, depth + 1, next, key);
 	};
 
-	walk(rootId, 0, new Set());
+	walk(rootId, 0, new Set(), '');
 	return out;
 }
 

@@ -63,7 +63,13 @@
 	let preview = $derived(editing === null ? '' : composeSystemPrompt(candidate, draftId));
 	/** Everyone but the agent being edited — you cannot put yourself on your own team. */
 	let pickable = $derived(agents.items.filter((a) => a.id !== editing));
-	let models = $derived(chat.models?.providers?.flatMap((p) => p.models ?? []) ?? []);
+	// Deduplicated: the same model id can be offered by two providers
+	// (claude-sonnet-5 arrives from both anthropic and openrouter), and a
+	// repeated key throws `each_key_duplicate` at render time — which type
+	// checking, tests and the build all miss.
+	let models = $derived([
+		...new Set(chat.models?.providers?.flatMap((p) => p.models ?? []) ?? [])
+	]);
 
 	function startCreate() {
 		draft = emptyDraft();
@@ -165,7 +171,7 @@
 							</div>
 							{#if agent.orchestrator && team.length > 0}
 								<ul class="tree">
-									{#each team as node (`${node.agent.id}-${node.depth}-${node.repeated}`)}
+									{#each team as node (node.key)}
 										<li style="padding-left: {(node.depth - 1) * 16}px">
 											<span class="branch">└</span>
 											{agentLabel(node.agent)}
@@ -285,7 +291,7 @@
 							<div class="preview-tree">
 								<span class="muted small">L'équipe telle que Hermes la verra :</span>
 								<ul class="tree">
-									{#each tree as node (`${node.agent.id}-${node.depth}-${node.repeated}`)}
+									{#each tree as node (node.key)}
 										<li style="padding-left: {node.depth * 16}px">
 											{#if node.depth > 0}<span class="branch">└</span>{/if}
 											{agentLabel(node.agent)}
