@@ -121,6 +121,14 @@ export interface HermesJob {
 	last_run_at?: string | null;
 	last_status?: string | null;
 	last_error?: string | null;
+	/**
+	 * Added by this app from `job_meta`, not fields Hermes knows about: which
+	 * agent the task belongs to, the instruction as typed (the stored prompt
+	 * also carries the agent's card), and whether that card has since changed.
+	 */
+	agent_id?: string | null;
+	instruction?: string;
+	persona_stale?: boolean;
 	[key: string]: unknown;
 }
 

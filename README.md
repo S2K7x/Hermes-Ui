@@ -40,8 +40,9 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   OAuth (code d'appairage + sondage jusqu'à validation), déconnecter, et
   changer le modèle par défaut de Hermes — sans SSH
 - **Tâches planifiées** (⏰ dans la sidebar, ou `⌘K` → « Tâches planifiées ») :
-  créer un rappel ou une tâche récurrente que Hermes exécute seul, la lancer
-  tout de suite, la mettre en pause ou la supprimer
+  confier à l'un de vos agents une tâche récurrente que Hermes exécute seul —
+  horaire choisi dans des menus plutôt qu'écrit en cron, puis modifiable,
+  duplicable, lançable tout de suite, en pause ou supprimée
 - **Notifications push** (panneau d'état → « Notifications ») : quand un tour se
   termine alors que l'app n'est pas à l'écran, la réponse arrive sur l'iPhone ou
   le desktop, et un tap ouvre la bonne conversation
@@ -144,12 +145,22 @@ fonctionne normalement.
 ### Tâches planifiées : ce que Hermes fera sans vous
 
 C'est le cron de Hermes, pas un minuteur maison : la tâche tourne côté Pi avec
-tous ses outils, et continue même app fermée. L'horaire accepte ce que Hermes
-accepte — `30m`, `2h`, `1d` pour une fois, `every 30m` pour un cycle,
-`0 8 * * *` pour une règle cron, ou une date `2026-08-11T09:00`. Six raccourcis
-couvrent les cas courants, et une phrase sous le champ traduit en français ce
-qui a été compris avant l'enregistrement (Hermes répond `500` à un horaire
-illisible : autant ne jamais l'envoyer).
+tous ses outils, et continue même app fermée.
+
+**L'horaire se choisit, il ne s'écrit pas.** « Chaque jour », « chaque
+semaine », « chaque mois », « à intervalle » ou « une seule fois » ouvrent les
+champs correspondants (une heure, un jour, un nombre) ; le panneau en fabrique
+l'expression que Hermes attend et traduit en français ce qu'elle veut dire avant
+l'enregistrement — Hermes répond `500` à un horaire illisible, autant ne jamais
+l'envoyer. Le mode « Expression » reste là pour ce que les menus ne couvrent pas
+(`0 9-18 * * 1-5`), et une tâche écrite ainsi se rouvre telle quelle.
+
+**Une tâche appartient à un agent.** Choisissez-le au moment de la planifier :
+sa fiche part avec la tâche, donc elle s'exécute avec sa personnalité et son
+équipe, exactement comme dans une conversation. Sans agent, c'est le prompt par
+défaut de Hermes. Attention : la fiche est recopiée à l'enregistrement, pas
+relue à chaque exécution — si vous modifiez l'agent ensuite, la tâche le signale
+et un bouton « Mettre à jour » la remet à niveau.
 
 Deux choses à savoir. **L'instruction doit se suffire à elle-même** : la tâche
 s'exécute dans sa propre conversation, sans le contexte de celle qui est
@@ -157,6 +168,11 @@ ouverte. Et **la livraison se choisit** : « Local » garde la sortie côté Her
 sinon le résultat part sur une plateforme dont le canal d'accueil est configuré
 (Telegram, typiquement) — les autres ne sont pas proposées, parce qu'elles
 résoudraient vers rien.
+
+Une tâche existante se modifie (nom, horaire, agent, instruction, livraison) ou
+se duplique pour en dériver une variante. Seule exception : une tâche « une
+seule fois » déjà passée demande une nouvelle date, parce que Hermes refuse de
+reprogrammer un horaire écoulé.
 
 Le panneau se désactive proprement si le gateway tourne sans son module cron.
 

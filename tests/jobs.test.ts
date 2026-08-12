@@ -1,14 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-	SCHEDULE_PRESETS,
+	JOB_TEMPLATES,
+	MAX_JOB_NAME,
+	MAX_JOB_PROMPT,
+	canEditJob,
+	composeJobPrompt,
+	humanCron,
 	humanMinutes,
+	jobInstructionLimit,
 	jobState,
+	lastRunLabel,
 	nextRunLabel,
 	parseDuration,
 	parseSchedule,
 	scheduleDisplay,
+	scheduleExpression,
+	scheduleFromSpec,
 	sortJobs,
+	specFromExpression,
 	targetLabel,
 	usableTargets
 } from '../src/lib/jobs.ts';
@@ -112,12 +122,6 @@ test('parseSchedule reads a naive timestamp as wall clock, not UTC', () => {
 	assert.match(parsed.display, /11/);
 });
 
-test('every schedule preset is something the schedule parser accepts', () => {
-	for (const preset of SCHEDULE_PRESETS) {
-		assert.notEqual(parseSchedule(preset.value, NOW).kind, null, preset.value);
-	}
-});
-
 // ---------------------------------------------------------------------------
 // Reading a job back
 // ---------------------------------------------------------------------------
@@ -139,7 +143,7 @@ test('scheduleDisplay prefers the structured fields over the English display', (
 	);
 	assert.equal(
 		scheduleDisplay({ schedule: { kind: 'cron', expr: '0 9 * * *' }, schedule_display: '0 9 * * *' }),
-		'0 9 * * *'
+		'chaque jour à 09 h 00'
 	);
 	assert.match(
 		scheduleDisplay({
@@ -226,4 +230,194 @@ test('usableTargets always keeps a local choice, even from an empty list', () =>
 		usableTargets([{ id: 'telegram', home_target_set: true }]).map((t) => t.id),
 		['local', 'telegram']
 	);
+});
+
+// ---------------------------------------------------------------------------
+// Picking a schedule without writing cron
+// ---------------------------------------------------------------------------
+
+const SPEC = {
+	mode: 'daily' as const,
+	time: '08:30',
+	weekday: 1,
+	monthday: 5,
+	every: 2,
+	unit: 'h' as const,
+	at: '2026-12-31T23:59',
+	raw: '0 9 * * 1-5'
+};
+
+test('scheduleFromSpec renders every mode as an expression Hermes accepts', () => {
+	const expr = (mode: (typeof SPEC)['mode'] | 'weekly' | 'monthly' | 'interval' | 'once' | 'advanced') =>
+		scheduleFromSpec({ ...SPEC, mode });
+
+	assert.equal(expr('daily'), '30 8 * * *');
+	assert.equal(expr('weekly'), '30 8 * * 1');
+	assert.equal(expr('monthly'), '30 8 5 * *');
+	assert.equal(expr('interval'), 'every 2h');
+	assert.equal(expr('once'), '2026-12-31T23:59');
+	assert.equal(expr('advanced'), '0 9 * * 1-5');
+
+	// And each one survives the parser that guards the upstream 500.
+	for (const mode of ['daily', 'weekly', 'monthly', 'interval', 'once', 'advanced'] as const) {
+		assert.notEqual(parseSchedule(expr(mode), NOW).kind, null, mode);
+	}
+});
+
+test('scheduleFromSpec yields an empty expression for an unfinished spec', () => {
+	// An empty time input, and a count the number field cannot make sense of.
+	assert.equal(scheduleFromSpec({ ...SPEC, mode: 'daily', time: '' }), '');
+	assert.equal(scheduleFromSpec({ ...SPEC, mode: 'interval', every: 0 }), '');
+	assert.equal(parseSchedule('', NOW).kind, null);
+});
+
+test('specFromExpression reopens a job in the mode that produced it', () => {
+	assert.equal(specFromExpression('30 8 * * *', NOW).mode, 'daily');
+	assert.equal(specFromExpression('30 8 * * *', NOW).time, '08:30');
+	assert.equal(specFromExpression('0 19 * * 5', NOW).mode, 'weekly');
+	assert.equal(specFromExpression('0 19 * * 5', NOW).weekday, 5);
+	assert.equal(specFromExpression('0 6 12 * *', NOW).mode, 'monthly');
+	assert.equal(specFromExpression('0 6 12 * *', NOW).monthday, 12);
+	// Sunday is 0 or 7 upstream; the picker only offers 0.
+	assert.equal(specFromExpression('0 6 * * 7', NOW).weekday, 0);
+});
+
+test('specFromExpression folds an interval back into its largest unit', () => {
+	assert.deepEqual(
+		(({ mode, every, unit }) => ({ mode, every, unit }))(specFromExpression('every 90m', NOW)),
+		{ mode: 'interval', every: 90, unit: 'm' }
+	);
+	assert.deepEqual(
+		(({ every, unit }) => ({ every, unit }))(specFromExpression('every 720m', NOW)),
+		{ every: 12, unit: 'h' }
+	);
+	assert.deepEqual(
+		(({ every, unit }) => ({ every, unit }))(specFromExpression('every 2880m', NOW)),
+		{ every: 2, unit: 'd' }
+	);
+});
+
+test('specFromExpression keeps anything else intact in advanced mode', () => {
+	for (const expr of ['0 9-18 * * 1-5', '*/15 * * * *', '0 8,12,20 * * *', 'every 5 * * * *']) {
+		const spec = specFromExpression(expr, NOW);
+		assert.equal(spec.mode, 'advanced', expr);
+		assert.equal(spec.raw, expr);
+	}
+});
+
+test('a schedule survives the round trip through the pickers', () => {
+	for (const expr of ['30 8 * * *', '0 19 * * 5', '0 6 12 * *', 'every 12h', '0 9-18 * * 1-5']) {
+		assert.equal(scheduleFromSpec(specFromExpression(expr, NOW)), expr, expr);
+	}
+});
+
+test('humanCron names the shapes the pickers produce, and only those', () => {
+	assert.equal(humanCron('30 8 * * *'), 'chaque jour à 08 h 30');
+	assert.equal(humanCron('0 19 * * 5'), 'chaque vendredi à 19 h 00');
+	assert.equal(humanCron('0 6 * * 0'), 'chaque dimanche à 06 h 00');
+	assert.equal(humanCron('0 6 * * 7'), 'chaque dimanche à 06 h 00');
+	assert.equal(humanCron('0 6 12 * *'), 'le 12 de chaque mois à 06 h 00');
+	assert.equal(humanCron('*/15 * * * *'), 'toutes les 15 min');
+	assert.equal(humanCron('0 */6 * * *'), 'toutes les 6 h, à la minute 0');
+	// Anything it cannot name honestly comes back empty, so the caller shows
+	// the expression itself.
+	assert.equal(humanCron('0 9-18 * * 1-5'), '');
+	assert.equal(humanCron('0 8,12,20 * * *'), '');
+	assert.equal(humanCron('0 9 * * * 2027'), '');
+	assert.equal(humanCron('n importe quoi'), '');
+});
+
+// ---------------------------------------------------------------------------
+// Editing an existing task
+// ---------------------------------------------------------------------------
+
+test('scheduleExpression turns the stored schedule back into an expression', () => {
+	assert.equal(scheduleExpression({ schedule: { kind: 'cron', expr: '0 8 * * *' } }), '0 8 * * *');
+	assert.equal(scheduleExpression({ schedule: { kind: 'interval', minutes: 720 } }), 'every 720m');
+	assert.equal(
+		scheduleExpression({ schedule: { kind: 'once', run_at: '2026-12-31T23:59:00' } }),
+		'2026-12-31T23:59:00'
+	);
+	assert.equal(scheduleExpression({ schedule: 'every 30m' }), 'every 30m');
+	assert.equal(scheduleExpression({ schedule_display: 'every 60m' }), 'every 60m');
+	assert.equal(scheduleExpression({}), '');
+});
+
+test('an editable task is one whose schedule can be sent back up', () => {
+	assert.equal(canEditJob({ schedule: { kind: 'cron', expr: '0 8 * * *' } }, NOW), true);
+	assert.equal(canEditJob({ schedule: { kind: 'interval', minutes: 60 } }, NOW), true);
+	// A spent one-shot: re-sending its date is exactly what update_job refuses.
+	assert.equal(canEditJob({ schedule: { kind: 'once', run_at: '2020-01-01T09:00:00' } }, NOW), false);
+	assert.equal(canEditJob({}, NOW), false);
+});
+
+test('lastRunLabel translates the statuses upstream writes', () => {
+	const at = new Date(NOW.getTime() - 3600_000).toISOString();
+	assert.match(lastRunLabel({ last_run_at: at, last_status: 'ok' }), /réussie$/);
+	assert.match(lastRunLabel({ last_run_at: at, last_status: 'error' }), /échouée$/);
+	assert.match(lastRunLabel({ last_run_at: at, last_status: 'blocked_config' }), /bloquée/);
+	assert.match(lastRunLabel({ last_run_at: at, last_status: 'no_change' }), /rien de neuf$/);
+	// An unknown status is reported as finished, not guessed at.
+	assert.match(lastRunLabel({ last_run_at: at, last_status: 'martien' }), /terminée$/);
+	assert.equal(lastRunLabel({ last_run_at: at }).includes('·'), false);
+	assert.equal(lastRunLabel({}), '');
+	assert.equal(lastRunLabel({ last_run_at: 'pas une date' }), '');
+});
+
+// ---------------------------------------------------------------------------
+// The agent's card, baked into the prompt
+// ---------------------------------------------------------------------------
+
+test('composeJobPrompt leaves an agent-less task exactly as typed', () => {
+	const composed = composeJobPrompt('', '  Résume ma journée.  ');
+	assert.equal(composed.prompt, 'Résume ma journée.');
+	assert.equal(composed.personaChars, 0);
+	assert.equal(composed.clipped, false);
+});
+
+test('composeJobPrompt puts the card first and the instruction last', () => {
+	const composed = composeJobPrompt('Tu es Chercheur.', 'Cherche les nouveautés.');
+	assert.ok(composed.prompt.startsWith('Tu es Chercheur.'));
+	assert.ok(composed.prompt.endsWith('Cherche les nouveautés.'));
+	assert.ok(composed.personaChars > 'Tu es Chercheur.'.length);
+	assert.equal(composed.clipped, false);
+});
+
+test('composeJobPrompt never exceeds the upstream prompt cap', () => {
+	const composed = composeJobPrompt('P'.repeat(6000), 'I'.repeat(1000));
+	assert.equal(composed.prompt.length, MAX_JOB_PROMPT);
+	assert.equal(composed.clipped, true);
+	// The instruction is what must survive intact.
+	assert.ok(composed.prompt.endsWith('I'.repeat(1000)));
+});
+
+test('composeJobPrompt drops the card rather than the instruction when full', () => {
+	const instruction = 'I'.repeat(MAX_JOB_PROMPT);
+	const composed = composeJobPrompt('Tu es Chercheur.', instruction);
+	assert.equal(composed.prompt, instruction);
+	assert.equal(composed.personaChars, 0);
+	assert.equal(composed.clipped, true);
+});
+
+test('jobInstructionLimit reserves room for the card when there is one', () => {
+	assert.equal(jobInstructionLimit(false), MAX_JOB_PROMPT);
+	assert.ok(jobInstructionLimit(true) < MAX_JOB_PROMPT);
+	// A card of exactly the remaining room still fits whole.
+	const card = 'Tu es Chercheur.';
+	const composed = composeJobPrompt(card, 'I'.repeat(jobInstructionLimit(true) - card.length));
+	assert.equal(composed.prompt.length, MAX_JOB_PROMPT);
+	assert.equal(composed.clipped, false);
+
+	// At the very limit there is room for the header but none for the card, so
+	// the instruction goes up alone — and the panel says so.
+	const full = composeJobPrompt(card, 'I'.repeat(jobInstructionLimit(true)));
+	assert.equal(full.clipped, true);
+	assert.equal(full.personaChars, 0);
+});
+
+test('the ready-made tasks are usable as they stand', () => {
+	for (const template of JOB_TEMPLATES) {
+		assert.ok(template.name.length > 0 && template.name.length <= MAX_JOB_NAME, template.label);
+		assert.ok(template.instruction.length <= jobInstructionLimit(true), template.label);
+	}
 });

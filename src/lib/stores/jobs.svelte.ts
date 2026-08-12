@@ -1,12 +1,26 @@
 import { api } from '$lib/client/api';
 import { toasts } from './toast.svelte';
-import { sortJobs, usableTargets, type DeliveryTarget } from '$lib/jobs';
+import { scheduleExpression, sortJobs, usableTargets, type DeliveryTarget } from '$lib/jobs';
 import type { HermesJob } from '$lib/types';
 
 interface JobsResponse {
 	jobs: HermesJob[];
 	targets: DeliveryTarget[];
 	targetsAvailable: boolean;
+}
+
+/**
+ * A task as the form holds it.
+ *
+ * `instruction` is what the user typed — the prompt Hermes stores also carries
+ * the agent's card, and only the server composes the two (`jobPromptFor`).
+ */
+export interface JobInput {
+	name: string;
+	schedule: string;
+	instruction: string;
+	agentId: string | null;
+	deliver: string;
 }
 
 /**
@@ -59,12 +73,7 @@ class JobsStore {
 	}
 
 	/** Returns true when the job was created, so the form can close itself. */
-	async create(input: {
-		name: string;
-		schedule: string;
-		prompt: string;
-		deliver: string;
-	}): Promise<boolean> {
+	async create(input: JobInput): Promise<boolean> {
 		if (this.creating) return false;
 		this.creating = true;
 		try {
@@ -81,6 +90,65 @@ class JobsStore {
 			return false;
 		} finally {
 			this.creating = false;
+		}
+	}
+
+	/**
+	 * Save an edited task. Returns true when it went through.
+	 *
+	 * The whole form goes up every time — the server recomposes the prompt from
+	 * the instruction and the agent, so sending half of it would compose half a
+	 * prompt. `refresh()` afterwards rather than patching the row: upstream
+	 * recomputes `next_run_at` from the new schedule and only it knows the answer.
+	 */
+	async update(id: string, input: JobInput): Promise<boolean> {
+		if (this.creating || this.busyId) return false;
+		this.creating = true;
+		try {
+			await api<{ job: HermesJob }>(`/api/jobs/${encodeURIComponent(id)}`, {
+				method: 'PATCH',
+				body: JSON.stringify(input),
+				timeoutMs: 20_000
+			});
+			await this.refresh(true);
+			toasts.success('Tâche enregistrée.');
+			return true;
+		} catch (err) {
+			toasts.error(err);
+			return false;
+		} finally {
+			this.creating = false;
+		}
+	}
+
+	/**
+	 * Re-bake the agent's current card into a task whose prompt has drifted.
+	 *
+	 * Nothing else changes: the same name, schedule, instruction and delivery go
+	 * back up, and the server composes the prompt again from the roster as it
+	 * stands now.
+	 */
+	async resync(job: HermesJob): Promise<void> {
+		if (!job.id || this.busyId) return;
+		this.busyId = job.id;
+		try {
+			await api(`/api/jobs/${encodeURIComponent(job.id)}`, {
+				method: 'PATCH',
+				body: JSON.stringify({
+					name: job.name ?? '',
+					schedule: scheduleExpression(job),
+					instruction: job.instruction ?? '',
+					agentId: job.agent_id ?? null,
+					deliver: job.deliver ?? 'local'
+				}),
+				timeoutMs: 20_000
+			});
+			await this.refresh(true);
+			toasts.success("Fiche de l'agent remise à jour sur cette tâche.");
+		} catch (err) {
+			toasts.error(err);
+		} finally {
+			this.busyId = null;
 		}
 	}
 

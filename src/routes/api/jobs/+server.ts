@@ -1,8 +1,15 @@
 import type { RequestHandler } from './$types';
 import { createJob, listJobs } from '$lib/server/hermes';
 import { DashboardError, dashboardConfigured, getCronDeliveryTargets } from '$lib/server/dashboard';
-import { errorResponse, gate, proxy, readJson } from '$lib/server/respond';
-import { MAX_JOB_NAME, MAX_JOB_PROMPT, parseSchedule } from '$lib/jobs';
+import {
+	decorateJobs,
+	jobPromptFor,
+	pruneJobMeta,
+	readJobInput,
+	rememberJob,
+	type JobBody
+} from '$lib/server/jobs';
+import { gate, proxy, readJson } from '$lib/server/respond';
 import type { DeliveryTarget } from '$lib/jobs';
 
 /**
@@ -22,53 +29,38 @@ export const GET: RequestHandler = () =>
 				})
 			: null;
 		const { jobs } = await listJobs();
+		const list = jobs ?? [];
+		pruneJobMeta(list.map((job) => job.id).filter((id): id is string => typeof id === 'string'));
 		return {
-			jobs: jobs ?? [],
+			jobs: decorateJobs(list),
 			targets: (targets?.targets ?? []) as DeliveryTarget[],
 			targetsAvailable: targets !== null
 		};
 	});
 
-interface CreateBody {
-	name?: unknown;
-	schedule?: unknown;
-	prompt?: unknown;
-	deliver?: unknown;
-}
-
-/**
- * Create a job.
- *
- * The schedule is validated here as well as in the browser: upstream turns an
- * unparseable one into an opaque HTTP 500, and this route is the last place
- * that can still say what is wrong in French.
- */
+/** Create a task, with the chosen agent's card baked into its prompt. */
 export const POST: RequestHandler = async ({ request }) => {
 	const limited = gate('jobs-write', 1, 5);
 	if (limited) return limited;
 
-	const parsed = await readJson<CreateBody>(request);
+	const parsed = await readJson<JobBody>(request);
 	if ('response' in parsed) return parsed.response;
 
-	const name = String(parsed.body.name ?? '').trim();
-	const schedule = String(parsed.body.schedule ?? '').trim();
-	const prompt = String(parsed.body.prompt ?? '').trim();
-	const deliver = String(parsed.body.deliver ?? 'local').trim() || 'local';
+	const input = readJobInput(parsed.body);
+	if (input instanceof Response) return input;
 
-	if (!name) return errorResponse(400, 'Donnez un nom à la tâche.', 'invalid_job');
-	if (name.length > MAX_JOB_NAME) {
-		return errorResponse(400, `Le nom dépasse ${MAX_JOB_NAME} caractères.`, 'invalid_job');
-	}
-	if (!prompt) return errorResponse(400, 'Décrivez ce que Hermes doit faire.', 'invalid_job');
-	if (prompt.length > MAX_JOB_PROMPT) {
-		return errorResponse(
-			400,
-			`L'instruction dépasse ${MAX_JOB_PROMPT} caractères.`,
-			'invalid_job'
-		);
-	}
-	const check = parseSchedule(schedule);
-	if (check.kind === null) return errorResponse(400, check.error, 'invalid_schedule');
-
-	return proxy(() => createJob({ name, schedule, prompt, deliver }));
+	return proxy(async () => {
+		const created = await createJob({
+			name: input.name,
+			schedule: input.schedule,
+			prompt: jobPromptFor(input.agentId, input.instruction),
+			deliver: input.deliver
+		});
+		// The binding is recorded only once the job exists: an id we invented
+		// for a creation that failed would linger as a row pointing nowhere.
+		if (created.job?.id) {
+			rememberJob(created.job.id, input.agentId, input.instruction);
+		}
+		return { job: { ...created.job, agent_id: input.agentId, instruction: input.instruction } };
+	});
 };

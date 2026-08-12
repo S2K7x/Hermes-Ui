@@ -149,7 +149,12 @@ export function parseSchedule(input: string, now: Date = new Date()): ParsedSche
 				error: `Expression cron invalide : le champ « ${names[bad]} » (${parts[bad]}) est hors limites.`
 			};
 		}
-		return { kind: 'cron', display: `selon la règle cron « ${raw} »`, error: '' };
+		const human = humanCron(raw);
+		return {
+			kind: 'cron',
+			display: human || `selon la règle cron « ${raw} »`,
+			error: ''
+		};
 	}
 
 	if (raw.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(raw)) {
@@ -176,14 +181,298 @@ export function parseSchedule(input: string, now: Date = new Date()): ParsedSche
 	return { kind: null, display: '', error: `Horaire non reconnu. ${INVALID_HINT}` };
 }
 
-/** Ready-made schedules, because typing cron on a phone is nobody's idea of fun. */
-export const SCHEDULE_PRESETS: { value: string; label: string }[] = [
-	{ value: '30m', label: 'Dans 30 min' },
-	{ value: '2h', label: 'Dans 2 h' },
-	{ value: '1d', label: 'Demain' },
-	{ value: 'every 1h', label: 'Toutes les heures' },
-	{ value: '0 8 * * *', label: 'Chaque jour à 8 h' },
-	{ value: '0 19 * * 5', label: 'Vendredi à 19 h' }
+// ---------------------------------------------------------------------------
+// Choosing a schedule without writing cron
+// ---------------------------------------------------------------------------
+
+/**
+ * A schedule as the form holds it, before it becomes an expression.
+ *
+ * Everything upstream accepts is still an expression string — this is only the
+ * shape the pickers manipulate, so nobody has to know that "chaque lundi à 8 h"
+ * is spelled `0 8 * * 1`. `scheduleFromSpec()` renders it, `specFromExpression()`
+ * reads it back when an existing job is reopened for editing.
+ */
+export type ScheduleMode = 'interval' | 'daily' | 'weekly' | 'monthly' | 'once' | 'advanced';
+
+export interface ScheduleSpec {
+	mode: ScheduleMode;
+	/** "HH:MM" — daily, weekly and monthly. */
+	time: string;
+	/** Cron day of week, 0 = dimanche. */
+	weekday: number;
+	/** Day of month. Capped at 28 in the picker: 29-31 skip months. */
+	monthday: number;
+	/** `every <count><unit>`. */
+	every: number;
+	unit: 'm' | 'h' | 'd';
+	/** A `datetime-local` value, for a one-shot. */
+	at: string;
+	/** The raw expression, in advanced mode. */
+	raw: string;
+}
+
+export const SCHEDULE_MODES: { value: ScheduleMode; label: string }[] = [
+	{ value: 'daily', label: 'Chaque jour' },
+	{ value: 'weekly', label: 'Chaque semaine' },
+	{ value: 'monthly', label: 'Chaque mois' },
+	{ value: 'interval', label: 'À intervalle' },
+	{ value: 'once', label: 'Une seule fois' },
+	{ value: 'advanced', label: 'Expression' }
+];
+
+/** Cron numbering, French labels, week starting on Monday. */
+export const WEEKDAYS: { value: number; label: string }[] = [
+	{ value: 1, label: 'lundi' },
+	{ value: 2, label: 'mardi' },
+	{ value: 3, label: 'mercredi' },
+	{ value: 4, label: 'jeudi' },
+	{ value: 5, label: 'vendredi' },
+	{ value: 6, label: 'samedi' },
+	{ value: 0, label: 'dimanche' }
+];
+
+/** Cron accepts both 0 and 7 for Sunday; croniter does, so this must too. */
+export function weekdayLabel(value: number): string {
+	if (value === 7) return 'dimanche';
+	return WEEKDAYS.find((d) => d.value === value)?.label ?? '';
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** "2026-08-12T09:00" — the value an `<input type="datetime-local">` wants. */
+export function localDateTimeValue(date: Date): string {
+	return (
+		`${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}` +
+		`T${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+	);
+}
+
+/** A sane starting point: every day at 08:00, one-shot pre-filled for tomorrow. */
+export function defaultScheduleSpec(now: Date = new Date()): ScheduleSpec {
+	const tomorrow = new Date(now.getTime() + 86_400_000);
+	tomorrow.setHours(9, 0, 0, 0);
+	return {
+		mode: 'daily',
+		time: '08:00',
+		weekday: 1,
+		monthday: 1,
+		every: 1,
+		unit: 'h',
+		at: localDateTimeValue(tomorrow),
+		raw: ''
+	};
+}
+
+const TIME_RE = /^(\d{1,2}):(\d{2})$/;
+
+/**
+ * Render a spec as the expression Hermes parses.
+ *
+ * Returns '' when the spec is not filled in yet — `parseSchedule('')` then says
+ * so in French, which keeps one single place deciding what a valid schedule is.
+ */
+export function scheduleFromSpec(spec: ScheduleSpec): string {
+	if (spec.mode === 'advanced') return spec.raw.trim();
+	if (spec.mode === 'once') return spec.at.trim();
+	if (spec.mode === 'interval') {
+		if (!Number.isInteger(spec.every) || spec.every < 1) return '';
+		return `every ${spec.every}${spec.unit}`;
+	}
+
+	const match = TIME_RE.exec(spec.time.trim());
+	if (!match) return '';
+	const hour = Number(match[1]);
+	const minute = Number(match[2]);
+	if (hour > 23 || minute > 59) return '';
+
+	if (spec.mode === 'weekly') {
+		const day = Number.isInteger(spec.weekday) ? spec.weekday : 1;
+		return `${minute} ${hour} * * ${day}`;
+	}
+	if (spec.mode === 'monthly') {
+		const day = Math.min(Math.max(Math.trunc(spec.monthday) || 1, 1), 31);
+		return `${minute} ${hour} ${day} * *`;
+	}
+	return `${minute} ${hour} * * *`;
+}
+
+const NUM_RE = /^\d{1,2}$/;
+const asNumber = (field: string): number | null => (NUM_RE.test(field) ? Number(field) : null);
+
+/**
+ * Read an expression back into a spec, so editing a job reopens the picker it
+ * was created with instead of dumping cron in the user's face.
+ *
+ * Anything that isn't one of the shapes the pickers produce lands in advanced
+ * mode with the expression intact — a job created from the CLI with a stepped
+ * or ranged expression must survive a round trip through this panel untouched.
+ */
+export function specFromExpression(input: string, now: Date = new Date()): ScheduleSpec {
+	const spec = defaultScheduleSpec(now);
+	const raw = (input ?? '').trim();
+	if (!raw) return { ...spec, mode: 'advanced', raw: '' };
+
+	if (raw.toLowerCase().startsWith('every ')) {
+		const minutes = parseDuration(raw.slice(6));
+		if (minutes !== null) {
+			const [every, unit]: [number, ScheduleSpec['unit']] =
+				minutes % 1440 === 0
+					? [minutes / 1440, 'd']
+					: minutes % 60 === 0
+						? [minutes / 60, 'h']
+						: [minutes, 'm'];
+			return { ...spec, mode: 'interval', every, unit };
+		}
+		return { ...spec, mode: 'advanced', raw };
+	}
+
+	const parts = raw.split(/\s+/);
+	if (parts.length === 5) {
+		const [mi, ho, dom, mon, dow] = parts;
+		const minute = asNumber(mi);
+		const hour = asNumber(ho);
+		if (minute !== null && hour !== null && minute < 60 && hour < 24 && mon === '*') {
+			const time = `${pad2(hour)}:${pad2(minute)}`;
+			if (dom === '*' && dow === '*') return { ...spec, mode: 'daily', time };
+			const weekday = asNumber(dow);
+			if (dom === '*' && weekday !== null && weekday <= 7) {
+				return { ...spec, mode: 'weekly', time, weekday: weekday === 7 ? 0 : weekday };
+			}
+			const monthday = asNumber(dom);
+			if (dow === '*' && monthday !== null && monthday >= 1 && monthday <= 31) {
+				return { ...spec, mode: 'monthly', time, monthday };
+			}
+		}
+		return { ...spec, mode: 'advanced', raw };
+	}
+
+	if (raw.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+		const date = parseNaiveIso(raw);
+		if (date) return { ...spec, mode: 'once', at: localDateTimeValue(date) };
+	}
+
+	return { ...spec, mode: 'advanced', raw };
+}
+
+/**
+ * A cron expression in French, when it has a shape worth naming.
+ *
+ * Returns '' for anything else — the caller then shows the expression itself,
+ * which is more honest than an approximate translation.
+ */
+export function humanCron(expr: string): string {
+	const parts = expr.trim().split(/\s+/);
+	if (parts.length !== 5) return '';
+	const [mi, ho, dom, mon, dow] = parts;
+	const minute = asNumber(mi);
+	const hour = asNumber(ho);
+
+	if (minute !== null && hour !== null && minute < 60 && hour < 24 && mon === '*') {
+		const at = `${pad2(hour)} h ${pad2(minute)}`;
+		if (dom === '*' && dow === '*') return `chaque jour à ${at}`;
+		const weekday = asNumber(dow);
+		if (dom === '*' && weekday !== null && weekday <= 7) {
+			return `chaque ${weekdayLabel(weekday)} à ${at}`;
+		}
+		const monthday = asNumber(dom);
+		if (dow === '*' && monthday !== null && monthday >= 1 && monthday <= 31) {
+			return `le ${monthday} de chaque mois à ${at}`;
+		}
+	}
+
+	if (ho === '*' && dom === '*' && mon === '*' && dow === '*' && mi.startsWith('*/')) {
+		const step = asNumber(mi.slice(2));
+		if (step && step < 60) return `toutes les ${humanMinutes(step)}`;
+	}
+	if (minute !== null && dom === '*' && mon === '*' && dow === '*' && ho.startsWith('*/')) {
+		const step = asNumber(ho.slice(2));
+		if (step && step < 24) return `toutes les ${humanMinutes(step * 60)}, à la minute ${minute}`;
+	}
+	return '';
+}
+
+// ---------------------------------------------------------------------------
+// The agent behind a task
+// ---------------------------------------------------------------------------
+
+/**
+ * What is inserted between an agent's card and the task itself.
+ *
+ * A scheduled run has no conversation and no reader: saying so once, here, is
+ * worth more than hoping every instruction repeats it.
+ */
+export const JOB_PROMPT_HEADER = [
+	'## Ta tâche planifiée',
+	"Le planificateur de Hermes déclenche cette tâche tout seul : il n'y a ni conversation précédente, ni personne pour répondre à une question pendant l'exécution. Va au bout, et rends un résultat qui se comprend seul.",
+	'',
+	'Voici la tâche :'
+].join('\n');
+
+/** Characters the header costs, blank-line joins included. */
+const HEADER_COST = JOB_PROMPT_HEADER.length + 4;
+
+/** The instruction budget, given whether an agent is attached. */
+export const jobInstructionLimit = (hasPersona: boolean): number =>
+	MAX_JOB_PROMPT - (hasPersona ? HEADER_COST : 0);
+
+export interface ComposedJobPrompt {
+	/** What actually gets stored as the job's `prompt` upstream. */
+	prompt: string;
+	/** Characters the agent's card and its header take out of the budget. */
+	personaChars: number;
+	/** True when the card had to be cut to fit under `MAX_JOB_PROMPT`. */
+	clipped: boolean;
+}
+
+/**
+ * Bake an agent's persona into the job prompt.
+ *
+ * Hermes' cron has no notion of a persona: `create_job` stores a prompt and
+ * nothing else, and the API server forwards neither a system message nor a
+ * model (`_handle_create_job` passes only name / schedule / prompt / deliver /
+ * skills / repeat). So the card travels *inside* the prompt — which is also why
+ * it has to fit under the upstream 5 000-character cap, the instruction first.
+ *
+ * With no agent the prompt is the instruction, byte for byte: a task planned
+ * before agents existed must keep behaving exactly as it did.
+ */
+export function composeJobPrompt(persona: string, instruction: string): ComposedJobPrompt {
+	const task = instruction.trim();
+	const card = persona.trim();
+	if (!card) return { prompt: task, personaChars: 0, clipped: false };
+
+	const room = MAX_JOB_PROMPT - task.length - HEADER_COST;
+	if (room <= 0) return { prompt: task, personaChars: 0, clipped: true };
+
+	const kept = card.length <= room ? card : `${card.slice(0, room - 1)}…`;
+	return {
+		prompt: `${kept}\n\n${JOB_PROMPT_HEADER}\n\n${task}`,
+		personaChars: kept.length + HEADER_COST,
+		clipped: kept.length < card.length
+	};
+}
+
+/** Ready-made tasks — a first job in two taps rather than a blank form. */
+export const JOB_TEMPLATES: { label: string; name: string; instruction: string }[] = [
+	{
+		label: 'Résumé du matin',
+		name: 'Résumé du matin',
+		instruction:
+			"Fais le point du jour en dix lignes maximum : la météo du jour ici, l'état du Raspberry Pi (charge, espace disque, services en échec), et ce qui mérite mon attention. Termine par une seule action recommandée."
+	},
+	{
+		label: 'Veille du soir',
+		name: 'Veille du soir',
+		instruction:
+			"Cherche les nouveautés du jour sur mes sujets techniques (self-hosting, IA locale, Raspberry Pi) et résume-les en cinq puces sourcées. Ignore ce qui n'est qu'une annonce commerciale."
+	},
+	{
+		label: 'Sauvegarde vérifiée',
+		name: 'Vérification des sauvegardes',
+		instruction:
+			"Vérifie que les sauvegardes du Pi de la nuit sont bien passées : la dernière archive présente, sa date, sa taille, et l'espace disque restant. Si quelque chose cloche, dis-le en premier et explique quoi faire."
+	}
 ];
 
 // ---------------------------------------------------------------------------
@@ -210,7 +499,7 @@ export function scheduleDisplay(job: HermesJob): string {
 			return `toutes les ${humanMinutes(schedule.minutes)}`;
 		}
 		if (kind === 'cron' && typeof schedule.expr === 'string' && schedule.expr) {
-			return schedule.expr;
+			return humanCron(schedule.expr) || schedule.expr;
 		}
 		if (kind === 'once' && typeof schedule.run_at === 'string') {
 			const date = new Date(schedule.run_at);
@@ -229,6 +518,40 @@ export function scheduleDisplay(job: HermesJob): string {
 	}
 	return '—';
 }
+
+/**
+ * The stored schedule, back as the expression that produced it.
+ *
+ * Editing a task means sending `schedule` up again — upstream re-parses the
+ * string and recomputes `next_run_at` — so the panel needs the round trip from
+ * the parsed object Hermes returns. `minutes` comes back in minutes whatever
+ * unit was typed, which `specFromExpression` folds into hours or days again.
+ */
+export function scheduleExpression(job: HermesJob): string {
+	const schedule = job.schedule as Record<string, unknown> | string | undefined;
+	if (schedule && typeof schedule === 'object') {
+		const kind = schedule.kind;
+		if (kind === 'interval' && typeof schedule.minutes === 'number') {
+			return `every ${schedule.minutes}m`;
+		}
+		if (kind === 'cron' && typeof schedule.expr === 'string' && schedule.expr) {
+			return schedule.expr;
+		}
+		if (kind === 'once' && typeof schedule.run_at === 'string') return schedule.run_at;
+	}
+	if (typeof schedule === 'string' && schedule) return schedule;
+	return typeof job.schedule_display === 'string' ? job.schedule_display : '';
+}
+
+/**
+ * May this task be edited as it stands?
+ *
+ * False for a one-shot whose date has passed: re-sending that schedule is
+ * exactly what `update_job` refuses (ValueError → HTTP 500), so the panel
+ * offers a new date instead of a broken button. Everything else round-trips.
+ */
+export const canEditJob = (job: HermesJob, now: Date = new Date()): boolean =>
+	parseSchedule(scheduleExpression(job), now).kind !== null;
 
 export interface JobStateBadge {
 	key: 'scheduled' | 'paused' | 'completed' | 'error' | 'running';
@@ -268,6 +591,36 @@ export function nextRunLabel(job: HermesJob, now: Date = new Date()): string {
 	if (minutes < 1) return "dans moins d'une minute";
 	if (minutes < 60 * 18) return `dans ${humanMinutes(minutes)}`;
 	return formatDateTime(date);
+}
+
+/**
+ * The last run, as one short line: when, and how it went.
+ *
+ * `last_status` values come from `mark_job_run` upstream — "ok" / "error", plus
+ * the two the scheduler writes itself ("blocked_config" when the job's provider
+ * config is unusable, "no_change" for a monitor tick that suppressed the run).
+ * An unknown value is shown as "terminée" rather than guessed at.
+ */
+export function lastRunLabel(job: HermesJob): string {
+	const raw = job.last_run_at;
+	if (typeof raw !== 'string' || !raw) return '';
+	const date = new Date(raw);
+	if (Number.isNaN(date.getTime())) return '';
+
+	const status = typeof job.last_status === 'string' ? job.last_status : '';
+	const outcome =
+		status === 'ok'
+			? 'réussie'
+			: status === 'error'
+				? 'échouée'
+				: status === 'blocked_config'
+					? 'bloquée (configuration)'
+					: status === 'no_change'
+						? 'rien de neuf'
+						: status
+							? 'terminée'
+							: '';
+	return `dernière ${formatDateTime(date)}${outcome ? ` · ${outcome}` : ''}`;
 }
 
 /** Runnable jobs first, each group soonest-first; undated rows go last. */

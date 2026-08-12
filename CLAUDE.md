@@ -407,8 +407,52 @@ panneau le dit et se désactive, comme l'éditeur de skills sans son bind mount.
 Ne pas se fier au drapeau `features.jobs_admin` de `/v1/capabilities` — il est
 codé en dur à `false` alors que les routes fonctionnent.
 
+**Une tâche appartient à un agent, et sa fiche voyage dans le prompt.** Le cron
+de Hermes ne connaît qu'un prompt par tâche : `_handle_create_job` ne transmet
+que `name`, `schedule`, `prompt`, `deliver`, `skills` et `repeat` — ni
+`system_message`, ni `model`, alors que `cron/jobs.py::create_job` les accepte.
+Faire tourner une tâche « en tant qu'agent » veut donc dire **composer sa fiche
+dans le prompt**, ce que fait `composeJobPrompt()` (pur, testé) : la fiche
+d'abord, un en-tête qui dit que personne ne regarde, puis l'instruction. Trois
+conséquences :
+
+- **L'instruction passe avant la fiche** quand les 5 000 caractères amont sont
+  atteints : c'est la fiche qui est rognée, jamais la consigne.
+  `jobInstructionLimit()` donne la borne à afficher, et le panneau montre le
+  coût réel (« dont N pour la fiche de l'agent ») en rejouant la **même**
+  fonction que le serveur.
+- Le lien tâche → agent et l'instruction telle que tapée vivent dans
+  `job_meta` (`data/hermes-web.db`), pas dans Hermes : une fois composé, le
+  prompt amont ne se re-découpe pas. `GET /api/jobs` ajoute `agent_id`,
+  `instruction` et `persona_stale` à chaque ligne, comme `agent_id` sur une
+  session (point 18). Une tâche planifiée avant cette table n'a pas de ligne :
+  son prompt **est** son instruction, et elle n'a pas d'agent.
+- `persona_stale` est vrai quand la fiche de l'agent a été modifiée depuis :
+  le serveur recompose et compare au prompt que Hermes détient. Le panneau
+  propose alors « Mettre à jour » (un `PATCH` avec les mêmes valeurs), au lieu
+  de laisser croire qu'éditer un agent met ses tâches à jour toutes seules.
+
+Deux détails mesurés sur l'édition :
+
+- `PATCH /api/jobs/{id}` accepte `schedule` en **chaîne** : `update_job` la
+  re-parse et recalcule `next_run_at` lui-même. L'UI envoie donc toujours le
+  formulaire entier — un corps sans aucun champ autorisé répond 400 de toute
+  façon.
+- Ré-envoyer l'horaire d'un **one-shot déjà passé** est refusé par `update_job`
+  (`ValueError` → 500). `canEditJob()` le détecte côté client : la tâche
+  s'édite quand même, mais il faut choisir une nouvelle date, et le bouton
+  « Mettre à jour la fiche » disparaît.
+
+Côté ergonomie, l'horaire ne se tape plus : `scheduleFromSpec()` /
+`specFromExpression()` traduisent dans les deux sens entre les sélecteurs
+(chaque jour / semaine / mois, intervalle, une fois) et l'expression amont, et
+`humanCron()` affiche « chaque vendredi à 19 h 00 » plutôt que `0 19 * * 5`. Ce
+qui ne rentre pas dans ces cas (`0 9-18 * * 1-5`) reste en mode « Expression »
+et fait l'aller-retour intact.
+
 Routes : `GET|POST /api/jobs` (liste + cibles de livraison en un aller-retour /
-création) et `POST|DELETE /api/jobs/{id}` (action / suppression).
+création) et `POST|PATCH|DELETE /api/jobs/{id}` (action / édition /
+suppression).
 
 ### 15. Les prompts enregistrés sont de l'état d'UI, pas de l'état Hermes
 
@@ -612,6 +656,11 @@ Routes : `GET|POST /api/agents`, `PATCH|DELETE /api/agents/{id}` et
 `null` pour la détacher — effectif au message suivant, comme le verrou de
 modèle du point 3).
 
+Une **tâche planifiée** peut elle aussi porter un agent, mais par un tout autre
+chemin : le cron n'accepte pas de `system_message`, donc la fiche est composée
+**dans le prompt de la tâche** au moment où elle est enregistrée, et ne se met
+pas à jour toute seule quand l'agent change. Voir le point 14.
+
 ### 19. Le thème : dix couleurs déclarées, tout le reste dérivé
 
 L'apparence est un réglage à part entière, pas une bascule clair/sombre. Un
@@ -717,6 +766,7 @@ src/
 │   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
 │   │   ├── sse.ts       en-têtes SSE + enveloppe d'erreur
 │   │   ├── agents.ts    magasin d'agents + lien conversation → agent
+│   │   ├── jobs.ts      lien tâche planifiée → agent, prompt composé
 │   │   ├── turns.ts     registre des tours en vol, présence, notification
 │   │   ├── push.ts      envoi Web Push (abonnements, 410 → oubli)
 │   │   ├── push-crypto.ts RFC 8291 + RFC 8292, sans dépendance
@@ -745,7 +795,8 @@ src/
 │   │   └── toast.svelte.ts      notifications dans la page
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
 │   ├── errors.ts      ApiError + codes + `humanizeError`
-│   ├── jobs.ts        horaires cron validés/traduits, état et tri des tâches
+│   ├── jobs.ts        horaires cron validés/traduits/composés, état et tri
+│   │                  des tâches, fiche d'agent dans le prompt d'une tâche
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
 │   ├── prompts.ts     prompts enregistrés : titres, bornes, recherche
 │   ├── push.ts        charge utile d'une notification, libellés, capacités

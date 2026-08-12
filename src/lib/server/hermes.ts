@@ -332,6 +332,24 @@ export interface CreateJobBody {
 export const createJob = (body: CreateJobBody) =>
 	hermesJson<{ job: HermesJob }>('/api/jobs', { method: 'POST', body });
 
+/**
+ * Edit a job in place.
+ *
+ * `_UPDATE_ALLOWED_FIELDS` upstream is {name, schedule, prompt, deliver, skills,
+ * skill, repeat, enabled} — anything else is silently dropped, and a body with
+ * no allowed field at all answers 400. `schedule` may be sent as a raw string:
+ * `update_job` re-parses it and recomputes `next_run_at` itself (verified in
+ * cron/jobs.py 0.20.0), which is why the panel never has to touch that field.
+ */
+export const updateJob = (
+	id: string,
+	body: { name?: string; schedule?: string; prompt?: string; deliver?: string }
+) =>
+	hermesJson<{ job: HermesJob }>(`/api/jobs/${encodeURIComponent(id)}`, {
+		method: 'PATCH',
+		body
+	});
+
 export const deleteJob = (id: string) =>
 	hermesJson<{ ok: boolean }>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
