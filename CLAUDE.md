@@ -168,6 +168,41 @@ gras et les liens tronqués pour que le texte partiel s'affiche comme ce qu'il
 est en train de devenir. La coloration syntaxique n'est appliquée qu'aux
 messages terminés.
 
+**Le post-traitement d'un message terminé doit attendre `tick()`.** `html` est
+affecté *depuis* un effet, donc quand l'effet suivant s'exécute Svelte n'a pas
+encore écrit `{@html html}` dans le DOM : lire `container` à ce moment-là
+décore le balisage **précédent**, que l'échange à venir jette. C'est ce qui
+faisait que ni la coloration syntaxique ni le bouton « copier » n'apparaissaient
+jamais. **Mesuré sur l'app en production** avant correction : un transcript
+affichant 13 blocs de code contenait zéro `span.hljs-*`, aucun `data-hl` et zéro
+bouton. Ne pas retirer ce `tick()`.
+
+**Et les grammaires de coloration sont chargées à la demande.**
+`highlight.js/lib/common`, ce sont 37 langages qui construisent tous leurs
+objets `RegExp` à l'initialisation du module. Mesuré : 164 Ko du chunk d'entrée
+(389 Ko → 226 Ko brut, 103 Ko → 65 Ko en brotli) et 48 ms d'initialisation sur
+le CPU du Pi — contre 22 ms pour `marked` + `dompurify` réunis — payés à chaque
+ouverture de l'app, y compris pour une conversation sans une ligne de code. Et
+tant que le bug ci-dessus vivait, payés pour **rien du tout**.
+
+D'où un `import()` dynamique dans `src/lib/markdown.ts`, avec trois
+conséquences dans le code :
+
+- `highlightCodeBlocks()` **ne fait rien** tant que le paquet n'est pas
+  résident, et ne pose alors pas `data-hl` : c'est l'appelant qui rejoue après
+  `loadHighlighter()`. Ne pas supposer la coloration synchrone.
+- Pour éviter le clignotement « code brut puis coloré », `Markdown.svelte`
+  déclenche le chargement dès qu'une fence apparaît **pendant** le stream. Le
+  test se fait dans `render()`, donc au rythme du debounce, pas à chaque token.
+- Le chunk fait partie du shell préchargé par le service worker : après la
+  première visite c'est un hit de cache, pas un aller-retour, et le hors-ligne
+  reste entier. Un échec de chargement laisse le code en noir et blanc plutôt
+  que de casser le message.
+
+`tests/markdown.test.ts` vérifie qu'aucun `import` **statique** de
+`highlight.js` ne revient — ce serait remettre les 164 Ko sur le chemin
+critique sans que rien ne le signale.
+
 ### 10. Hermes ne recharge pas `.env` à chaud
 
 Après toute modification de `~/.hermes/.env` ou `config.yaml` :

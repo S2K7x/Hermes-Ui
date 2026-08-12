@@ -49,6 +49,9 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
   applicable à la conversation ouverte dès le message suivant
 - **Export markdown** de la conversation
+- **Blocs de code colorés**, avec un bouton « copier » au survol. Les grammaires
+  (37 langages, 164 Ko) ne sont chargées qu'à la première apparition d'un bloc
+  de code, pas au démarrage de l'app
 - **Apparence** (◐ dans l'entête, ou `⌘K` → « Apparence ») : quatre palettes
   nommées, mode clair / sombre, et deux couleurs d'accent choisissables — le
   reste en est dérivé. Le choix est enregistré côté serveur, donc le téléphone

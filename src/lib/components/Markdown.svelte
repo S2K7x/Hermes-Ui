@@ -1,6 +1,13 @@
 <script lang="ts">
-	import { highlightCodeBlocks, RENDER_DEBOUNCE_MS, renderMarkdown } from '$lib/markdown';
-	import { onDestroy } from 'svelte';
+	import {
+		hasCodeBlocks,
+		highlightCodeBlocks,
+		highlighterReady,
+		loadHighlighter,
+		RENDER_DEBOUNCE_MS,
+		renderMarkdown
+	} from '$lib/markdown';
+	import { onDestroy, tick } from 'svelte';
 
 	interface Props {
 		source: string;
@@ -12,8 +19,18 @@
 	let container = $state<HTMLDivElement | null>(null);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
+	/** Set once the grammar bundle has been asked for, so the scan below stops. */
+	let warmed = false;
+
 	function render() {
 		html = renderMarkdown(source, streaming);
+		// A fence has appeared mid-stream: start fetching the grammar bundle now
+		// so it is resident when the turn ends, instead of flashing plain code
+		// first. Checked here rather than per token — this runs on the debounce.
+		if (streaming && !warmed && source.includes('```')) {
+			warmed = true;
+			loadHighlighter();
+		}
 	}
 
 	// While streaming, re-parse on a timer instead of per token: a full
@@ -34,13 +51,35 @@
 		}, RENDER_DEBOUNCE_MS);
 	});
 
-	// Syntax highlighting only once the message is final — highlighting a
-	// growing block re-colours it on every pass for nothing.
+	// Syntax highlighting and copy buttons, only once the message is final —
+	// decorating a growing block redoes the work on every pass for nothing.
+	//
+	// The `tick()` is not cosmetic. `html` is assigned from inside the effect
+	// above, so when this effect body runs Svelte has not yet written
+	// `{@html html}` to the DOM: touching `container` here would decorate the
+	// *previous* markup, which the pending swap then throws away. That is why
+	// neither highlighting nor the copy button ever appeared (verified against
+	// the live app: a transcript with 13 code blocks had zero `.hljs-*` spans
+	// and zero buttons). Post-processing has to wait for the flush.
 	$effect(() => {
 		void html;
 		if (streaming || !container) return;
-		highlightCodeBlocks(container);
-		decorateCodeBlocks(container);
+		const root = container;
+		let cancelled = false;
+		const alive = () => !cancelled && root.isConnected;
+		void (async () => {
+			await tick();
+			if (!alive()) return;
+			decorateCodeBlocks(root);
+			if (!hasCodeBlocks(root)) return;
+			// Nothing to await once the grammars are resident — the common case
+			// after the first code block, and the one that must not flash.
+			if (!highlighterReady()) await loadHighlighter();
+			if (alive()) highlightCodeBlocks(root);
+		})();
+		return () => {
+			cancelled = true;
+		};
 	});
 
 	/** Add a copy button to each finished code block. */
