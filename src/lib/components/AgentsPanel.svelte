@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Modal from './Modal.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import {
@@ -134,261 +135,207 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="scrim" onclick={onclose}></div>
-	<div class="panel" role="dialog" aria-modal="true" aria-label="Équipe d'agents">
-		<header>
-			<h2>{editing === null ? 'Ton équipe' : editing ? "Modifier l'agent" : 'Nouvel agent'}</h2>
-			<span class="muted small">Chaque agent a son métier et son prompt</span>
-			<button class="x" onclick={onclose} aria-label="Fermer">✕</button>
-		</header>
+<Modal
+	{open}
+	title={editing === null ? 'Ton équipe' : editing ? "Modifier l'agent" : 'Nouvel agent'}
+	label="Équipe d'agents"
+	width={660}
+	{onclose}
+>
+	{#snippet subtitle()}Chaque agent a son métier et son prompt{/snippet}
 
-		<div class="body">
-			{#if editing === null}
-				<button class="new" onclick={startCreate}>＋ Nouvel agent</button>
+	<div class="body">
+		{#if editing === null}
+			<button class="new" onclick={startCreate}>＋ Nouvel agent</button>
 
-				{#if agents.items.length === 0}
-					<p class="none">
-						Aucun agent pour l'instant. Un agent, c'est un nom, un métier et un prompt système
-						renvoyé à chaque message.
+			{#if agents.items.length === 0}
+				<p class="none">
+					Aucun agent pour l'instant. Un agent, c'est un nom, un métier et un prompt système
+					renvoyé à chaque message.
+				</p>
+			{/if}
+
+			<ul class="list">
+				{#each agents.items as agent (agent.id)}
+					{@const team = teamTree(agents.items, agent.id).slice(1)}
+					<li style="--agent: {agentColor(agent)}">
+						<div class="row">
+							<span class="badge">{agent.emoji || agent.name.slice(0, 1)}</span>
+							<span class="who">
+								<span class="name">{agent.name}</span>
+								{#if agent.role}<span class="job">{agent.role}</span>{/if}
+							</span>
+							{#if agent.orchestrator && team.length > 0}
+								<span class="tag" title="Cet agent peut déléguer à d'autres">chef d'équipe</span>
+							{/if}
+						</div>
+						{#if agent.orchestrator && team.length > 0}
+							<ul class="tree">
+								{#each team as node (node.key)}
+									<li style="padding-left: {(node.depth - 1) * 16}px">
+										<span class="branch">└</span>
+										{agentLabel(node.agent)}
+										{#if node.agent.role}<span class="job">— {node.agent.role}</span>{/if}
+										{#if node.repeated}<span class="job">(déjà plus haut)</span>{/if}
+									</li>
+								{/each}
+							</ul>
+						{/if}
+						<div class="ops">
+							<button onclick={() => startEdit(agent)}>Modifier</button>
+							<button onclick={() => startDuplicate(agent)}>Dupliquer</button>
+							<button class="danger" onclick={() => confirmRemove(agent)}>Supprimer</button>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<div class="form">
+				<div class="two">
+					<label class="tiny">
+						Emoji
+						<input bind:value={draft.emoji} placeholder="🔎" maxlength={8} />
+					</label>
+					<label>
+						Nom
+						<input bind:value={draft.name} placeholder="Chercheur" maxlength={MAX_AGENT_NAME} />
+					</label>
+				</div>
+
+				<div class="swatches" role="group" aria-label="Couleur">
+					{#each AGENT_COLORS as color (color)}
+						<button
+							type="button"
+							class:sel={draft.color === color}
+							style="--agent: {AGENT_COLOR_HEX[color]}"
+							aria-label={color}
+							title={color}
+							onclick={() => (draft.color = color)}></button>
+					{/each}
+				</div>
+
+				<label>
+					Métier
+					<input
+						bind:value={draft.role}
+						placeholder="Recherche en ligne et synthèse sourcée"
+						maxlength={MAX_AGENT_ROLE}
+					/>
+				</label>
+				<p class="muted small">Une ligne. C'est ce que lit un chef d'équipe pour savoir quand le solliciter.</p>
+
+				<label>
+					Prompt système
+					<textarea
+						bind:value={draft.prompt}
+						rows="8"
+						maxlength={MAX_AGENT_PROMPT}
+						placeholder="Tu cherches et tu synthétises. Croise au moins deux sources et cite tes liens…"
+					></textarea>
+				</label>
+				<p class="muted small">
+					Renvoyé à Hermes à chaque message de la conversation — {draft.prompt.length} / {MAX_AGENT_PROMPT}
+					caractères.
+				</p>
+
+				{#if models.length > 0}
+					<label>
+						Modèle préféré
+						<select bind:value={draft.model}>
+							<option value="">Modèle par défaut de Hermes</option>
+							{#each models as model (model)}
+								<option value={model}>{model}</option>
+							{/each}
+						</select>
+					</label>
+					<p class="muted small">
+						Appliqué aux conversations démarrées avec cet agent. Un modèle que la passerelle ne
+						sait plus router est ignoré au profit du défaut.
 					</p>
 				{/if}
 
-				<ul class="list">
-					{#each agents.items as agent (agent.id)}
-						{@const team = teamTree(agents.items, agent.id).slice(1)}
-						<li style="--agent: {agentColor(agent)}">
-							<div class="row">
-								<span class="badge">{agent.emoji || agent.name.slice(0, 1)}</span>
-								<span class="who">
-									<span class="name">{agent.name}</span>
-									{#if agent.role}<span class="job">{agent.role}</span>{/if}
-								</span>
-								{#if agent.orchestrator && team.length > 0}
-									<span class="tag" title="Cet agent peut déléguer à d'autres">chef d'équipe</span>
-								{/if}
-							</div>
-							{#if agent.orchestrator && team.length > 0}
-								<ul class="tree">
-									{#each team as node (node.key)}
-										<li style="padding-left: {(node.depth - 1) * 16}px">
-											<span class="branch">└</span>
-											{agentLabel(node.agent)}
-											{#if node.agent.role}<span class="job">— {node.agent.role}</span>{/if}
-											{#if node.repeated}<span class="job">(déjà plus haut)</span>{/if}
-										</li>
-									{/each}
-								</ul>
-							{/if}
-							<div class="ops">
-								<button onclick={() => startEdit(agent)}>Modifier</button>
-								<button onclick={() => startDuplicate(agent)}>Dupliquer</button>
-								<button class="danger" onclick={() => confirmRemove(agent)}>Supprimer</button>
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{:else}
-				<div class="form">
-					<div class="two">
-						<label class="tiny">
-							Emoji
-							<input bind:value={draft.emoji} placeholder="🔎" maxlength={8} />
-						</label>
-						<label>
-							Nom
-							<input bind:value={draft.name} placeholder="Chercheur" maxlength={MAX_AGENT_NAME} />
-						</label>
-					</div>
+				<label class="check">
+					<input type="checkbox" bind:checked={draft.orchestrator} />
+					<span>Peut piloter d'autres agents</span>
+				</label>
+				<p class="muted small">
+					Coché, son prompt reçoit la fiche des agents ci-dessous et la marche à suivre pour les
+					lancer avec l'outil <code>delegate_task</code> de Hermes. Chaque agent lancé est un agent
+					Hermes complet qui tourne sur le même Raspberry&nbsp;Pi&nbsp;5 : à quatre cœurs, deux ou
+					trois en parallèle se sentent passer. Un agent piloté ne voit rien de la conversation —
+					le chef doit tout lui écrire.
+				</p>
 
-					<div class="swatches" role="group" aria-label="Couleur">
-						{#each AGENT_COLORS as color (color)}
-							<button
-								type="button"
-								class:sel={draft.color === color}
-								style="--agent: {AGENT_COLOR_HEX[color]}"
-								aria-label={color}
-								title={color}
-								onclick={() => (draft.color = color)}></button>
-						{/each}
-					</div>
-
-					<label>
-						Métier
-						<input
-							bind:value={draft.role}
-							placeholder="Recherche en ligne et synthèse sourcée"
-							maxlength={MAX_AGENT_ROLE}
-						/>
-					</label>
-					<p class="muted small">Une ligne. C'est ce que lit un chef d'équipe pour savoir quand le solliciter.</p>
-
-					<label>
-						Prompt système
-						<textarea
-							bind:value={draft.prompt}
-							rows="8"
-							maxlength={MAX_AGENT_PROMPT}
-							placeholder="Tu cherches et tu synthétises. Croise au moins deux sources et cite tes liens…"
-						></textarea>
-					</label>
-					<p class="muted small">
-						Renvoyé à Hermes à chaque message de la conversation — {draft.prompt.length} / {MAX_AGENT_PROMPT}
-						caractères.
-					</p>
-
-					{#if models.length > 0}
-						<label>
-							Modèle préféré
-							<select bind:value={draft.model}>
-								<option value="">Modèle par défaut de Hermes</option>
-								{#each models as model (model)}
-									<option value={model}>{model}</option>
-								{/each}
-							</select>
-						</label>
-						<p class="muted small">
-							Appliqué aux conversations démarrées avec cet agent. Un modèle que la passerelle ne
-							sait plus router est ignoré au profit du défaut.
-						</p>
-					{/if}
-
-					<label class="check">
-						<input type="checkbox" bind:checked={draft.orchestrator} />
-						<span>Peut piloter d'autres agents</span>
-					</label>
-					<p class="muted small">
-						Coché, son prompt reçoit la fiche des agents ci-dessous et la marche à suivre pour les
-						lancer avec l'outil <code>delegate_task</code> de Hermes. Chaque agent lancé est un agent
-						Hermes complet qui tourne sur le même Raspberry&nbsp;Pi&nbsp;5 : à quatre cœurs, deux ou
-						trois en parallèle se sentent passer. Un agent piloté ne voit rien de la conversation —
-						le chef doit tout lui écrire.
-					</p>
-
-					{#if draft.orchestrator}
-						{#if pickable.length === 0}
-							<p class="muted small">Créez d'abord un autre agent à piloter.</p>
-						{:else}
-							<div class="picks">
-								{#each pickable as agent (agent.id)}
-									<label class="pick" class:on={draft.children.includes(agent.id)}>
-										<input
-											type="checkbox"
-											checked={draft.children.includes(agent.id)}
-											disabled={!draft.children.includes(agent.id) &&
-												draft.children.length >= MAX_AGENT_CHILDREN}
-											onchange={() => toggleChild(agent.id)}
-										/>
-										<span>{agentLabel(agent)}</span>
-										{#if agent.orchestrator}<span class="job">chef</span>{/if}
-									</label>
-								{/each}
-							</div>
-						{/if}
-
-						{#if tree.length > 1}
-							<div class="preview-tree">
-								<span class="muted small">L'équipe telle que Hermes la verra :</span>
-								<ul class="tree">
-									{#each tree as node (node.key)}
-										<li style="padding-left: {node.depth * 16}px">
-											{#if node.depth > 0}<span class="branch">└</span>{/if}
-											{agentLabel(node.agent)}
-											{#if node.repeated}<span class="job">(déjà plus haut)</span>{/if}
-										</li>
-									{/each}
-								</ul>
-							</div>
-						{/if}
-					{/if}
-
-					{#if errors.length > 0}
-						<ul class="errs">
-							{#each errors as error (error)}
-								<li>{error}</li>
+				{#if draft.orchestrator}
+					{#if pickable.length === 0}
+						<p class="muted small">Créez d'abord un autre agent à piloter.</p>
+					{:else}
+						<div class="picks">
+							{#each pickable as agent (agent.id)}
+								<label class="pick" class:on={draft.children.includes(agent.id)}>
+									<input
+										type="checkbox"
+										checked={draft.children.includes(agent.id)}
+										disabled={!draft.children.includes(agent.id) &&
+											draft.children.length >= MAX_AGENT_CHILDREN}
+										onchange={() => toggleChild(agent.id)}
+									/>
+									<span>{agentLabel(agent)}</span>
+									{#if agent.orchestrator}<span class="job">chef</span>{/if}
+								</label>
 							{/each}
-						</ul>
+						</div>
 					{/if}
 
-					{#if preview}
-						<details>
-							<summary>Voir le prompt envoyé à chaque message</summary>
-							<pre>{preview}</pre>
-						</details>
+					{#if tree.length > 1}
+						<div class="preview-tree">
+							<span class="muted small">L'équipe telle que Hermes la verra :</span>
+							<ul class="tree">
+								{#each tree as node (node.key)}
+									<li style="padding-left: {node.depth * 16}px">
+										{#if node.depth > 0}<span class="branch">└</span>{/if}
+										{agentLabel(node.agent)}
+										{#if node.repeated}<span class="job">(déjà plus haut)</span>{/if}
+									</li>
+								{/each}
+							</ul>
+						</div>
 					{/if}
+				{/if}
 
-					<div class="actions">
-						<button onclick={() => (editing = null)}>Annuler</button>
-						<button class="primary" disabled={errors.length > 0 || agents.saving} onclick={submit}>
-							{agents.saving ? 'Enregistrement…' : 'Enregistrer'}
-						</button>
-					</div>
+				{#if errors.length > 0}
+					<ul class="errs">
+						{#each errors as error (error)}
+							<li>{error}</li>
+						{/each}
+					</ul>
+				{/if}
+
+				{#if preview}
+					<details>
+						<summary>Voir le prompt envoyé à chaque message</summary>
+						<pre>{preview}</pre>
+					</details>
+				{/if}
+
+				<div class="actions">
+					<button onclick={() => (editing = null)}>Annuler</button>
+					<button class="primary" disabled={errors.length > 0 || agents.saving} onclick={submit}>
+						{agents.saving ? 'Enregistrement…' : 'Enregistrer'}
+					</button>
 				</div>
-			{/if}
-		</div>
-
-		<footer>
-			<span class="muted small">
-				Une conversation appartient à un agent ; changer d'agent s'applique au message suivant.
-			</span>
-		</footer>
+			</div>
+		{/if}
 	</div>
-{/if}
+
+	{#snippet footer()}
+		<span class="foot-note">
+			Une conversation appartient à un agent ; changer d'agent s'applique au message suivant.
+		</span>
+	{/snippet}
+</Modal>
 
 <style>
-	.scrim {
-		position: fixed;
-		inset: 0;
-		z-index: 150;
-		background: var(--scrim);
-	}
-	.panel {
-		position: fixed;
-		z-index: 151;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		width: min(660px, calc(100vw - 20px));
-		max-height: min(88vh, calc(100dvh - 20px));
-		display: flex;
-		flex-direction: column;
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-panel);
-		box-shadow: var(--shadow);
-		overflow: hidden;
-	}
-	header,
-	footer {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 12px 16px;
-	}
-	header {
-		align-items: baseline;
-		border-bottom: 1px solid var(--border-soft);
-	}
-	footer {
-		border-top: 1px solid var(--border-soft);
-	}
-	h2 {
-		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
-	}
-	header .muted {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.x {
-		color: var(--text-faint);
-		padding: 2px 6px;
-	}
 	.body {
 		flex: 1;
 		min-height: 0;
@@ -661,24 +608,10 @@
 		color: var(--text-faint);
 		font-size: 13px;
 	}
-	footer .muted {
+	.foot-note {
 		flex: 1;
 		min-width: 0;
-	}
-
-	/* Phone: come up from the bottom edge instead of floating in the middle,
-	   rounded on top only. Margins on a 390px screen are lost width. */
-	@media (max-width: 820px) {
-		.panel {
-			top: auto;
-			bottom: 0;
-			left: 0;
-			transform: none;
-			width: 100%;
-			max-height: 92dvh;
-			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-			border-bottom: none;
-			padding-bottom: env(safe-area-inset-bottom);
-		}
+		color: var(--text-muted);
+		font-size: 12px;
 	}
 </style>

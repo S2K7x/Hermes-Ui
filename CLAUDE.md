@@ -735,6 +735,46 @@ place perdue. En dessous de 820 px, `.app` reprend ses gouttières, `main`
 perd son rayon, et les panneaux modaux deviennent des **feuilles qui montent du
 bas**, arrondies en haut seulement.
 
+Cette feuille n'est écrite qu'**une fois**, dans `Modal.svelte` : voir le
+point 21.
+
+### 21. Un seul cadre pour tous les panneaux modaux
+
+`Modal.svelte` porte le voile, la carte centrée, la barre de titre (titre,
+sous-titre facultatif, bouton ✕), le pied de page facultatif et la feuille
+téléphone du point 20. Les sept panneaux — État, Skills, Providers, Tâches,
+Agents, Apparence, Raccourcis — ne fournissent que leur contenu :
+
+```svelte
+<Modal {open} title="Tâches planifiées" width={620} {onclose}>
+	{#snippet subtitle()}Hermes les exécute seul, même app fermée{/snippet}
+	<div class="body">…</div>
+	{#snippet footer()}…{/snippet}
+</Modal>
+```
+
+Ce qui reste au panneau, et pourquoi :
+
+- **Échap**, parce que sa signification diffère : sortir d'un formulaire
+  d'édition (Tâches, Agents), refuser de fermer sur des modifications non
+  enregistrées (`tryClose` de Skills), ou simplement fermer. Le cadre ne
+  connaît que `onclose`, que le panneau branche sur ce qu'il veut.
+- Le **corps** : padding, colonnes, défilement. Le cadre est un `flex column`,
+  rien de plus.
+- Les seuls réglages exposés sont `width` (en px, la carte se rétrécit toute
+  seule sur une fenêtre étroite) et `fill` (occuper toute la hauteur, pour les
+  panneaux à éditeur plutôt que ceux qui épousent leur contenu).
+
+**Le contenu d'un snippet reste stylé par le panneau, pas par le cadre.** Un
+sélecteur écrit dans `Modal.svelte` ne porte que sur les éléments écrits dans
+`Modal.svelte` — c'est le scoping de Svelte. Un `footer .muted` côté panneau ne
+s'appliquerait donc plus : ces contenus se stylent par leur propre classe.
+
+`tests/panels.test.ts` échoue si un panneau redéclare le cadre ou reprend son
+propre `role="dialog"`. Les sept copies avaient déjà divergé (84 vs 86 vs 88vh,
+cible de fermeture à 44 px sur un seul, `env(safe-area-inset-bottom)` oublié
+là où le pied de page le posait déjà) : c'est ce que fait un bloc copié.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -780,9 +820,10 @@ src/
 │   │   ├── storage.ts   localStorage qui ne peut pas jeter
 │   │   └── platform.ts  ⌘ vs Ctrl
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
-│   │                  AgentPicker, Markdown, CommandPalette, StatusPanel,
-│   │                  SkillsPanel, ProvidersPanel, JobsPanel, AgentsPanel,
-│   │                  PushSettings, ThemePanel, Shortcuts, Toasts
+│   │                  AgentPicker, Markdown, CommandPalette, Modal (cadre
+│   │                  commun des panneaux), StatusPanel, SkillsPanel,
+│   │                  ProvidersPanel, JobsPanel, AgentsPanel, PushSettings,
+│   │                  ThemePanel, Shortcuts, Toasts
 │   ├── stores/
 │   │   ├── chat.svelte.ts       tout l'état de conversation (runes Svelte 5)
 │   │   ├── agents.svelte.ts     équipe d'agents personnalisés

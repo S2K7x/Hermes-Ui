@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Modal from './Modal.svelte';
 	import { providersStore } from '$lib/stores/providers.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import {
@@ -77,372 +78,319 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="scrim" onclick={close}></div>
-	<div class="panel" role="dialog" aria-modal="true" aria-label="Providers">
-		<header>
-			<h2>Providers</h2>
-			<span class="muted small">
-				{#if providersStore.available === false}
-					indisponible
-				{:else}
-					clés et comptes de Hermes · un redémarrage du gateway peut être nécessaire
-				{/if}
-			</span>
-			<button class="x" onclick={close} aria-label="Fermer">✕</button>
-		</header>
-
+<Modal {open} title="Providers" width={760} fill onclose={close}>
+	{#snippet subtitle()}
 		{#if providersStore.available === false}
-			<div class="unavailable">
-				<p>La gestion des providers est indisponible.</p>
-				<p class="muted small">{providersStore.message}</p>
-				<p class="muted small">
-					Le dashboard de Hermes tourne en service utilisateur
-					(<code>systemctl --user status hermes-dashboard</code>) sur
-					<code>127.0.0.1:9119</code>. Son jeton est
-					<code>HERMES_DASHBOARD_SESSION_TOKEN</code> dans
-					<code>~/.hermes/dashboard.env</code> ; recopiez-le dans
-					<code>HERMES_DASHBOARD_TOKEN</code>.
-				</p>
-				<button onclick={() => providersStore.refresh()}>Réessayer</button>
-			</div>
+			indisponible
 		{:else}
-			<nav class="tabs">
-				<button class:sel={tab === 'keys'} onclick={() => (tab = 'keys')}>Clés API</button>
-				<button class:sel={tab === 'accounts'} onclick={() => (tab = 'accounts')}>Comptes</button>
-				<button class:sel={tab === 'model'} onclick={() => (tab = 'model')}>
-					Modèle par défaut
-				</button>
-			</nav>
+			clés et comptes de Hermes · un redémarrage du gateway peut être nécessaire
+		{/if}
+	{/snippet}
 
-			<div class="body">
-				{#if providersStore.loading && providersStore.keys.length === 0}
-					<p class="none">Chargement…</p>
-				{:else if tab === 'keys'}
-					<div class="tools">
-						<input
-							bind:value={query}
-							placeholder="Filtrer un fournisseur…"
-							aria-label="Filtrer les fournisseurs"
-							type="search"
-						/>
-					</div>
+	{#if providersStore.available === false}
+		<div class="unavailable">
+			<p>La gestion des providers est indisponible.</p>
+			<p class="muted small">{providersStore.message}</p>
+			<p class="muted small">
+				Le dashboard de Hermes tourne en service utilisateur
+				(<code>systemctl --user status hermes-dashboard</code>) sur
+				<code>127.0.0.1:9119</code>. Son jeton est
+				<code>HERMES_DASHBOARD_SESSION_TOKEN</code> dans
+				<code>~/.hermes/dashboard.env</code> ; recopiez-le dans
+				<code>HERMES_DASHBOARD_TOKEN</code>.
+			</p>
+			<button onclick={() => providersStore.refresh()}>Réessayer</button>
+		</div>
+	{:else}
+		<nav class="tabs">
+			<button class:sel={tab === 'keys'} onclick={() => (tab = 'keys')}>Clés API</button>
+			<button class:sel={tab === 'accounts'} onclick={() => (tab = 'accounts')}>Comptes</button>
+			<button class:sel={tab === 'model'} onclick={() => (tab = 'model')}>
+				Modèle par défaut
+			</button>
+		</nav>
 
-					{#if groups.length === 0}
-						<p class="none">Aucun fournisseur ne correspond.</p>
-					{/if}
+		<div class="body">
+			{#if providersStore.loading && providersStore.keys.length === 0}
+				<p class="none">Chargement…</p>
+			{:else if tab === 'keys'}
+				<div class="tools">
+					<input
+						bind:value={query}
+						placeholder="Filtrer un fournisseur…"
+						aria-label="Filtrer les fournisseurs"
+						type="search"
+					/>
+				</div>
 
-					{#each groups as group (group.provider)}
-						<section class="card">
-							<div class="card-head">
-								<span class="name">{group.label}</span>
-								<span class="pill" class:on={isGroupConfigured(group)}>
-									{isGroupConfigured(group) ? 'Configuré' : 'Non configuré'}
-								</span>
-							</div>
-							{#each group.keys as entry (entry.key)}
-								<div class="var">
-									<div class="var-head">
-										<code>{entry.key}</code>
-										{#if entry.isSet}
-											<span class="redacted">{entry.redacted ?? '••••'}</span>
-										{:else}
-											<span class="muted small">non renseignée</span>
-										{/if}
-										<span class="spacer"></span>
-										{#if providersStore.editing !== entry.key}
-											<button onclick={() => providersStore.edit(entry.key)}>
-												{entry.isSet ? 'Remplacer' : 'Renseigner'}
-											</button>
-											{#if entry.isSet}
-												<button
-													class="danger"
-													disabled={providersStore.saving}
-													onclick={() => {
-														if (confirm(`Supprimer ${entry.key} de la configuration de Hermes ?`))
-															providersStore.deleteKey(entry.key);
-													}}>Supprimer</button
-												>
-											{/if}
-										{/if}
-									</div>
+				{#if groups.length === 0}
+					<p class="none">Aucun fournisseur ne correspond.</p>
+				{/if}
 
-									{#if entry.description}
-										<p class="muted small desc">
-											{entry.description}
-											{#if entry.url}
-												· <a href={entry.url} target="_blank" rel="noreferrer noopener">
-													obtenir une clé
-												</a>
-											{/if}
-										</p>
-									{/if}
-
-									{#if providersStore.editing === entry.key}
-										<div class="editor">
-											<!-- svelte-ignore a11y_autofocus -->
-											<input
-												type="password"
-												autocomplete="off"
-												spellcheck="false"
-												autofocus
-												bind:value={providersStore.draft}
-												placeholder="Collez la clé"
-												aria-label={`Valeur de ${entry.key}`}
-												onkeydown={(e) => {
-													if (e.key === 'Enter') providersStore.saveKey();
-												}}
-											/>
-											<button
-												disabled={!providersStore.draft.trim() || providersStore.validating}
-												onclick={() => providersStore.validate()}
-											>
-												{providersStore.validating ? 'Vérification…' : 'Vérifier'}
-											</button>
-											<button
-												class="primary"
-												disabled={!providersStore.draft.trim() || providersStore.saving}
-												onclick={() => providersStore.saveKey()}
-											>
-												{providersStore.saving ? 'Enregistrement…' : 'Enregistrer'}
-											</button>
-											<button onclick={() => providersStore.cancelEdit()}>Annuler</button>
-										</div>
-										{#if providersStore.validationHint}
-											<p class="muted small">{providersStore.validationHint}</p>
-										{/if}
-										<p class="muted small">
-											La clé est écrite dans <code>~/.hermes/.env</code> par Hermes lui-même, qui
-											met aussi à jour les copies de <code>config.yaml</code>. Elle n'est jamais
-											renvoyée en clair à ce navigateur.
-										</p>
-									{/if}
-								</div>
-							{/each}
-						</section>
-					{/each}
-				{:else if tab === 'accounts'}
-					{#if flow}
-						<section class="card flow">
-							<div class="card-head">
-								<span class="name">{flow.providerName}</span>
-								{#if flow.phase === 'awaiting'}
-									<span class="pill">expire dans {Math.floor(remaining / 60)} min {remaining % 60}s</span>
-								{/if}
-							</div>
-
-							{#if flow.phase === 'awaiting' && flow.kind === 'device_code'}
-								<p>
-									Ouvrez
-									<a href={flow.verificationUrl} target="_blank" rel="noreferrer noopener">
-										{flow.verificationUrl}
-									</a>
-									et saisissez ce code :
-								</p>
-								<p class="code">{flow.userCode}</p>
-								<p class="muted small">
-									Cette page interroge Hermes toutes les
-									{Math.round(flow.pollIntervalMs / 1000)} s jusqu'à ce que le fournisseur réponde.
-								</p>
-							{:else if flow.phase === 'awaiting'}
-								<p>
-									Ouvrez
-									<a href={flow.authUrl} target="_blank" rel="noreferrer noopener">
-										la page d'autorisation
-									</a>, puis collez ici le code affiché à la fin :
-								</p>
-								<div class="editor">
-									<input
-										bind:value={providersStore.code}
-										placeholder="Code d'autorisation"
-										aria-label="Code d'autorisation"
-										spellcheck="false"
-									/>
-									<button
-										class="primary"
-										disabled={!providersStore.code.trim() || providersStore.submitting}
-										onclick={() => providersStore.submitCode()}
-									>
-										{providersStore.submitting ? 'Validation…' : 'Valider'}
-									</button>
-								</div>
-							{:else}
-								<p class:ok={flow.phase === 'approved'} class:ko={flow.phase !== 'approved'}>
-									{flow.message}
-								</p>
-							{/if}
-
-							<div class="actions">
-								<button onclick={() => providersStore.cancelFlow()}>
-									{flow.phase === 'awaiting' ? 'Annuler' : 'Fermer'}
-								</button>
-							</div>
-						</section>
-					{/if}
-
-					{#each providersStore.accounts as provider (provider.id)}
-						<section class="card">
-							<div class="card-head">
-								<span class="name">{provider.name}</span>
-								<span class="pill" class:on={isConnected(provider)}>
-									{isConnected(provider) ? 'Connecté' : 'Non connecté'}
-								</span>
-							</div>
-							<p class="muted small desc">
-								{accountSummary(provider)}
-								{#if provider.docs_url}
-									· <a href={provider.docs_url} target="_blank" rel="noreferrer noopener">docs</a>
-								{/if}
-							</p>
-
-							{#if flowKind(provider) === 'external'}
-								<p class="muted small">
-									Lancez <code>{provider.cli_command}</code> sur le Pi : Hermes ne peut pas
-									piloter ce flux à sa place.
-								</p>
-							{/if}
-
-							<div class="actions">
-								{#if !isConnected(provider) && flowKind(provider) !== 'external'}
-									<button
-										class="primary"
-										disabled={!!flow || providersStore.starting !== null}
-										onclick={() => providersStore.startOauth(provider)}
-									>
-										{providersStore.starting === provider.id ? 'Démarrage…' : accountAction(provider)}
-									</button>
-								{/if}
-								{#if isConnected(provider) && provider.disconnectable}
-									<button
-										class="danger"
-										disabled={providersStore.saving}
-										onclick={() => {
-											if (confirm(`Déconnecter ${provider.name} ?`)) providersStore.disconnect(provider);
-										}}>Déconnecter</button
-									>
-								{:else if isConnected(provider) && provider.disconnect_command}
-									<span class="muted small">
-										Pour déconnecter : <code>{provider.disconnect_command}</code>
-									</span>
-								{:else if isConnected(provider) && provider.disconnect_hint}
-									<span class="muted small">{provider.disconnect_hint}</span>
-								{/if}
-							</div>
-						</section>
-					{/each}
-				{:else}
+				{#each groups as group (group.provider)}
 					<section class="card">
 						<div class="card-head">
-							<span class="name">Modèle par défaut de Hermes</span>
-							{#if chat.models}
-								<span class="pill on">{shortModelName(chat.models.model)}</span>
+							<span class="name">{group.label}</span>
+							<span class="pill" class:on={isGroupConfigured(group)}>
+								{isGroupConfigured(group) ? 'Configuré' : 'Non configuré'}
+							</span>
+						</div>
+						{#each group.keys as entry (entry.key)}
+							<div class="var">
+								<div class="var-head">
+									<code>{entry.key}</code>
+									{#if entry.isSet}
+										<span class="redacted">{entry.redacted ?? '••••'}</span>
+									{:else}
+										<span class="muted small">non renseignée</span>
+									{/if}
+									<span class="spacer"></span>
+									{#if providersStore.editing !== entry.key}
+										<button onclick={() => providersStore.edit(entry.key)}>
+											{entry.isSet ? 'Remplacer' : 'Renseigner'}
+										</button>
+										{#if entry.isSet}
+											<button
+												class="danger"
+												disabled={providersStore.saving}
+												onclick={() => {
+													if (confirm(`Supprimer ${entry.key} de la configuration de Hermes ?`))
+														providersStore.deleteKey(entry.key);
+												}}>Supprimer</button
+											>
+										{/if}
+									{/if}
+								</div>
+
+								{#if entry.description}
+									<p class="muted small desc">
+										{entry.description}
+										{#if entry.url}
+											· <a href={entry.url} target="_blank" rel="noreferrer noopener">
+												obtenir une clé
+											</a>
+										{/if}
+									</p>
+								{/if}
+
+								{#if providersStore.editing === entry.key}
+									<div class="editor">
+										<!-- svelte-ignore a11y_autofocus -->
+										<input
+											type="password"
+											autocomplete="off"
+											spellcheck="false"
+											autofocus
+											bind:value={providersStore.draft}
+											placeholder="Collez la clé"
+											aria-label={`Valeur de ${entry.key}`}
+											onkeydown={(e) => {
+												if (e.key === 'Enter') providersStore.saveKey();
+											}}
+										/>
+										<button
+											disabled={!providersStore.draft.trim() || providersStore.validating}
+											onclick={() => providersStore.validate()}
+										>
+											{providersStore.validating ? 'Vérification…' : 'Vérifier'}
+										</button>
+										<button
+											class="primary"
+											disabled={!providersStore.draft.trim() || providersStore.saving}
+											onclick={() => providersStore.saveKey()}
+										>
+											{providersStore.saving ? 'Enregistrement…' : 'Enregistrer'}
+										</button>
+										<button onclick={() => providersStore.cancelEdit()}>Annuler</button>
+									</div>
+									{#if providersStore.validationHint}
+										<p class="muted small">{providersStore.validationHint}</p>
+									{/if}
+									<p class="muted small">
+										La clé est écrite dans <code>~/.hermes/.env</code> par Hermes lui-même, qui
+										met aussi à jour les copies de <code>config.yaml</code>. Elle n'est jamais
+										renvoyée en clair à ce navigateur.
+									</p>
+								{/if}
+							</div>
+						{/each}
+					</section>
+				{/each}
+			{:else if tab === 'accounts'}
+				{#if flow}
+					<section class="card flow">
+						<div class="card-head">
+							<span class="name">{flow.providerName}</span>
+							{#if flow.phase === 'awaiting'}
+								<span class="pill">expire dans {Math.floor(remaining / 60)} min {remaining % 60}s</span>
 							{/if}
 						</div>
-						<p class="muted small desc">
-							Écrit dans <code>config.yaml</code> et appliqué aux <strong>nouvelles</strong>
-							discussions. Pour changer le modèle de la conversation ouverte, utilisez le sélecteur
-							en haut de l'écran.
-						</p>
 
-						{#if usableProviders.length === 0}
-							<p class="muted small">
-								Aucun fournisseur authentifié pour l'instant. Renseignez une clé ou connectez un
-								compte dans les autres onglets.
+						{#if flow.phase === 'awaiting' && flow.kind === 'device_code'}
+							<p>
+								Ouvrez
+								<a href={flow.verificationUrl} target="_blank" rel="noreferrer noopener">
+									{flow.verificationUrl}
+								</a>
+								et saisissez ce code :
 							</p>
-						{:else}
+							<p class="code">{flow.userCode}</p>
+							<p class="muted small">
+								Cette page interroge Hermes toutes les
+								{Math.round(flow.pollIntervalMs / 1000)} s jusqu'à ce que le fournisseur réponde.
+							</p>
+						{:else if flow.phase === 'awaiting'}
+							<p>
+								Ouvrez
+								<a href={flow.authUrl} target="_blank" rel="noreferrer noopener">
+									la page d'autorisation
+								</a>, puis collez ici le code affiché à la fin :
+							</p>
 							<div class="editor">
-								<select bind:value={modelProvider} aria-label="Fournisseur">
-									{#each usableProviders as provider (provider.slug)}
-										<option value={provider.slug}>{provider.name}</option>
-									{/each}
-								</select>
-								<select bind:value={modelName} aria-label="Modèle">
-									{#each providerModels as model (model)}
-										<option value={model}>{model}</option>
-									{/each}
-								</select>
+								<input
+									bind:value={providersStore.code}
+									placeholder="Code d'autorisation"
+									aria-label="Code d'autorisation"
+									spellcheck="false"
+								/>
 								<button
 									class="primary"
-									disabled={!modelName || providersStore.switchingModel}
-									onclick={() => providersStore.setDefaultModel(modelProvider, modelName)}
+									disabled={!providersStore.code.trim() || providersStore.submitting}
+									onclick={() => providersStore.submitCode()}
 								>
-									{providersStore.switchingModel ? 'Application…' : 'Définir par défaut'}
+									{providersStore.submitting ? 'Validation…' : 'Valider'}
 								</button>
 							</div>
+						{:else}
+							<p class:ok={flow.phase === 'approved'} class:ko={flow.phase !== 'approved'}>
+								{flow.message}
+							</p>
 						{/if}
 
-						{#if providersStore.confirmModel}
-							<div class="warn">
-								<p>{providersStore.confirmModel.message}</p>
-								<div class="actions">
-									<button onclick={() => providersStore.dismissConfirm()}>Annuler</button>
-									<button
-										class="primary"
-										disabled={providersStore.switchingModel}
-										onclick={() =>
-											providersStore.setDefaultModel(
-												providersStore.confirmModel!.provider,
-												providersStore.confirmModel!.model,
-												true
-											)}>Confirmer quand même</button
-									>
-								</div>
-							</div>
-						{/if}
+						<div class="actions">
+							<button onclick={() => providersStore.cancelFlow()}>
+								{flow.phase === 'awaiting' ? 'Annuler' : 'Fermer'}
+							</button>
+						</div>
 					</section>
 				{/if}
-			</div>
-		{/if}
-	</div>
+
+				{#each providersStore.accounts as provider (provider.id)}
+					<section class="card">
+						<div class="card-head">
+							<span class="name">{provider.name}</span>
+							<span class="pill" class:on={isConnected(provider)}>
+								{isConnected(provider) ? 'Connecté' : 'Non connecté'}
+							</span>
+						</div>
+						<p class="muted small desc">
+							{accountSummary(provider)}
+							{#if provider.docs_url}
+								· <a href={provider.docs_url} target="_blank" rel="noreferrer noopener">docs</a>
+							{/if}
+						</p>
+
+						{#if flowKind(provider) === 'external'}
+							<p class="muted small">
+								Lancez <code>{provider.cli_command}</code> sur le Pi : Hermes ne peut pas
+								piloter ce flux à sa place.
+							</p>
+						{/if}
+
+						<div class="actions">
+							{#if !isConnected(provider) && flowKind(provider) !== 'external'}
+								<button
+									class="primary"
+									disabled={!!flow || providersStore.starting !== null}
+									onclick={() => providersStore.startOauth(provider)}
+								>
+									{providersStore.starting === provider.id ? 'Démarrage…' : accountAction(provider)}
+								</button>
+							{/if}
+							{#if isConnected(provider) && provider.disconnectable}
+								<button
+									class="danger"
+									disabled={providersStore.saving}
+									onclick={() => {
+										if (confirm(`Déconnecter ${provider.name} ?`)) providersStore.disconnect(provider);
+									}}>Déconnecter</button
+								>
+							{:else if isConnected(provider) && provider.disconnect_command}
+								<span class="muted small">
+									Pour déconnecter : <code>{provider.disconnect_command}</code>
+								</span>
+							{:else if isConnected(provider) && provider.disconnect_hint}
+								<span class="muted small">{provider.disconnect_hint}</span>
+							{/if}
+						</div>
+					</section>
+				{/each}
+			{:else}
+				<section class="card">
+					<div class="card-head">
+						<span class="name">Modèle par défaut de Hermes</span>
+						{#if chat.models}
+							<span class="pill on">{shortModelName(chat.models.model)}</span>
+						{/if}
+					</div>
+					<p class="muted small desc">
+						Écrit dans <code>config.yaml</code> et appliqué aux <strong>nouvelles</strong>
+						discussions. Pour changer le modèle de la conversation ouverte, utilisez le sélecteur
+						en haut de l'écran.
+					</p>
+
+					{#if usableProviders.length === 0}
+						<p class="muted small">
+							Aucun fournisseur authentifié pour l'instant. Renseignez une clé ou connectez un
+							compte dans les autres onglets.
+						</p>
+					{:else}
+						<div class="editor">
+							<select bind:value={modelProvider} aria-label="Fournisseur">
+								{#each usableProviders as provider (provider.slug)}
+									<option value={provider.slug}>{provider.name}</option>
+								{/each}
+							</select>
+							<select bind:value={modelName} aria-label="Modèle">
+								{#each providerModels as model (model)}
+									<option value={model}>{model}</option>
+								{/each}
+							</select>
+							<button
+								class="primary"
+								disabled={!modelName || providersStore.switchingModel}
+								onclick={() => providersStore.setDefaultModel(modelProvider, modelName)}
+							>
+								{providersStore.switchingModel ? 'Application…' : 'Définir par défaut'}
+							</button>
+						</div>
+					{/if}
+
+					{#if providersStore.confirmModel}
+						<div class="warn">
+							<p>{providersStore.confirmModel.message}</p>
+							<div class="actions">
+								<button onclick={() => providersStore.dismissConfirm()}>Annuler</button>
+								<button
+									class="primary"
+									disabled={providersStore.switchingModel}
+									onclick={() =>
+										providersStore.setDefaultModel(
+											providersStore.confirmModel!.provider,
+											providersStore.confirmModel!.model,
+											true
+										)}>Confirmer quand même</button
+								>
+							</div>
+						</div>
+					{/if}
+				</section>
+			{/if}
+		</div>
 {/if}
+</Modal>
 
 <style>
-	.scrim {
-		position: fixed;
-		inset: 0;
-		z-index: 150;
-		background: var(--scrim);
-	}
-	.panel {
-		position: fixed;
-		z-index: 151;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		width: min(760px, calc(100vw - 20px));
-		height: min(88vh, calc(100dvh - 20px));
-		display: flex;
-		flex-direction: column;
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-panel);
-		box-shadow: var(--shadow);
-		overflow: hidden;
-	}
-	header {
-		display: flex;
-		align-items: baseline;
-		gap: 10px;
-		padding: 12px 16px;
-		border-bottom: 1px solid var(--border-soft);
-	}
-	h2 {
-		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
-	}
-	header .muted {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.x {
-		color: var(--text-faint);
-		padding: 2px 6px;
-	}
 	.tabs {
 		display: flex;
 		gap: 4px;
@@ -588,8 +536,7 @@
 		border-radius: 7px;
 		font-size: 12.5px;
 	}
-	.tabs button,
-	.x {
+	.tabs button {
 		border: none;
 		border-radius: 0;
 	}
@@ -652,21 +599,5 @@
 	}
 	a {
 		color: var(--text);
-	}
-
-	/* Phone: come up from the bottom edge instead of floating in the middle,
-	   rounded on top only. Margins on a 390px screen are lost width. */
-	@media (max-width: 820px) {
-		.panel {
-			top: auto;
-			bottom: 0;
-			left: 0;
-			transform: none;
-			width: 100%;
-			max-height: 92dvh;
-			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-			border-bottom: none;
-			padding-bottom: env(safe-area-inset-bottom);
-		}
 	}
 </style>

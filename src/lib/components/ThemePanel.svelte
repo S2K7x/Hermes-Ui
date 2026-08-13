@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Modal from './Modal.svelte';
 	import { theme } from '$lib/stores/theme.svelte';
 	import {
 		DEFAULT_THEME,
@@ -41,163 +42,120 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="scrim" onclick={onclose}></div>
-	<div class="panel" role="dialog" aria-modal="true" aria-label="Apparence">
-		<header>
-			<h2>Apparence</h2>
-			<button class="x" onclick={onclose} aria-label="Fermer">✕</button>
-		</header>
-
-		<div class="body">
-			<h3>Mode</h3>
-			<div class="modes">
-				<button
-					class="mode"
-					class:sel={settings.mode === 'dark'}
-					onclick={() => theme.update({ mode: 'dark' })}>🌙 Sombre</button
-				>
-				<button
-					class="mode"
-					class:sel={settings.mode === 'light'}
-					onclick={() => theme.update({ mode: 'light' })}>☀️ Clair</button
-				>
-			</div>
-
-			<h3>Palette</h3>
-			<div class="presets">
-				{#each PRESETS as preset (preset.id)}
-					{@const p = preview(preset)}
-					<button
-						class="preset"
-						class:sel={preset.id === settings.preset}
-						onclick={() => theme.update({ preset: preset.id })}
-					>
-						<span class="swatch" style="background: {p.bg}">
-							<span class="chip" style="background: {p.surface}"></span>
-							<span class="chip round" style="background: {p.accent}"></span>
-							<span class="chip round" style="background: {p.accent2}"></span>
-						</span>
-						<span class="pname">{preset.name}</span>
-						<span class="phint">{preset.hint}</span>
-					</button>
-				{/each}
-			</div>
-
-			<h3>Accents</h3>
-			<p class="lead">
-				Le reste — survols, bordures, fonds doux — est dérivé de ces deux couleurs, pas demandé une
-				par une.
-			</p>
-
-			<div class="colors">
-				<label class="color">
-					<input
-						type="color"
-						value={palette.accent}
-						oninput={(e) => theme.update({ accent: e.currentTarget.value })}
-						aria-label="Couleur d'accent"
-					/>
-					<span class="cname">Accent</span>
-					<span class="cval">{palette.accent}</span>
-					<span class="ratio" class:warn={!accentCheck.ok}>
-						{accentCheck.ratio.toFixed(1)}:1
-					</span>
-				</label>
-
-				<label class="color">
-					<input
-						type="color"
-						value={palette.accent2}
-						oninput={(e) => theme.update({ accent2: e.currentTarget.value })}
-						aria-label="Couleur d'accent secondaire"
-					/>
-					<span class="cname">Actions positives</span>
-					<span class="cval">{palette.accent2}</span>
-					<span class="ratio" class:warn={!accent2Check.ok}>
-						{accent2Check.ratio.toFixed(1)}:1
-					</span>
-				</label>
-			</div>
-
-			{#if !accentCheck.ok || !accent2Check.ok}
-				<p class="warning">
-					Contraste sous 4,5:1 : le texte posé sur cette couleur sera difficile à lire. La bulle
-					utilisateur, elle, est assombrie automatiquement jusqu'à ce que le blanc passe.
-				</p>
-			{/if}
-
-			{#if customised}
-				<button class="revert" onclick={() => theme.update({ accent: null, accent2: null })}>
-					Revenir aux accents de « {PRESETS.find((p) => p.id === settings.preset)?.name} »
-				</button>
-			{/if}
-
-			<h3>Aperçu</h3>
-			<div class="preview">
-				<div class="pv-user">Trouve les trains pour Tel Aviv.</div>
-				<div class="pv-bot">
-					Voici les prochains départs. <code>terminal</code> a été utilisé.
-					<span class="pv-badge">3 outils</span>
-				</div>
-				<div class="pv-row">
-					<span class="pv-send">↑</span>
-					<span class="pv-pill">Envoyer</span>
-					<span class="pv-dot"></span>
-				</div>
-			</div>
-
-			<p class="lead">
-				Le choix est enregistré sur le serveur : le téléphone et le bureau affichent la même
-				palette.
-			</p>
+<Modal {open} title="Apparence" width={520} {onclose}>
+	<div class="body">
+		<h3>Mode</h3>
+		<div class="modes">
+			<button
+				class="mode"
+				class:sel={settings.mode === 'dark'}
+				onclick={() => theme.update({ mode: 'dark' })}>🌙 Sombre</button
+			>
+			<button
+				class="mode"
+				class:sel={settings.mode === 'light'}
+				onclick={() => theme.update({ mode: 'light' })}>☀️ Clair</button
+			>
 		</div>
 
-		<footer>
-			<button class="reset" onclick={() => theme.reset()} disabled={pristine}>
-				Réglages par défaut
+		<h3>Palette</h3>
+		<div class="presets">
+			{#each PRESETS as preset (preset.id)}
+				{@const p = preview(preset)}
+				<button
+					class="preset"
+					class:sel={preset.id === settings.preset}
+					onclick={() => theme.update({ preset: preset.id })}
+				>
+					<span class="swatch" style="background: {p.bg}">
+						<span class="chip" style="background: {p.surface}"></span>
+						<span class="chip round" style="background: {p.accent}"></span>
+						<span class="chip round" style="background: {p.accent2}"></span>
+					</span>
+					<span class="pname">{preset.name}</span>
+					<span class="phint">{preset.hint}</span>
+				</button>
+			{/each}
+		</div>
+
+		<h3>Accents</h3>
+		<p class="lead">
+			Le reste — survols, bordures, fonds doux — est dérivé de ces deux couleurs, pas demandé une
+			par une.
+		</p>
+
+		<div class="colors">
+			<label class="color">
+				<input
+					type="color"
+					value={palette.accent}
+					oninput={(e) => theme.update({ accent: e.currentTarget.value })}
+					aria-label="Couleur d'accent"
+				/>
+				<span class="cname">Accent</span>
+				<span class="cval">{palette.accent}</span>
+				<span class="ratio" class:warn={!accentCheck.ok}>
+					{accentCheck.ratio.toFixed(1)}:1
+				</span>
+			</label>
+
+			<label class="color">
+				<input
+					type="color"
+					value={palette.accent2}
+					oninput={(e) => theme.update({ accent2: e.currentTarget.value })}
+					aria-label="Couleur d'accent secondaire"
+				/>
+				<span class="cname">Actions positives</span>
+				<span class="cval">{palette.accent2}</span>
+				<span class="ratio" class:warn={!accent2Check.ok}>
+					{accent2Check.ratio.toFixed(1)}:1
+				</span>
+			</label>
+		</div>
+
+		{#if !accentCheck.ok || !accent2Check.ok}
+			<p class="warning">
+				Contraste sous 4,5:1 : le texte posé sur cette couleur sera difficile à lire. La bulle
+				utilisateur, elle, est assombrie automatiquement jusqu'à ce que le blanc passe.
+			</p>
+		{/if}
+
+		{#if customised}
+			<button class="revert" onclick={() => theme.update({ accent: null, accent2: null })}>
+				Revenir aux accents de « {PRESETS.find((p) => p.id === settings.preset)?.name} »
 			</button>
-			<button class="done" onclick={onclose}>Terminé</button>
-		</footer>
+		{/if}
+
+		<h3>Aperçu</h3>
+		<div class="preview">
+			<div class="pv-user">Trouve les trains pour Tel Aviv.</div>
+			<div class="pv-bot">
+				Voici les prochains départs. <code>terminal</code> a été utilisé.
+				<span class="pv-badge">3 outils</span>
+			</div>
+			<div class="pv-row">
+				<span class="pv-send">↑</span>
+				<span class="pv-pill">Envoyer</span>
+				<span class="pv-dot"></span>
+			</div>
+		</div>
+
+		<p class="lead">
+			Le choix est enregistré sur le serveur : le téléphone et le bureau affichent la même
+			palette.
+		</p>
 	</div>
-{/if}
+
+	{#snippet footer()}
+		<button class="reset" onclick={() => theme.reset()} disabled={pristine}>
+			Réglages par défaut
+		</button>
+		<button class="done" onclick={onclose}>Terminé</button>
+	{/snippet}
+</Modal>
 
 <style>
-	.scrim {
-		position: fixed;
-		inset: 0;
-		z-index: 150;
-		background: var(--scrim);
-	}
-	.panel {
-		position: fixed;
-		z-index: 151;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		width: min(520px, calc(100vw - 20px));
-		max-height: min(88vh, calc(100dvh - 20px));
-		display: flex;
-		flex-direction: column;
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-panel);
-		box-shadow: var(--shadow);
-		overflow: hidden;
-	}
-	header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 14px 20px;
-		border-bottom: 1px solid var(--border-soft);
-	}
-	h2 {
-		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
-	}
 	h3 {
 		margin: 20px 0 8px;
 		font-size: 11px;
@@ -209,16 +167,11 @@
 	h3:first-child {
 		margin-top: 6px;
 	}
-	.x {
-		min-width: 44px;
-		min-height: 44px;
-		color: var(--text-faint);
-	}
 	.body {
 		flex: 1;
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		padding: 4px 20px 18px;
+		padding: 4px 16px 18px;
 	}
 	.lead {
 		margin: 0 0 4px;
@@ -445,20 +398,15 @@
 		border-radius: 50%;
 		background: var(--ok);
 	}
-	footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-		padding: 12px 20px;
-		padding-bottom: max(12px, env(safe-area-inset-bottom));
-		border-top: 1px solid var(--border-soft);
-	}
-	footer button {
+	.reset,
+	.done {
 		min-height: 44px;
 		padding: 6px 18px;
 		border-radius: var(--radius-pill);
 		font-size: 13px;
+	}
+	.done {
+		margin-left: auto;
 	}
 	.reset {
 		border: 1px solid var(--border);
@@ -476,20 +424,5 @@
 		background: var(--accent-2);
 		color: var(--accent-2-ink);
 		font-weight: 600;
-	}
-
-	/* On a phone a centred card wastes both margins: come up from the bottom
-	   edge instead, rounded on top only. */
-	@media (max-width: 820px) {
-		.panel {
-			top: auto;
-			bottom: 0;
-			left: 0;
-			transform: none;
-			width: 100%;
-			max-height: 92dvh;
-			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-			border-bottom: none;
-		}
 	}
 </style>

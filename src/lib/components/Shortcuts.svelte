@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Modal from './Modal.svelte';
+
 	interface Props {
 		open: boolean;
 		onclose: () => void;
@@ -23,65 +25,23 @@
 	]);
 </script>
 
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="scrim" onclick={onclose}></div>
-	<div class="panel" role="dialog" aria-modal="true" aria-label="Raccourcis clavier">
-		<header>
-			<h2>Raccourcis clavier</h2>
-			<button class="x" onclick={onclose} aria-label="Fermer">✕</button>
-		</header>
-		<ul>
-			{#each rows as [keys, label] (label)}
-				<li>
-					<kbd>{keys}</kbd>
-					<span>{label}</span>
-				</li>
-			{/each}
-		</ul>
-	</div>
-{/if}
+<Modal {open} title="Raccourcis clavier" width={460} {onclose}>
+	<ul>
+		{#each rows as [keys, label] (label)}
+			<li>
+				<kbd>{keys}</kbd>
+				<span>{label}</span>
+			</li>
+		{/each}
+	</ul>
+</Modal>
 
 <style>
-	.scrim {
-		position: fixed;
-		inset: 0;
-		z-index: 150;
-		background: var(--scrim);
-	}
-	.panel {
-		position: fixed;
-		z-index: 151;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		width: min(460px, calc(100vw - 24px));
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-panel);
-		box-shadow: var(--shadow);
-		overflow: hidden;
-	}
-	header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 12px 16px;
-		border-bottom: 1px solid var(--border-soft);
-	}
-	h2 {
-		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
-	}
-	.x {
-		color: var(--text-faint);
-		padding: 2px 6px;
-	}
 	ul {
 		margin: 0;
 		padding: 10px 16px 16px;
 		list-style: none;
+		overflow-y: auto;
 	}
 	li {
 		display: flex;
@@ -98,21 +58,5 @@
 		color: var(--text);
 		text-align: right;
 		white-space: nowrap;
-	}
-
-	/* Phone: come up from the bottom edge instead of floating in the middle,
-	   rounded on top only. Margins on a 390px screen are lost width. */
-	@media (max-width: 820px) {
-		.panel {
-			top: auto;
-			bottom: 0;
-			left: 0;
-			transform: none;
-			width: 100%;
-			max-height: 92dvh;
-			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-			border-bottom: none;
-			padding-bottom: env(safe-area-inset-bottom);
-		}
 	}
 </style>

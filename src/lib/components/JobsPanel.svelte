@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Modal from './Modal.svelte';
 	import { jobsStore, type JobInput } from '$lib/stores/jobs.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
 	import { agentColor, agentLabel, composeSystemPrompt } from '$lib/agents';
@@ -140,340 +141,284 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="scrim" onclick={onclose}></div>
-	<div class="panel" role="dialog" aria-modal="true" aria-label="Tâches planifiées">
-		<header>
-			<h2>Tâches planifiées</h2>
-			<span class="muted small">Hermes les exécute seul, même app fermée</span>
-			<button class="x" onclick={onclose} aria-label="Fermer">✕</button>
-		</header>
+<Modal {open} title="Tâches planifiées" width={620} {onclose}>
+	{#snippet subtitle()}Hermes les exécute seul, même app fermée{/snippet}
 
-		<div class="body">
-			{#if jobsStore.unavailable}
-				<p class="none">
-					Ce Hermes tourne sans son module cron : aucune tâche ne peut être planifiée.
-				</p>
-			{:else if editing !== null}
-				<div class="form">
-					{#if !editing}
-						<div class="templates">
-							<span class="muted small">Pour démarrer :</span>
-							{#each JOB_TEMPLATES as template (template.label)}
-								<button type="button" onclick={() => applyTemplate(template)}>
-									{template.label}
-								</button>
-							{/each}
-						</div>
-					{/if}
+	<div class="body">
+		{#if jobsStore.unavailable}
+			<p class="none">
+				Ce Hermes tourne sans son module cron : aucune tâche ne peut être planifiée.
+			</p>
+		{:else if editing !== null}
+			<div class="form">
+				{#if !editing}
+					<div class="templates">
+						<span class="muted small">Pour démarrer :</span>
+						{#each JOB_TEMPLATES as template (template.label)}
+							<button type="button" onclick={() => applyTemplate(template)}>
+								{template.label}
+							</button>
+						{/each}
+					</div>
+				{/if}
 
-					<label>
-						Nom
-						<input bind:value={name} placeholder="Résumé du matin" maxlength={MAX_JOB_NAME} />
-					</label>
+				<label>
+					Nom
+					<input bind:value={name} placeholder="Résumé du matin" maxlength={MAX_JOB_NAME} />
+				</label>
 
-					<fieldset class="who">
-						<legend>Qui s'en charge</legend>
-						<div class="chips">
+				<fieldset class="who">
+					<legend>Qui s'en charge</legend>
+					<div class="chips">
+						<button
+							type="button"
+							class:sel={agentId === null}
+							onclick={() => (agentId = null)}
+							style="--agent: var(--text-faint)"
+						>
+							<span class="dot"></span>Hermes par défaut
+						</button>
+						{#each agents.items as agent (agent.id)}
 							<button
 								type="button"
-								class:sel={agentId === null}
-								onclick={() => (agentId = null)}
-								style="--agent: var(--text-faint)"
+								class:sel={agentId === agent.id}
+								onclick={() => (agentId = agent.id)}
+								style="--agent: {agentColor(agent)}"
 							>
-								<span class="dot"></span>Hermes par défaut
+								<span class="dot"></span>{agentLabel(agent)}
 							</button>
-							{#each agents.items as agent (agent.id)}
-								<button
-									type="button"
-									class:sel={agentId === agent.id}
-									onclick={() => (agentId = agent.id)}
-									style="--agent: {agentColor(agent)}"
-								>
-									<span class="dot"></span>{agentLabel(agent)}
-								</button>
-							{/each}
-						</div>
-						<p class="muted small">
-							{#if agentId}
-								La fiche de cet agent part avec la tâche : elle s'exécutera avec sa personnalité et
-								son équipe.
-							{:else}
-								La tâche tournera avec le prompt système par défaut de Hermes.
-							{/if}
-						</p>
-					</fieldset>
-
-					<fieldset class="when">
-						<legend>Quand</legend>
-						<div class="chips modes">
-							{#each SCHEDULE_MODES as m (m.value)}
-								<button
-									type="button"
-									class:sel={spec.mode === m.value}
-									onclick={() => (spec = { ...spec, mode: m.value })}>{m.label}</button
-								>
-							{/each}
-						</div>
-
-						<div class="fields">
-							{#if spec.mode === 'daily'}
-								<span class="lead">à</span>
-								<input type="time" bind:value={spec.time} />
-							{:else if spec.mode === 'weekly'}
-								<span class="lead">chaque</span>
-								<select bind:value={spec.weekday}>
-									{#each WEEKDAYS as day (day.value)}
-										<option value={day.value}>{day.label}</option>
-									{/each}
-								</select>
-								<span class="lead">à</span>
-								<input type="time" bind:value={spec.time} />
-							{:else if spec.mode === 'monthly'}
-								<span class="lead">le</span>
-								<select bind:value={spec.monthday}>
-									{#each Array.from({ length: 28 }, (_, i) => i + 1) as day (day)}
-										<option value={day}>{day}</option>
-									{/each}
-								</select>
-								<span class="lead">de chaque mois, à</span>
-								<input type="time" bind:value={spec.time} />
-							{:else if spec.mode === 'interval'}
-								<span class="lead">toutes les</span>
-								<input class="num" type="number" min="1" max="999" bind:value={spec.every} />
-								<select bind:value={spec.unit}>
-									<option value="m">minutes</option>
-									<option value="h">heures</option>
-									<option value="d">jours</option>
-								</select>
-							{:else if spec.mode === 'once'}
-								<span class="lead">le</span>
-								<input type="datetime-local" bind:value={spec.at} />
-							{:else}
-								<input
-									class="grow"
-									bind:value={spec.raw}
-									placeholder="0 8 * * 1-5"
-									autocapitalize="off"
-									autocorrect="off"
-									spellcheck="false"
-								/>
-							{/if}
-						</div>
-
-						{#if spec.mode === 'advanced'}
-							<p class="muted small">
-								Expression cron à cinq champs, « every 30m », « 2h » ou une date ISO. Utile pour ce
-								que les choix ci-dessus ne couvrent pas (« 0 8 * * 1-5 » : en semaine seulement).
-							</p>
-						{/if}
-						{#if spec.mode === 'monthly'}
-							<p class="muted small">
-								Le 29, le 30 et le 31 sauteraient des mois : la liste s'arrête au 28.
-							</p>
-						{/if}
-
-						<p class="preview" class:bad={parsed.kind === null}>
-							{parsed.kind === null ? parsed.error : `Tournera ${parsed.display}.`}
-						</p>
-					</fieldset>
-
-					<label>
-						Instruction pour Hermes
-						<textarea
-							bind:value={instruction}
-							rows="5"
-							maxlength={limit}
-							placeholder="Résume les nouveautés tech du jour en cinq puces."
-						></textarea>
-					</label>
+						{/each}
+					</div>
 					<p class="muted small">
-						L'instruction doit se suffire à elle-même : la tâche tourne dans sa propre conversation,
-						sans le contexte de celle-ci.
 						{#if agentId}
-							<br />Prompt envoyé : {composed.prompt.length} caractères, dont {composed.personaChars}
-							pour la fiche de l'agent.
+							La fiche de cet agent part avec la tâche : elle s'exécutera avec sa personnalité et
+							son équipe.
+						{:else}
+							La tâche tournera avec le prompt système par défaut de Hermes.
 						{/if}
 					</p>
-					{#if composed.clipped}
-						<p class="preview bad">
-							L'instruction est trop longue pour laisser passer la fiche de l'agent en entier :
-							raccourcissez-la, ou choisissez « Hermes par défaut ».
-						</p>
-					{/if}
+				</fieldset>
 
-					{#if jobsStore.deliveryChoices.length > 1}
-						<label>
-							Livraison
-							<select bind:value={deliver}>
-								{#each jobsStore.deliveryChoices as target (target.id)}
-									<option value={target.id}>{targetLabel(target)}</option>
+				<fieldset class="when">
+					<legend>Quand</legend>
+					<div class="chips modes">
+						{#each SCHEDULE_MODES as m (m.value)}
+							<button
+								type="button"
+								class:sel={spec.mode === m.value}
+								onclick={() => (spec = { ...spec, mode: m.value })}>{m.label}</button
+							>
+						{/each}
+					</div>
+
+					<div class="fields">
+						{#if spec.mode === 'daily'}
+							<span class="lead">à</span>
+							<input type="time" bind:value={spec.time} />
+						{:else if spec.mode === 'weekly'}
+							<span class="lead">chaque</span>
+							<select bind:value={spec.weekday}>
+								{#each WEEKDAYS as day (day.value)}
+									<option value={day.value}>{day.label}</option>
 								{/each}
 							</select>
-						</label>
-					{/if}
-					<p class="muted small">{deliveryHint(deliver)}</p>
-
-					<div class="actions">
-						<button onclick={() => (editing = null)}>Annuler</button>
-						<button class="primary" disabled={!canSubmit} onclick={submit}>
-							{jobsStore.creating
-								? 'Enregistrement…'
-								: editing
-									? 'Enregistrer'
-									: 'Planifier'}
-						</button>
+							<span class="lead">à</span>
+							<input type="time" bind:value={spec.time} />
+						{:else if spec.mode === 'monthly'}
+							<span class="lead">le</span>
+							<select bind:value={spec.monthday}>
+								{#each Array.from({ length: 28 }, (_, i) => i + 1) as day (day)}
+									<option value={day}>{day}</option>
+								{/each}
+							</select>
+							<span class="lead">de chaque mois, à</span>
+							<input type="time" bind:value={spec.time} />
+						{:else if spec.mode === 'interval'}
+							<span class="lead">toutes les</span>
+							<input class="num" type="number" min="1" max="999" bind:value={spec.every} />
+							<select bind:value={spec.unit}>
+								<option value="m">minutes</option>
+								<option value="h">heures</option>
+								<option value="d">jours</option>
+							</select>
+						{:else if spec.mode === 'once'}
+							<span class="lead">le</span>
+							<input type="datetime-local" bind:value={spec.at} />
+						{:else}
+							<input
+								class="grow"
+								bind:value={spec.raw}
+								placeholder="0 8 * * 1-5"
+								autocapitalize="off"
+								autocorrect="off"
+								spellcheck="false"
+							/>
+						{/if}
 					</div>
-				</div>
-			{:else}
-				<button class="new" onclick={() => startCreate()}>＋ Nouvelle tâche</button>
 
-				{#if jobsStore.jobs === null && jobsStore.loading}
-					<p class="none">Chargement…</p>
-				{:else if jobsStore.sorted.length === 0}
-					<p class="none">
-						Aucune tâche planifiée. Un rappel dans deux heures ou un résumé chaque matin, confié à
-						l'agent de votre choix, c'est ici.
+					{#if spec.mode === 'advanced'}
+						<p class="muted small">
+							Expression cron à cinq champs, « every 30m », « 2h » ou une date ISO. Utile pour ce
+							que les choix ci-dessus ne couvrent pas (« 0 8 * * 1-5 » : en semaine seulement).
+						</p>
+					{/if}
+					{#if spec.mode === 'monthly'}
+						<p class="muted small">
+							Le 29, le 30 et le 31 sauteraient des mois : la liste s'arrête au 28.
+						</p>
+					{/if}
+
+					<p class="preview" class:bad={parsed.kind === null}>
+						{parsed.kind === null ? parsed.error : `Tournera ${parsed.display}.`}
+					</p>
+				</fieldset>
+
+				<label>
+					Instruction pour Hermes
+					<textarea
+						bind:value={instruction}
+						rows="5"
+						maxlength={limit}
+						placeholder="Résume les nouveautés tech du jour en cinq puces."
+					></textarea>
+				</label>
+				<p class="muted small">
+					L'instruction doit se suffire à elle-même : la tâche tourne dans sa propre conversation,
+					sans le contexte de celle-ci.
+					{#if agentId}
+						<br />Prompt envoyé : {composed.prompt.length} caractères, dont {composed.personaChars}
+						pour la fiche de l'agent.
+					{/if}
+				</p>
+				{#if composed.clipped}
+					<p class="preview bad">
+						L'instruction est trop longue pour laisser passer la fiche de l'agent en entier :
+						raccourcissez-la, ou choisissez « Hermes par défaut ».
 					</p>
 				{/if}
 
-				<ul class="jobs">
-					{#each jobsStore.sorted as job (job.id)}
-						{@const state = jobState(job)}
-						{@const agent = agents.byId(job.agent_id)}
-						<li class:paused={state.key === 'paused'}>
-							<div class="row">
-								<span class="icon" title={state.label}>{state.icon}</span>
-								<span class="title">{job.name}</span>
-								<span class="when">{scheduleDisplay(job)}</span>
-							</div>
-							{#if agent}
-								<span class="owner" style="--agent: {agentColor(agent)}">
-									<span class="dot"></span>{agentLabel(agent)}
-								</span>
-							{/if}
-							{#if job.instruction || job.prompt}
-								<p class="prompt">{job.instruction || job.prompt}</p>
-							{/if}
-							<div class="meta">
-								<span class="muted small">{metaLine(job)}</span>
-							</div>
-							{#if job.persona_stale && canEditJob(job)}
-								<p class="stale">
-									La fiche de {agent ? agent.name : "l'agent"} a changé depuis.
-									<button
-										disabled={jobsStore.busyId === job.id}
-										onclick={() => jobsStore.resync(job)}>Mettre à jour</button
-									>
-								</p>
-							{/if}
-							{#if job.last_error}
-								<p class="err">{job.last_error}</p>
-							{/if}
-							<div class="ops">
-								<button
-									disabled={jobsStore.busyId === job.id}
-									onclick={() => jobsStore.act(job.id!, 'run')}>Lancer</button
-								>
-								<button
-									disabled={jobsStore.busyId === job.id}
-									onclick={() => jobsStore.act(job.id!, state.key === 'paused' ? 'resume' : 'pause')}
-								>
-									{state.key === 'paused' ? 'Reprendre' : 'Mettre en pause'}
-								</button>
-								<button disabled={jobsStore.busyId === job.id} onclick={() => startEdit(job)}>
-									Modifier
-								</button>
-								<button disabled={jobsStore.busyId === job.id} onclick={() => startCreate(job)}>
-									Dupliquer
-								</button>
-								<button
-									class="danger"
-									disabled={jobsStore.busyId === job.id}
-									onclick={() => confirmRemove(job.id!, job.name ?? job.id!)}>Supprimer</button
-								>
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</div>
-
-		<footer>
-			<span class="muted small">
-				{#if jobsStore.unavailable}
-					&nbsp;
-				{:else if editing !== null}
-					{modeLabel(spec.mode)} · {parsed.kind === null ? 'horaire à compléter' : parsed.display}
-				{:else}
-					Une tâche tourne côté Pi avec tous les outils de Hermes.
+				{#if jobsStore.deliveryChoices.length > 1}
+					<label>
+						Livraison
+						<select bind:value={deliver}>
+							{#each jobsStore.deliveryChoices as target (target.id)}
+								<option value={target.id}>{targetLabel(target)}</option>
+							{/each}
+						</select>
+					</label>
 				{/if}
-			</span>
-			<button onclick={() => jobsStore.refresh()} disabled={jobsStore.loading}>Actualiser</button>
-		</footer>
+				<p class="muted small">{deliveryHint(deliver)}</p>
+
+				<div class="actions">
+					<button onclick={() => (editing = null)}>Annuler</button>
+					<button class="primary" disabled={!canSubmit} onclick={submit}>
+						{jobsStore.creating
+							? 'Enregistrement…'
+							: editing
+								? 'Enregistrer'
+								: 'Planifier'}
+					</button>
+				</div>
+			</div>
+		{:else}
+			<button class="new" onclick={() => startCreate()}>＋ Nouvelle tâche</button>
+
+			{#if jobsStore.jobs === null && jobsStore.loading}
+				<p class="none">Chargement…</p>
+			{:else if jobsStore.sorted.length === 0}
+				<p class="none">
+					Aucune tâche planifiée. Un rappel dans deux heures ou un résumé chaque matin, confié à
+					l'agent de votre choix, c'est ici.
+				</p>
+			{/if}
+
+			<ul class="jobs">
+				{#each jobsStore.sorted as job (job.id)}
+					{@const state = jobState(job)}
+					{@const agent = agents.byId(job.agent_id)}
+					<li class:paused={state.key === 'paused'}>
+						<div class="row">
+							<span class="icon" title={state.label}>{state.icon}</span>
+							<span class="title">{job.name}</span>
+							<span class="when">{scheduleDisplay(job)}</span>
+						</div>
+						{#if agent}
+							<span class="owner" style="--agent: {agentColor(agent)}">
+								<span class="dot"></span>{agentLabel(agent)}
+							</span>
+						{/if}
+						{#if job.instruction || job.prompt}
+							<p class="prompt">{job.instruction || job.prompt}</p>
+						{/if}
+						<div class="meta">
+							<span class="muted small">{metaLine(job)}</span>
+						</div>
+						{#if job.persona_stale && canEditJob(job)}
+							<p class="stale">
+								La fiche de {agent ? agent.name : "l'agent"} a changé depuis.
+								<button
+									disabled={jobsStore.busyId === job.id}
+									onclick={() => jobsStore.resync(job)}>Mettre à jour</button
+								>
+							</p>
+						{/if}
+						{#if job.last_error}
+							<p class="err">{job.last_error}</p>
+						{/if}
+						<div class="ops">
+							<button
+								disabled={jobsStore.busyId === job.id}
+								onclick={() => jobsStore.act(job.id!, 'run')}>Lancer</button
+							>
+							<button
+								disabled={jobsStore.busyId === job.id}
+								onclick={() => jobsStore.act(job.id!, state.key === 'paused' ? 'resume' : 'pause')}
+							>
+								{state.key === 'paused' ? 'Reprendre' : 'Mettre en pause'}
+							</button>
+							<button disabled={jobsStore.busyId === job.id} onclick={() => startEdit(job)}>
+								Modifier
+							</button>
+							<button disabled={jobsStore.busyId === job.id} onclick={() => startCreate(job)}>
+								Dupliquer
+							</button>
+							<button
+								class="danger"
+								disabled={jobsStore.busyId === job.id}
+								onclick={() => confirmRemove(job.id!, job.name ?? job.id!)}>Supprimer</button
+							>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	</div>
-{/if}
+
+	{#snippet footer()}
+		<span class="foot-note">
+			{#if jobsStore.unavailable}
+				&nbsp;
+			{:else if editing !== null}
+				{modeLabel(spec.mode)} · {parsed.kind === null ? 'horaire à compléter' : parsed.display}
+			{:else}
+				Une tâche tourne côté Pi avec tous les outils de Hermes.
+			{/if}
+		</span>
+		<button class="refresh" onclick={() => jobsStore.refresh()} disabled={jobsStore.loading}>
+			Actualiser
+		</button>
+	{/snippet}
+</Modal>
 
 <style>
-	.scrim {
-		position: fixed;
-		inset: 0;
-		z-index: 150;
-		background: var(--scrim);
-	}
-	.panel {
-		position: fixed;
-		z-index: 151;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		width: min(620px, calc(100vw - 20px));
-		max-height: min(86vh, calc(100dvh - 20px));
-		display: flex;
-		flex-direction: column;
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-panel);
-		box-shadow: var(--shadow);
-		overflow: hidden;
-	}
-	header,
-	footer {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 12px 16px;
-	}
-	header {
-		align-items: baseline;
-		border-bottom: 1px solid var(--border-soft);
-	}
-	footer {
-		border-top: 1px solid var(--border-soft);
-	}
-	footer .muted {
+	.foot-note {
 		flex: 1;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	h2 {
-		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
-	}
-	header .muted {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.x {
-		color: var(--text-faint);
-		padding: 2px 6px;
+		color: var(--text-muted);
+		font-size: 12px;
 	}
 	.body {
 		flex: 1;
@@ -587,7 +532,7 @@
 	.ops button,
 	.stale button,
 	.actions button,
-	footer button {
+	.refresh {
 		padding: 5px 11px;
 		border: 1px solid var(--border);
 		border-radius: 7px;
@@ -596,7 +541,7 @@
 	.ops button:hover:not(:disabled),
 	.stale button:hover:not(:disabled),
 	.actions button:hover:not(:disabled),
-	footer button:hover:not(:disabled) {
+	.refresh:hover:not(:disabled) {
 		background: var(--bg-hover);
 	}
 	.danger:not(:disabled) {
@@ -748,21 +693,5 @@
 		text-align: center;
 		color: var(--text-faint);
 		font-size: 13px;
-	}
-
-	/* Phone: come up from the bottom edge instead of floating in the middle,
-	   rounded on top only. Margins on a 390px screen are lost width. */
-	@media (max-width: 820px) {
-		.panel {
-			top: auto;
-			bottom: 0;
-			left: 0;
-			transform: none;
-			width: 100%;
-			max-height: 92dvh;
-			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-			border-bottom: none;
-			padding-bottom: env(safe-area-inset-bottom);
-		}
 	}
 </style>

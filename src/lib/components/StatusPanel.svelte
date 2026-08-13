@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Modal from './Modal.svelte';
 	import PushSettings from './PushSettings.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { usageSummary } from '$lib/sessions';
@@ -70,159 +71,116 @@
 	}
 </script>
 
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="scrim" onclick={onclose}></div>
-	<div class="panel" role="dialog" aria-modal="true" aria-label="État du système">
-		<header>
-			<h2>État du système</h2>
-			<button class="x" onclick={onclose} aria-label="Fermer">✕</button>
-		</header>
+<Modal {open} title="État du système" width={560} {onclose}>
+	<div class="body">
+		{#if chat.status === null}
+			<p class="muted">Chargement…</p>
+		{:else if chat.status.healthError}
+			<p class="err">⚠️ {chat.status.healthError}</p>
+		{/if}
 
-		<div class="body">
-			{#if chat.status === null}
-				<p class="muted">Chargement…</p>
-			{:else if chat.status.healthError}
-				<p class="err">⚠️ {chat.status.healthError}</p>
-			{/if}
-
-			{#if health}
-				<div class="hero">
-					<span class="big">{icon(health.readiness?.status ?? health.status)}</span>
-					<div>
-						<div class="strong">Hermes {health.version}</div>
-						<div class="muted">
-							gateway {health.gateway_state ?? '?'} · PID {health.pid}
-							{#if health.gateway_busy}· occupé{/if}
-						</div>
+		{#if health}
+			<div class="hero">
+				<span class="big">{icon(health.readiness?.status ?? health.status)}</span>
+				<div>
+					<div class="strong">Hermes {health.version}</div>
+					<div class="muted">
+						gateway {health.gateway_state ?? '?'} · PID {health.pid}
+						{#if health.gateway_busy}· occupé{/if}
 					</div>
 				</div>
+			</div>
 
-				<h3>Contrôles</h3>
-				<ul class="checks">
-					{#each checks as [name, check] (name)}
-						<li>
-							<span>{icon(String(check.status))}</span>
-							<span class="name">{LABELS[name] ?? name}</span>
-							<span class="muted small">{detail(name, check)}</span>
-						</li>
-					{/each}
-				</ul>
-
-				<h3>Plateformes</h3>
-				<ul class="checks">
-					{#each Object.entries(health.platforms ?? {}) as [name, info] (name)}
-						<li>
-							<span>{info.state === 'connected' ? '🟢' : '🔴'}</span>
-							<span class="name">{name}</span>
-							<span class="muted small">{info.state ?? '?'}{info.error_code ? ` · ${info.error_code}` : ''}</span>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-
-			<h3>Cette interface</h3>
+			<h3>Contrôles</h3>
 			<ul class="checks">
-				<li>
-					<span>⚙️</span>
-					<span class="name">Tours simultanés</span>
-					<span class="muted small">
-						{chat.status?.turns.active ?? 0} / {chat.status?.turns.limit ?? '—'}
-					</span>
-				</li>
-				<li>
-					<span>🛠️</span>
-					<span class="name">Outils exposés</span>
-					<span class="muted small">
-						{chat.toolCount}{chat.mcpTools.length ? ` · dont ${chat.mcpTools.length} MCP` : ''}
-					</span>
-				</li>
-				<li>
-					<span>📚</span>
-					<span class="name">Skills</span>
-					<span class="muted small">{chat.skills.length}</span>
-				</li>
-				{#if usageSummary(chat.current)}
+				{#each checks as [name, check] (name)}
 					<li>
-						<span>📊</span>
-						<span class="name">Conversation ouverte</span>
-						<span class="muted small">{usageSummary(chat.current)}</span>
+						<span>{icon(String(check.status))}</span>
+						<span class="name">{LABELS[name] ?? name}</span>
+						<span class="muted small">{detail(name, check)}</span>
 					</li>
-				{/if}
+				{/each}
 			</ul>
 
-			<PushSettings />
+			<h3>Plateformes</h3>
+			<ul class="checks">
+				{#each Object.entries(health.platforms ?? {}) as [name, info] (name)}
+					<li>
+						<span>{info.state === 'connected' ? '🟢' : '🔴'}</span>
+						<span class="name">{name}</span>
+						<span class="muted small">{info.state ?? '?'}{info.error_code ? ` · ${info.error_code}` : ''}</span>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 
-			{#if chat.status?.jobsAvailable}
-				<h3>
-					Tâches planifiées
-					<button class="link" onclick={onopenJobs}>gérer</button>
-				</h3>
-				{#if jobs.length === 0}
-					<p class="muted small empty">Aucune tâche planifiée.</p>
-				{:else}
-					<ul class="checks">
-						{#each jobs as job (job.id ?? job.name)}
-							{@const state = jobState(job)}
-							<li>
-								<span title={state.label}>{state.icon}</span>
-								<span class="name">{job.name ?? job.id}</span>
-								<span class="muted small">{jobLine(job)}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
+		<h3>Cette interface</h3>
+		<ul class="checks">
+			<li>
+				<span>⚙️</span>
+				<span class="name">Tours simultanés</span>
+				<span class="muted small">
+					{chat.status?.turns.active ?? 0} / {chat.status?.turns.limit ?? '—'}
+				</span>
+			</li>
+			<li>
+				<span>🛠️</span>
+				<span class="name">Outils exposés</span>
+				<span class="muted small">
+					{chat.toolCount}{chat.mcpTools.length ? ` · dont ${chat.mcpTools.length} MCP` : ''}
+				</span>
+			</li>
+			<li>
+				<span>📚</span>
+				<span class="name">Skills</span>
+				<span class="muted small">{chat.skills.length}</span>
+			</li>
+			{#if usageSummary(chat.current)}
+				<li>
+					<span>📊</span>
+					<span class="name">Conversation ouverte</span>
+					<span class="muted small">{usageSummary(chat.current)}</span>
+				</li>
 			{/if}
+		</ul>
 
-			{#if chat.mcpTools.length}
-				<h3>Outils MCP</h3>
-				<p class="tools">
-					{#each chat.mcpTools as tool (tool)}<code>{tool}</code>{/each}
-				</p>
+		<PushSettings />
+
+		{#if chat.status?.jobsAvailable}
+			<h3>
+				Tâches planifiées
+				<button class="link" onclick={onopenJobs}>gérer</button>
+			</h3>
+			{#if jobs.length === 0}
+				<p class="muted small empty">Aucune tâche planifiée.</p>
+			{:else}
+				<ul class="checks">
+					{#each jobs as job (job.id ?? job.name)}
+						{@const state = jobState(job)}
+						<li>
+							<span title={state.label}>{state.icon}</span>
+							<span class="name">{job.name ?? job.id}</span>
+							<span class="muted small">{jobLine(job)}</span>
+						</li>
+					{/each}
+				</ul>
 			{/if}
-		</div>
+		{/if}
 
-		<footer>
-			<button onclick={() => chat.refreshStatus()}>Actualiser</button>
-		</footer>
+		{#if chat.mcpTools.length}
+			<h3>Outils MCP</h3>
+			<p class="tools">
+				{#each chat.mcpTools as tool (tool)}<code>{tool}</code>{/each}
+			</p>
+		{/if}
 	</div>
-{/if}
+
+	{#snippet footer()}
+		<button class="refresh" onclick={() => chat.refreshStatus()}>Actualiser</button>
+	{/snippet}
+</Modal>
 
 <style>
-	.scrim {
-		position: fixed;
-		inset: 0;
-		z-index: 150;
-		background: var(--scrim);
-	}
-	.panel {
-		position: fixed;
-		z-index: 151;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		width: min(560px, calc(100vw - 24px));
-		max-height: 84vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-panel);
-		box-shadow: var(--shadow);
-		overflow: hidden;
-	}
-	header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 12px 16px;
-		border-bottom: 1px solid var(--border-soft);
-	}
-	h2 {
-		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
-	}
 	h3 {
 		margin: 18px 0 6px;
 		font-size: 11px;
@@ -248,10 +206,6 @@
 	}
 	.empty {
 		margin: 0;
-	}
-	.x {
-		color: var(--text-faint);
-		padding: 2px 6px;
 	}
 	.body {
 		flex: 1;
@@ -319,34 +273,14 @@
 		border-radius: 5px;
 		color: var(--text-muted);
 	}
-	footer {
-		padding: 10px 16px;
-		border-top: 1px solid var(--border-soft);
-		text-align: right;
-	}
-	footer button {
+	.refresh {
+		margin-left: auto;
 		padding: 5px 12px;
 		border: 1px solid var(--border);
 		border-radius: 7px;
 		font-size: 13px;
 	}
-	footer button:hover {
+	.refresh:hover {
 		background: var(--bg-hover);
-	}
-
-	/* Phone: come up from the bottom edge instead of floating in the middle,
-	   rounded on top only. Margins on a 390px screen are lost width. */
-	@media (max-width: 820px) {
-		.panel {
-			top: auto;
-			bottom: 0;
-			left: 0;
-			transform: none;
-			width: 100%;
-			max-height: 92dvh;
-			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-			border-bottom: none;
-			padding-bottom: env(safe-area-inset-bottom);
-		}
 	}
 </style>

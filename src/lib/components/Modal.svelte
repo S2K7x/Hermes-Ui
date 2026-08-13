@@ -1,0 +1,137 @@
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+
+	/**
+	 * The shell every settings panel shares: scrim, centred dialog, title bar
+	 * with a close button, optional footer — and, under 820px, the bottom sheet
+	 * of point 20 in CLAUDE.md.
+	 *
+	 * It owns the *frame* only. Escape stays with the panel, because what it
+	 * means differs (back out of a form, guard unsaved edits, close), and the
+	 * body keeps its own padding and layout.
+	 */
+	interface Props {
+		open: boolean;
+		/** Title bar text. Also the accessible name unless `label` overrides it. */
+		title: string;
+		label?: string;
+		/** Natural width in px; the frame still shrinks to fit a narrow window. */
+		width: number;
+		/** Take the full available height instead of hugging the content. */
+		fill?: boolean;
+		/** Scrim click and ✕. The panel decides what closing means. */
+		onclose: () => void;
+		subtitle?: Snippet;
+		children: Snippet;
+		footer?: Snippet;
+	}
+	let { open, title, label, width, fill = false, onclose, subtitle, children, footer }: Props =
+		$props();
+</script>
+
+{#if open}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div class="scrim" onclick={onclose}></div>
+	<div
+		class="panel"
+		class:fill
+		role="dialog"
+		aria-modal="true"
+		aria-label={label ?? title}
+		style="--panel-width: {width}px"
+	>
+		<header>
+			<h2>{title}</h2>
+			{#if subtitle}<span class="sub">{@render subtitle()}</span>{/if}
+			<button class="x" onclick={onclose} aria-label="Fermer">✕</button>
+		</header>
+
+		{@render children()}
+
+		{#if footer}
+			<footer>{@render footer()}</footer>
+		{/if}
+	</div>
+{/if}
+
+<style>
+	.scrim {
+		position: fixed;
+		inset: 0;
+		z-index: 150;
+		background: var(--scrim);
+	}
+	.panel {
+		position: fixed;
+		z-index: 151;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: min(var(--panel-width), calc(100vw - 20px));
+		max-height: min(88vh, calc(100dvh - 20px));
+		display: flex;
+		flex-direction: column;
+		background: var(--bg-raised);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-panel);
+		box-shadow: var(--shadow);
+		overflow: hidden;
+	}
+	.panel.fill {
+		height: min(88vh, calc(100dvh - 20px));
+	}
+	header {
+		display: flex;
+		align-items: baseline;
+		gap: 10px;
+		padding: 12px 16px;
+		border-bottom: 1px solid var(--border-soft);
+	}
+	h2 {
+		margin: 0;
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.sub {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.x {
+		margin-left: auto;
+		padding: 2px 6px;
+		color: var(--text-faint);
+	}
+	footer {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 12px 16px;
+		border-top: 1px solid var(--border-soft);
+	}
+
+	/* Phone: come up from the bottom edge instead of floating in the middle,
+	   rounded on top only. Margins on a 390px screen are lost width. */
+	@media (max-width: 820px) {
+		.panel {
+			top: auto;
+			bottom: 0;
+			left: 0;
+			transform: none;
+			width: 100%;
+			max-height: 92dvh;
+			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+			border-bottom: none;
+			padding-bottom: env(safe-area-inset-bottom);
+		}
+		/* Thumb-sized close target where a thumb is what taps it. */
+		.x {
+			min-width: 44px;
+			min-height: 44px;
+		}
+	}
+</style>
