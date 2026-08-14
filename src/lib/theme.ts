@@ -268,6 +268,31 @@ export function ensureContrast(color: string, ink: string, toward: string, targe
 	return toward;
 }
 
+/**
+ * Nudge `color` toward `toward` until it is visible on *every* surface it can
+ * be drawn on.
+ *
+ * This is the focus ring. WCAG 1.4.11 asks 3:1 for a control's visual
+ * indicator, and the accent alone does not always give it: a deep indigo on
+ * the near-black background of "Nocturne", or any dark colour the user types
+ * into the accent field, would draw a ring nobody can see. Walking it toward
+ * the text ink keeps it recognisably the accent while making it stand out —
+ * and `toward` is the fallback, since text on its own surfaces is what the
+ * presets already guarantee.
+ */
+export function ensureVisible(
+	color: string,
+	backgrounds: string[],
+	toward: string,
+	target = 3
+): string {
+	for (let t = 0; t <= 1.0001; t += 0.05) {
+		const candidate = mixHex(color, toward, t);
+		if (backgrounds.every((bg) => contrastRatio(candidate, bg) >= target)) return candidate;
+	}
+	return toward;
+}
+
 /** What the settings panel shows next to a colour input. */
 export interface Readability {
 	ink: string;
@@ -354,6 +379,9 @@ export function themeVariables(raw: unknown): Record<string, string> {
 		'--accent': p.accent,
 		'--accent-ink': readableInk(p.accent),
 		'--accent-soft': mix(p.surface, p.accent, step.soft),
+		// The keyboard focus ring, drawn on the page, on a panel and on the
+		// sunken fields alike — hence the three backgrounds.
+		'--focus': ensureVisible(p.accent, [p.surface, p.bg, p.sunken], p.text),
 		'--accent-2': p.accent2,
 		'--accent-2-ink': readableInk(p.accent2),
 		'--accent-2-soft': mix(p.surface, p.accent2, step.soft),

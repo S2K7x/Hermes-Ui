@@ -7,6 +7,7 @@ import {
 	contrastRatio,
 	effectivePalette,
 	ensureContrast,
+	ensureVisible,
 	luminance,
 	mixHex,
 	normalizeHex,
@@ -85,6 +86,52 @@ test('ensureContrast copes with a colour it cannot fix by deepening', () => {
 	// Anchor and colour both bright: the loop runs out and returns the anchor
 	// rather than looping forever or returning something unreadable.
 	assert.equal(ensureContrast('#ffff00', '#ffffff', '#fffff0'), '#fffff0');
+});
+
+test('ensureVisible leaves a colour that already stands out alone', () => {
+	// The default orange is already well clear of the dark surfaces.
+	assert.equal(ensureVisible('#ee7c2b', ['#221f1c', '#141312'], '#f2ebe2'), '#ee7c2b');
+});
+
+test('ensureVisible lifts a colour that would vanish on one of the backgrounds', () => {
+	// Fine on the pale surface, invisible on the dark one: the ring must clear
+	// *both*, so it is nudged toward the ink.
+	const ring = ensureVisible('#111111', ['#ffffff', '#101010'], '#ffffff');
+	assert.notEqual(ring, '#111111');
+	assert.ok(contrastRatio(ring, '#101010') >= 3);
+	assert.ok(contrastRatio(ring, '#ffffff') >= 3);
+});
+
+test('ensureVisible falls back on the ink rather than looping', () => {
+	// Nothing between white and white can clear a white background.
+	assert.equal(ensureVisible('#ffffff', ['#ffffff'], '#fffffe'), '#fffffe');
+});
+
+test('the focus ring stays visible whatever accent is chosen', () => {
+	// WCAG 1.4.11: a focus indicator needs 3:1 against what it sits on, and it
+	// sits on the page, on a panel and inside a sunken field.
+	const accents = [
+		...PRESETS.flatMap((p) => [p.dark.accent, p.light.accent]),
+		'#ffff00',
+		'#ffffff',
+		'#000000',
+		'#7f7f7f',
+		'#141312'
+	];
+	for (const preset of PRESETS) {
+		for (const mode of ['dark', 'light'] as const) {
+			for (const accent of accents) {
+				const ring = themeVariables({ preset: preset.id, mode, accent })['--focus'];
+				const palette = effectivePalette(normalizeTheme({ preset: preset.id, mode, accent }));
+				for (const bg of [palette.surface, palette.bg, palette.sunken]) {
+					assert.ok(
+						contrastRatio(ring, bg) >= 3,
+						`${preset.id}/${mode}/${accent} → ${ring} is ${contrastRatio(ring, bg).toFixed(2)}:1 on ${bg}`
+					);
+				}
+			}
+		}
+	}
 });
 
 test('readability reports the ratio and whether AA is met', () => {

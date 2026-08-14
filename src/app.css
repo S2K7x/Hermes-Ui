@@ -25,6 +25,7 @@
 	--accent: #ee7c2b;
 	--accent-ink: #1b1613;
 	--accent-soft: #3d2b1c;
+	--focus: #ee7c2b;
 	--accent-2: #a6be79;
 	--accent-2-ink: #1b1613;
 	--accent-2-soft: #2f3324;
@@ -55,6 +56,7 @@
 	--accent: #ee7c2b;
 	--accent-ink: #1b1613;
 	--accent-soft: #fcebdc;
+	--focus: #b46126;
 	--accent-2: #a6be79;
 	--accent-2-ink: #1b1613;
 	--accent-2-soft: #eaf0dd;
@@ -117,6 +119,17 @@ button {
 	background: none;
 	border: none;
 	cursor: pointer;
+}
+
+/* Keyboard focus has to be visible: every control here is a bare button or a
+   borderless field, so the browser's default ring is the only thing that says
+   where the caret is — and half the app used to remove it. `:focus-visible`,
+   not `:focus`, so a mouse click never draws it. The colour is themed and
+   kept at 3:1 on the page, on a panel and in a sunken field (see
+   `ensureVisible` in src/lib/theme.ts). */
+:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
 }
 
 input,

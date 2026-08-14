@@ -354,7 +354,6 @@
 		border: 1px solid var(--border-soft);
 		border-radius: var(--radius-pill);
 		font-size: 13px;
-		outline: none;
 	}
 	.search:focus {
 		border-color: var(--accent);
@@ -430,7 +429,6 @@
 		border: 1px solid var(--accent);
 		border-radius: 6px;
 		font-size: 13.5px;
-		outline: none;
 	}
 	.menu {
 		position: absolute;

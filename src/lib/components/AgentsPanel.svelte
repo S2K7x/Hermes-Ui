@@ -491,7 +491,6 @@
 		font-size: 13.5px;
 		font-family: inherit;
 		color: var(--text);
-		outline: none;
 	}
 	.form textarea {
 		resize: vertical;

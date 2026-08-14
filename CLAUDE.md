@@ -672,7 +672,7 @@ par `themeVariables()` en `color-mix(in oklab, …)`. C'est ce qui fait qu'un
 accent choisi ne peut pas laisser un survol périmé derrière lui : la couleur
 n'est écrite qu'à un seul endroit.
 
-Deux choses ne sont **pas** laissées au CSS, parce qu'elles demandent un calcul
+Trois choses ne sont **pas** laissées au CSS, parce qu'elles demandent un calcul
 qu'aucune feuille de style ne sait faire, et sont donc des fonctions pures
 testées :
 
@@ -684,6 +684,9 @@ testées :
   plein, texte blanc » reste vrai même si l'utilisateur choisit un jaune. Le
   test rejoue tous les accents des préréglages plus les cas pathologiques
   (`#ffff00`, `#ffffff`, `#7f7f7f`).
+- `ensureVisible()` pousse l'accent vers l'encre jusqu'à ce qu'il tienne 3:1 sur
+  **tous** les fonds où il sera dessiné. C'est `--focus`, l'anneau de focus
+  clavier — voir le point 22.
 
 Points de détail qui comptent :
 
@@ -775,6 +778,56 @@ propre `role="dialog"`. Les sept copies avaient déjà divergé (84 vs 86 vs 88v
 cible de fermeture à 44 px sur un seul, `env(safe-area-inset-bottom)` oublié
 là où le pied de page le posait déjà) : c'est ce que fait un bloc copié.
 
+### 22. Le focus appartient au cadre, et l'anneau est une couleur du thème
+
+Deux choses qu'aucun panneau ne faisait, et qui tiennent maintenant en un seul
+endroit chacune.
+
+**Le cadre possède le focus.** `Modal.svelte` déplace le focus sur la carte à
+l'ouverture, empêche Tab d'en sortir, et le rend à ce qui a ouvert le panneau à
+la fermeture. Trois choix, dans cet ordre d'importance :
+
+- Le focus va sur la **carte** (`tabindex="-1"`), pas sur le premier bouton :
+  un lecteur d'écran annonce alors le dialogue et son nom avant tout le reste,
+  et aucun champ ne vole le curseur — ce qui, sur iPhone, ferait monter le
+  clavier pour un panneau qu'on voulait seulement lire. `.panel:focus` n'a donc
+  pas d'anneau : l'annonce est le signal.
+- Le piège n'agit **qu'aux extrémités** : `trapIndex()` (`src/lib/a11y.ts`,
+  pur et testé) ne renvoie un indice que si la tabulation allait sortir. Ailleurs
+  le navigateur fait son travail, ce qui laisse intactes la sélection de texte
+  et la saisie dans un champ.
+- Les arrêts sont filtrés sur `getClientRects().length > 0` — un formulaire
+  replié ne doit pas capturer le focus. `offsetParent` ne conviendrait pas :
+  la carte est en `position: fixed`.
+
+Mesuré sur l'application construite, pilotée en CDP : à l'ouverture du panneau
+Raccourcis le focus est bien sur `[role=dialog]` ; Tab tourne sur le seul arrêt
+(✕) sans jamais sortir ; Échap ferme et rend le focus au bouton « Raccourcis ».
+Sur le panneau Apparence (10 arrêts), Tab revient au premier après le dernier et
+⇧Tab passe du premier au dernier, sans fuite.
+
+**L'anneau de focus est un token.** `--focus` sort de `ensureVisible()`
+(`src/lib/theme.ts`) : l'accent, poussé vers l'encre juste assez pour tenir 3:1
+(WCAG 1.4.11) sur les **trois** fonds où il peut être dessiné — la page, un
+panneau, un champ creusé. Sans ça, l'indigo de « Nocturne » ou n'importe quelle
+couleur sombre saisie dans le champ d'accent donnerait un anneau invisible.
+`tests/theme.test.ts` rejoue les quatre préréglages × deux modes × les accents
+pathologiques.
+
+La règle globale est dans `app.css`, en `:focus-visible` (jamais `:focus` : un
+clic à la souris ne doit rien dessiner). Comme presque tout ici est un bouton nu
+ou un champ sans bordure, un `outline: none` posé dans un composant supprime la
+seule indication de position qui reste — douze le faisaient. `tests/a11y.test.ts`
+compte les `outline: none` restants et n'en tolère que trois, chacun justifié :
+le composeur (c'est la boîte qui s'allume, `:focus-within`), l'éditeur de skills
+(le curseur fait office d'indicateur sur une surface pleine page) et la carte
+modale ci-dessus.
+
+Dernier point du même ordre : un `<input type="file">` en `display: none` n'est
+**pas** dans l'ordre de tabulation, et son `<label>` ne peut pas prendre le
+focus à sa place — joindre une image était à la souris uniquement. L'input est
+donc masqué en 1 px transparent, et c'est le label qui porte l'anneau.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -834,6 +887,7 @@ src/
 │   │   ├── push.svelte.ts       abonnement Web Push + report de présence
 │   │   ├── theme.svelte.ts      palette active + cache d'avant-rendu
 │   │   └── toast.svelte.ts      notifications dans la page
+│   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus)
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── jobs.ts        horaires cron validés/traduits/composés, état et tri

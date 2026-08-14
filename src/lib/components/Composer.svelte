@@ -297,6 +297,7 @@
 				type="file"
 				accept="image/*"
 				multiple
+				aria-label="Joindre une image"
 				onchange={(e) => {
 					const input = e.currentTarget;
 					if (input.files) addFiles(input.files);
@@ -359,6 +360,11 @@
 		border-color: var(--accent);
 		background: var(--accent-soft);
 	}
+	/* The textarea has no ring of its own — a box inside a box — so the box
+	   itself is what says the keyboard is writing here. */
+	.composer:focus-within {
+		border-color: var(--focus);
+	}
 	.row {
 		display: flex;
 		align-items: flex-end;
@@ -391,8 +397,19 @@
 		opacity: 1;
 		background: var(--bg-hover);
 	}
+	/* Hidden, but still a stop for the keyboard: `display: none` took the file
+	   input out of the tab order, and its label cannot take focus in its place
+	   — attaching an image was mouse-only. */
 	.attach input {
-		display: none;
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		opacity: 0;
+		pointer-events: none;
+	}
+	.attach:focus-within {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
 	}
 	.prompt-btn {
 		line-height: 1;
@@ -523,7 +540,6 @@
 		border: 1px solid var(--border-soft);
 		border-radius: var(--radius-pill);
 		font-size: 13px;
-		outline: none;
 	}
 	.p-list {
 		overflow-y: auto;

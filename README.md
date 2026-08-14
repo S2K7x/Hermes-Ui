@@ -60,7 +60,11 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **PWA** installable sur téléphone : plein cadre, feuilles qui montent du bas,
   encoche et barre d'accueil respectées, composeur qui reste au-dessus du
   clavier iOS
-- **Raccourcis clavier** (`?` pour la liste)
+- **Raccourcis clavier** (`?` pour la liste). L'app se pilote entièrement au
+  clavier : le focus entre dans un panneau quand il s'ouvre, Tab n'en sort pas,
+  Échap le ferme et rend le focus au bouton d'origine — et chaque contrôle
+  porte un anneau de focus visible, dérivé de l'accent choisi et maintenu à
+  3:1 sur tous les fonds
 - **Détachement** d'un tour en cours (voir la limite ci-dessous)
 
 ### Robustesse

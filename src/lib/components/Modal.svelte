@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
+	import { FOCUSABLE_SELECTOR, trapIndex } from '$lib/a11y';
 
 	/**
 	 * The shell every settings panel shares: scrim, centred dialog, title bar
@@ -9,6 +10,10 @@
 	 * It owns the *frame* only. Escape stays with the panel, because what it
 	 * means differs (back out of a form, guard unsaved edits, close), and the
 	 * body keeps its own padding and layout.
+	 *
+	 * It also owns the focus, which no panel did: focus enters the dialog when
+	 * it opens, Tab cannot walk out of it into the page underneath, and closing
+	 * puts the caret back where it came from.
 	 */
 	interface Props {
 		open: boolean;
@@ -27,6 +32,48 @@
 	}
 	let { open, title, label, width, fill = false, onclose, subtitle, children, footer }: Props =
 		$props();
+
+	let card = $state<HTMLElement | null>(null);
+
+	/**
+	 * Focus follows the dialog.
+	 *
+	 * On open it moves onto the card itself rather than onto the first control:
+	 * a screen reader then announces the dialog and its name before anything
+	 * else, and no field steals the caret (which on iOS would raise the
+	 * keyboard for a panel the user only meant to read). On close it goes back
+	 * to whatever opened the dialog — usually the rail button — so the next Tab
+	 * carries on from there instead of restarting at the top of the page.
+	 */
+	$effect(() => {
+		if (!open) return;
+		const opener = document.activeElement;
+		void tick().then(() => card?.focus({ preventScroll: true }));
+		return () => {
+			if (opener instanceof HTMLElement && opener.isConnected) {
+				opener.focus({ preventScroll: true });
+			}
+		};
+	});
+
+	/** Tab wraps inside the dialog instead of walking into the page behind it. */
+	function ontrap(event: KeyboardEvent) {
+		if (event.key !== 'Tab' || !card) return;
+		// `getClientRects()` is how a hidden stop (a collapsed form, a panel not
+		// on screen) is told from a real one — it also works inside `position:
+		// fixed`, unlike `offsetParent`.
+		const stops = [...card.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
+			(el) => el.getClientRects().length > 0
+		);
+		const index = trapIndex(
+			stops.length,
+			stops.indexOf(document.activeElement as HTMLElement),
+			event.shiftKey
+		);
+		if (index === null && stops.length > 0) return;
+		event.preventDefault();
+		(index === null ? card : stops[index]).focus();
+	}
 </script>
 
 {#if open}
@@ -35,9 +82,12 @@
 	<div
 		class="panel"
 		class:fill
+		bind:this={card}
+		onkeydown={ontrap}
 		role="dialog"
 		aria-modal="true"
 		aria-label={label ?? title}
+		tabindex="-1"
 		style="--panel-width: {width}px"
 	>
 		<header>
@@ -76,6 +126,11 @@
 		border-radius: var(--radius-panel);
 		box-shadow: var(--shadow);
 		overflow: hidden;
+	}
+	/* The card takes the focus when it opens so the dialog is announced; the
+	   announcement is the signal, a ring around the whole panel is not. */
+	.panel:focus {
+		outline: none;
 	}
 	.panel.fill {
 		height: min(88vh, calc(100dvh - 20px));

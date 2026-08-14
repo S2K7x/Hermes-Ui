@@ -299,7 +299,6 @@
 		border: 1px solid var(--border-soft);
 		border-radius: 7px;
 		font-size: 13px;
-		outline: none;
 	}
 	.new {
 		flex: 0 0 auto;
@@ -453,7 +452,6 @@
 		border-radius: 7px;
 		font-size: 13.5px;
 		color: var(--text);
-		outline: none;
 	}
 	.form input:focus {
 		border-color: var(--border);

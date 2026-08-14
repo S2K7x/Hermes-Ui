@@ -114,7 +114,6 @@
 		border: 1px solid var(--border-soft);
 		border-radius: 10px;
 		font-size: 13px;
-		outline: none;
 	}
 	.items {
 		display: flex;

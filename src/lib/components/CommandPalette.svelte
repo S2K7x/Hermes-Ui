@@ -147,7 +147,6 @@
 		border: none;
 		border-bottom: 1px solid var(--border-soft);
 		font-size: 15px;
-		outline: none;
 	}
 	.rows {
 		flex: 1;

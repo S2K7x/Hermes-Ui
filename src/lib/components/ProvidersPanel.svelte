@@ -427,7 +427,6 @@
 		border-radius: 7px;
 		font-size: 13px;
 		color: var(--text);
-		outline: none;
 	}
 	.card {
 		margin-bottom: 10px;
@@ -500,7 +499,6 @@
 		border-radius: 7px;
 		font-size: 13px;
 		color: var(--text);
-		outline: none;
 	}
 	.editor select {
 		flex: 1;
@@ -511,7 +509,6 @@
 		border-radius: 7px;
 		font-size: 13px;
 		color: var(--text);
-		outline: none;
 	}
 	.actions {
 		display: flex;
