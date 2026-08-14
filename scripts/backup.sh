@@ -23,10 +23,36 @@ stamp=$(date +%Y%m%d_%H%M%S)
 work="${DEST}/${stamp}"
 mkdir -p "$work"
 
+# Online backup of a live SQLite file.
+#
+# The `sqlite3` CLI is NOT installed on this Pi (measured: `which sqlite3`
+# returns nothing), and `set -e` turned that into a silent no-backup — the
+# script died on its first database and left an empty directory behind, every
+# time it was run. Python's stdlib carries the same online-backup API
+# (`Connection.backup`, SQLITE_BACKUP under the hood), and python3 is part of
+# the base system, so it is the fallback rather than a new dependency.
 sqlite_backup() {
 	local src=$1 dst=$2
 	[ -f "$src" ] || return 0
-	sqlite3 "$src" ".backup '${dst}'"
+	if command -v sqlite3 >/dev/null 2>&1; then
+		sqlite3 "$src" ".backup '${dst}'"
+	elif command -v python3 >/dev/null 2>&1; then
+		python3 - "$src" "$dst" <<-'PY'
+			import sqlite3, sys
+			src, dst = sys.argv[1], sys.argv[2]
+			# Read-only on the source: a backup must never be able to write to
+			# the database the agent is using while it runs.
+			source = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+			target = sqlite3.connect(dst)
+			with target:
+			    source.backup(target)
+			target.close()
+			source.close()
+		PY
+	else
+		echo "ni sqlite3 ni python3 : impossible de sauvegarder ${src}" >&2
+		return 1
+	fi
 }
 
 sqlite_backup "${HERMES_HOME}/state.db" "${work}/state.db"

@@ -308,17 +308,6 @@
 					</label>
 				{/if}
 				<p class="muted small">{deliveryHint(deliver)}</p>
-
-				<div class="actions">
-					<button onclick={() => (editing = null)}>Annuler</button>
-					<button class="primary" disabled={!canSubmit} onclick={submit}>
-						{jobsStore.creating
-							? 'Enregistrement…'
-							: editing
-								? 'Enregistrer'
-								: 'Planifier'}
-					</button>
-				</div>
 			</div>
 		{:else}
 			<button class="new" onclick={() => startCreate()}>＋ Nouvelle tâche</button>
@@ -395,6 +384,9 @@
 	</div>
 
 	{#snippet footer()}
+		<!-- The form's own actions live here, not at the end of the body: the
+		     footer is the one part of the sheet that stays visible, and on a
+		     phone the submit button was below a five-row textarea. -->
 		<span class="foot-note">
 			{#if jobsStore.unavailable}
 				&nbsp;
@@ -404,9 +396,16 @@
 				Une tâche tourne côté Pi avec tous les outils de Hermes.
 			{/if}
 		</span>
-		<button class="refresh" onclick={() => jobsStore.refresh()} disabled={jobsStore.loading}>
-			Actualiser
-		</button>
+		{#if editing !== null && !jobsStore.unavailable}
+			<button class="refresh" onclick={() => (editing = null)}>Annuler</button>
+			<button class="refresh primary" disabled={!canSubmit} onclick={submit}>
+				{jobsStore.creating ? 'Enregistrement…' : editing ? 'Enregistrer' : 'Planifier'}
+			</button>
+		{:else}
+			<button class="refresh" onclick={() => jobsStore.refresh()} disabled={jobsStore.loading}>
+				Actualiser
+			</button>
+		{/if}
 	{/snippet}
 </Modal>
 
@@ -531,7 +530,6 @@
 	}
 	.ops button,
 	.stale button,
-	.actions button,
 	.refresh {
 		padding: 5px 11px;
 		border: 1px solid var(--border);
@@ -540,7 +538,6 @@
 	}
 	.ops button:hover:not(:disabled),
 	.stale button:hover:not(:disabled),
-	.actions button:hover:not(:disabled),
 	.refresh:hover:not(:disabled) {
 		background: var(--bg-hover);
 	}
@@ -669,11 +666,6 @@
 	}
 	.preview.bad {
 		color: var(--danger);
-	}
-	.actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
 	}
 	.muted {
 		color: var(--text-muted);

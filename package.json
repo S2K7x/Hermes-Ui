@@ -12,20 +12,20 @@
     "test": "node --experimental-strip-types --test \"tests/*.test.ts\""
   },
   "devDependencies": {
-    "@sveltejs/adapter-node": "^5.2.12",
-    "@sveltejs/kit": "^2.20.0",
-    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@sveltejs/adapter-node": "^5.5.7",
+    "@sveltejs/kit": "^2.70.2",
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.2.0",
-    "svelte": "^5.20.0",
-    "svelte-check": "^4.1.5",
-    "typescript": "^5.7.3",
-    "vite": "^6.2.0"
+    "svelte": "^5.56.9",
+    "svelte-check": "^4.7.6",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
-    "dompurify": "^3.2.4",
-    "highlight.js": "^11.11.1",
-    "marked": "^15.0.7"
+    "better-sqlite3": "^11.10.0",
+    "dompurify": "^3.4.13",
+    "highlight.js": "^11.12.0",
+    "marked": "^15.0.12"
   }
 }
