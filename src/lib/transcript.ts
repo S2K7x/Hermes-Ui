@@ -106,7 +106,9 @@ export function groupTranscript(messages: HermesMessage[]): UiMessage[] {
 			const { text } = textOf(msg.content);
 			current.steps.push({
 				key: String(msg.tool_call_id ?? uid('t')),
-				tool_name: msg.tool_name || 'tool',
+				// Left empty on purpose when upstream has no name: the merge
+				// below then keeps the one the tool_calls row already gave.
+				tool_name: msg.tool_name || '',
 				status: 'done',
 				result: text.slice(0, 4000),
 				started_at: msg.timestamp ?? Date.now() / 1000
@@ -137,15 +139,25 @@ export function groupTranscript(messages: HermesMessage[]): UiMessage[] {
 	flush();
 
 	// Merge duplicate step keys that both the tool_calls row and the tool
-	// result row produced, keeping the result.
+	// result row produced, keeping the result — and the name, which the tool
+	// row does not always carry (Hermes writes `name` but not `tool_name` on
+	// the rows it synthesises for invalid tool calls, and its row decoder
+	// drops the column when it is NULL).
 	for (const turn of out) {
 		const seen = new Map<string, ToolStep>();
 		for (const step of turn.steps) {
 			const prev = seen.get(step.key);
-			if (prev) Object.assign(prev, { ...step, result: step.result ?? prev.result });
-			else seen.set(step.key, step);
+			if (prev) {
+				Object.assign(prev, {
+					...step,
+					tool_name: step.tool_name || prev.tool_name,
+					result: step.result ?? prev.result
+				});
+			} else seen.set(step.key, step);
 		}
 		turn.steps = [...seen.values()];
+		// An orphan tool row (no matching tool_calls entry) still needs a label.
+		for (const step of turn.steps) if (!step.tool_name) step.tool_name = 'tool';
 	}
 
 	return out;
@@ -156,7 +168,9 @@ export function toolIcon(name: string): string {
 	if (name.startsWith('mcp_')) return '🔌';
 	if (name === '_thinking') return '💭';
 	if (name.startsWith('browser')) return '🌐';
-	if (name.startsWith('web_')) return '🔍';
+	// `web_search`, but also `session_search` and `x_search`, which would
+	// otherwise fall into the file family below on their `search` substring.
+	if (name.startsWith('web_') || name.endsWith('_search')) return '🔍';
 	if (name === 'terminal' || name === 'process') return '💻';
 	if (name.includes('code')) return '🐍';
 	if (['read', 'write', 'patch', 'search', 'file'].some((f) => name.includes(f))) return '📁';

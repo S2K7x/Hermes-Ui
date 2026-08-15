@@ -848,6 +848,25 @@ Des commentaires `: keepalive` arrivent toutes les N secondes ; le parseur
 certains contenus (médias résolus en `data:` URL) ne passent pas par les
 deltas.
 
+### Le transcript rechargé, lui, n'a pas la même forme
+
+`groupTranscript()` (`src/lib/transcript.ts`, pur et testé) replie les lignes
+persistées — `user → assistant(tool_calls) → tool → … → assistant` — en tours
+d'UI, pour qu'un rechargement ressemble à ce que le flux a produit. Deux
+constats vérifiés dans les sources de Hermes, qui commandent le pliage :
+
+- **Une ligne `tool` ne porte pas toujours `tool_name`.** Les lignes que Hermes
+  synthétise pour un appel refusé (nom d'outil invalide, arguments JSON
+  illisibles, `agent/conversation_loop.py`) posent `name` mais pas `tool_name`,
+  et `_rows_to_conversation` (`hermes_state.py`) omet la colonne quand elle est
+  NULL. Le nom utile vient donc du `tool_calls` de la ligne assistante : la
+  fusion des deux lignes par `tool_call_id` **conserve** ce nom, et le générique
+  « tool » n'est posé qu'en dernier recours, sur une ligne d'outil orpheline.
+- **Les clés d'étapes doivent être uniques dans un tour** : `ToolSteps.svelte`
+  rend un `{#each … (step.key)}` clé, et un doublon est une erreur d'exécution,
+  pas un défaut d'affichage. D'où la déduplication par `Map` et le `uid()` de
+  secours quand une ligne n'a ni `tool_call_id` ni `id`.
+
 ## Structure
 
 ```
