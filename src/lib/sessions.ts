@@ -111,6 +111,50 @@ export function archivedCandidates(known: string[], active: string[], limit: num
 	return out;
 }
 
+// ---------------------------------------------------------------------------
+// Conversations Hermes compressed under us
+// ---------------------------------------------------------------------------
+
+/** A conversation whose id moved, from the id it had to the id it answers to. */
+export interface SessionRotation {
+	root: string;
+	tip: string;
+}
+
+/**
+ * The id changes Hermes made behind the app's back in this listing.
+ *
+ * Context compression ends the running session and forks a continuation child
+ * (`end_reason = "compression"`, linked by `parent_session_id`); new messages
+ * land in the child. `list_sessions_rich` hides that from the sidebar by
+ * projecting the chain forward — one logical conversation stays one row — but
+ * the row then carries the **continuation's** id, with the original in
+ * `_lineage_root_id`.
+ *
+ * Everything this app keys on a session id therefore has to follow: the agent
+ * binding and the title cache in `session_meta`, and the open conversation.
+ */
+export function lineageRotations(sessions: HermesSession[]): SessionRotation[] {
+	const out: SessionRotation[] = [];
+	for (const s of sessions) {
+		const root = s._lineage_root_id;
+		if (root && s.id && root !== s.id) out.push({ root, tip: s.id });
+	}
+	return out;
+}
+
+/** What `current` has become in this listing, or null when it has not moved. */
+export function rotatedSessionId(
+	sessions: HermesSession[],
+	current: string | null | undefined
+): string | null {
+	if (!current) return null;
+	for (const { root, tip } of lineageRotations(sessions)) {
+		if (root === current) return tip;
+	}
+	return null;
+}
+
 /** Compact token/cost summary for a session, or null when nothing ran yet. */
 export function usageSummary(s: HermesSession | undefined): string | null {
 	if (!s) return null;

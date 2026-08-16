@@ -828,6 +828,48 @@ Dernier point du même ordre : un `<input type="file">` en `display: none` n'est
 focus à sa place — joindre une image était à la souris uniquement. L'input est
 donc masqué en 1 px transparent, et c'est le label qui porte l'anneau.
 
+### 23. Une conversation compressée change d'identifiant
+
+La compression de contexte est **activée par défaut** dans Hermes
+(`compression.enabled`, seuil à 50 % de la fenêtre). Quand elle se déclenche,
+elle ne réécrit pas la session : elle la **termine**
+(`end_reason = "compression"`) et crée une session enfant qui reçoit le résumé
+et tous les messages suivants (`hermes_state.py`, `resolve_resume_session_id`).
+Une conversation longue change donc d'`id` sans prévenir.
+
+`GET /api/sessions` masque ça à la sidebar : `list_sessions_rich` tourne avec
+`project_compression_tips=True`, suit la chaîne jusqu'à sa pointe et fusionne
+la ligne — une conversation logique reste **une** ligne, à sa place dans le
+tri. Mais la ligne porte alors l'`id` de la **continuation**, et l'ancien dans
+`_lineage_root_id` (exposé par `_session_response`).
+
+Or tout ce que cette app range par `session_id` vit dans `session_meta` :
+l'agent de la conversation (point 18) et le cache de titre. Sans rien faire,
+une conversation perdait donc **sa persona au moment précis où Hermes la
+compressait**, et repassait en silence au prompt par défaut du gateway.
+
+- `lineageRotations()` / `rotatedSessionId()` (`src/lib/sessions.ts`, purs et
+  testés) lisent ces rotations dans une liste.
+- Côté serveur, `GET /api/sessions` appelle `inheritSessionMeta(root, tip)`
+  **avant** de décorer les lignes. La continuation garde ses propres valeurs si
+  elle en a, et rien n'est écrit quand rien ne change : ce code tourne à chaque
+  rafraîchissement de sidebar, sur une carte SD.
+- Côté client, `refreshSessions()` déplace `chat.sessionId` sur la nouvelle
+  ligne — **jamais pendant un tour**, le flux en vol étant lié à l'id avec
+  lequel il a démarré. Sans ça, le message suivant partirait sur l'ancien id,
+  dont `_conversation_history_for_session` rejouerait tout le transcript
+  d'avant compression (`get_messages_as_conversation` ne suit pas la chaîne).
+
+**Ce qu'on ne fait délibérément pas** : se fier au `session_id` renvoyé par
+`GET /api/sessions/{id}/messages`. Ce handler résout par
+`resolve_resume_session_id`, dont la seconde passe suit `parent_session_id`
+vers l'enfant le plus récent en excluant les marqueurs `_branched_from` /
+`_delegate_from` — or `_handle_fork_session` crée son enfant par
+`db.create_session(..., parent_session_id=...)` **sans écrire ce marqueur**.
+Ouvrir le parent d'un fork peut donc renvoyer le transcript du fork. Le champ
+`_lineage_root_id`, lui, ne vient que de `get_compression_tip`, qui exige
+`parent.end_reason == 'compression'` : c'est le seul signal non ambigu.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -877,7 +919,8 @@ src/
 │   │   ├── hermes.ts    client de l'API Hermes (Bearer, timeouts, retries)
 │   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
 │   │   ├── sse.ts       en-têtes SSE + enveloppe d'erreur
-│   │   ├── agents.ts    magasin d'agents + lien conversation → agent
+│   │   ├── agents.ts    magasin d'agents, lien conversation → agent, héritage
+│   │   │                  de `session_meta` après une compression
 │   │   ├── jobs.ts      lien tâche planifiée → agent, prompt composé
 │   │   ├── turns.ts     registre des tours en vol, présence, notification
 │   │   ├── push.ts      envoi Web Push (abonnements, 410 → oubli)
@@ -917,7 +960,7 @@ src/
 │   ├── providers.ts   groupement des clés par provider, statut des comptes,
 │   │                  machine à états du flux OAuth
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage,
-│   │                  candidats de la vue archivée
+│   │                  candidats de la vue archivée, rotations de compression
 │   ├── skills.ts      chemins de skills validés, gabarits, groupement
 │   ├── sse.ts         parseur SSE incrémental (partagé)
 │   ├── theme.ts       préréglages, dérivation color-mix, contraste WCAG

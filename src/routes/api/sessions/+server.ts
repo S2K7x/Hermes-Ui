@@ -8,8 +8,14 @@ import {
 } from '$lib/server/hermes';
 import { gate, proxy, readJson } from '$lib/server/respond';
 import { cacheTitle, forgetSession, knownSessionIds, rememberSessions } from '$lib/server/db';
-import { bindSessionAgent, findAgent, listAgents, sessionAgentMap } from '$lib/server/agents';
-import { archivedCandidates } from '$lib/sessions';
+import {
+	bindSessionAgent,
+	findAgent,
+	inheritSessionMeta,
+	listAgents,
+	sessionAgentMap
+} from '$lib/server/agents';
+import { archivedCandidates, lineageRotations } from '$lib/sessions';
 import { composeSystemPrompt } from '$lib/agents';
 import type { HermesSession } from '$lib/types';
 
@@ -110,6 +116,10 @@ export const GET: RequestHandler = ({ url }) => {
 			source: url.searchParams.get('source') ?? undefined,
 			include_children: url.searchParams.get('include_children') === 'true'
 		});
+		// A compressed conversation comes back under its continuation's id.
+		// Move our own state onto it *before* decorating the rows, or the
+		// conversation loses its agent the day Hermes compresses it.
+		for (const { root, tip } of lineageRotations(res.data ?? [])) inheritSessionMeta(root, tip);
 		// Seeing a conversation here is the only chance to record its id before
 		// archiving hides it from every future listing.
 		rememberSessions((res.data ?? []).map((s) => s.id));

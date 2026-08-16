@@ -3,7 +3,9 @@ import test from 'node:test';
 import {
 	archivedCandidates,
 	groupSessions,
+	lineageRotations,
 	matchesQuery,
+	rotatedSessionId,
 	sessionLabel,
 	usageSummary
 } from '../src/lib/sessions.ts';
@@ -113,4 +115,36 @@ test('archive candidates are the known ids the live listing dropped', () => {
 	assert.deepEqual(archivedCandidates(['a'], ['z'], 10), ['a']);
 	// A zero cap disables probing entirely rather than probing everything.
 	assert.deepEqual(archivedCandidates(known, [], 0), []);
+});
+
+test('a compressed conversation reports the id it moved to', () => {
+	const rows = [
+		session({ id: 'plain' }),
+		session({ id: 'tip-1', _lineage_root_id: 'root-1' }),
+		session({ id: 'tip-2', _lineage_root_id: 'root-2' })
+	];
+	assert.deepEqual(lineageRotations(rows), [
+		{ root: 'root-1', tip: 'tip-1' },
+		{ root: 'root-2', tip: 'tip-2' }
+	]);
+
+	// An uncompressed listing has nothing to migrate.
+	assert.deepEqual(lineageRotations([session({ id: 'plain' })]), []);
+	// The projection only sets the field when it differs, but a row that names
+	// itself as its own root is not a rotation either.
+	assert.deepEqual(lineageRotations([session({ id: 'a', _lineage_root_id: 'a' })]), []);
+	assert.deepEqual(lineageRotations([session({ id: 'a', _lineage_root_id: null })]), []);
+	assert.deepEqual(lineageRotations([]), []);
+});
+
+test('the open conversation follows its compression continuation', () => {
+	const rows = [session({ id: 'plain' }), session({ id: 'tip-1', _lineage_root_id: 'root-1' })];
+	assert.equal(rotatedSessionId(rows, 'root-1'), 'tip-1');
+	// Already on the continuation, or on an untouched conversation: no move.
+	assert.equal(rotatedSessionId(rows, 'tip-1'), null);
+	assert.equal(rotatedSessionId(rows, 'plain'), null);
+	// Nothing open, or an id this listing knows nothing about.
+	assert.equal(rotatedSessionId(rows, null), null);
+	assert.equal(rotatedSessionId(rows, 'gone'), null);
+	assert.equal(rotatedSessionId([], 'root-1'), null);
 });

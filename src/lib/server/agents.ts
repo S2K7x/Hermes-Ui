@@ -156,6 +156,47 @@ export function sessionAgentMap(): Map<string, string> {
 	return new Map(rows.map((r) => [r.session_id, r.agent_id]));
 }
 
+// ---------------------------------------------------------------------------
+// Following a conversation that Hermes compressed
+// ---------------------------------------------------------------------------
+
+const selMeta = db.prepare<[string], { title_cache: string | null; agent_id: string | null }>(
+	'SELECT title_cache, agent_id FROM session_meta WHERE session_id = ?'
+);
+const upsertMeta = db.prepare(
+	`INSERT INTO session_meta (session_id, title_cache, agent_id, updated_at) VALUES (?, ?, ?, ?)
+	 ON CONFLICT(session_id) DO UPDATE SET
+	   title_cache = excluded.title_cache,
+	   agent_id    = excluded.agent_id`
+);
+
+/**
+ * Carry this app's per-conversation state across a compression rotation.
+ *
+ * Auto-compression gives a conversation a new session id (see
+ * `lineageRotations`), and `session_meta` is keyed on that id — so without
+ * this, a long conversation silently loses its agent at the moment Hermes
+ * compresses it, and quietly falls back to the gateway's default prompt. The
+ * title cache goes the same way.
+ *
+ * The continuation wins wherever it already has a value of its own, and
+ * nothing is written when there is nothing to change: this runs on every
+ * sidebar refresh, and this database lives next to `state.db` on the SSD
+ * precisely because needless writes are what kill cards.
+ */
+export function inheritSessionMeta(fromId: string, toId: string): void {
+	if (!fromId || !toId || fromId === toId) return;
+	const source = selMeta.get(fromId);
+	if (!source || (!source.title_cache && !source.agent_id)) return;
+
+	const target = selMeta.get(toId);
+	const title = target?.title_cache ?? source.title_cache;
+	const agentId = target?.agent_id ?? source.agent_id;
+	if (target && target.title_cache === title && target.agent_id === agentId) return;
+
+	upsertMeta.run(toId, title, agentId, Date.now() / 1000);
+}
+
 /**
  * The `system_message` to send with this conversation's next turn.
  *

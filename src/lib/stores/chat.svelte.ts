@@ -3,6 +3,7 @@ import { readJSON, writeJSON } from '$lib/client/storage';
 import { ApiError, AppErrorCode } from '$lib/errors';
 import { isModelAvailable, providerForModel, shortModelName } from '$lib/models';
 import { isTerminalTurnEvent, newSSEState, parseSSEChunk } from '$lib/sse';
+import { rotatedSessionId } from '$lib/sessions';
 import { emptyAssistant, groupTranscript, uid, type UiMessage } from '$lib/transcript';
 import { toasts } from './toast.svelte';
 import type {
@@ -181,6 +182,15 @@ class ChatStore {
 				api<{ data: HermesSession[] }>('/api/sessions?limit=200')
 			);
 			this.sessions = res.data ?? [];
+			// Hermes may have compressed the open conversation since the last
+			// listing, which gives it a new id. Keep writing to the row the
+			// sidebar now shows: the stale id still exists, but posting to it
+			// would replay the whole pre-compression transcript. Never mid-turn
+			// — the in-flight stream is bound to the id it was started with.
+			if (!this.streaming) {
+				const moved = rotatedSessionId(this.sessions, this.sessionId);
+				if (moved) this.sessionId = moved;
+			}
 		} catch (err) {
 			toasts.error(err, { label: 'Réessayer', run: () => this.refreshSessions() });
 		} finally {

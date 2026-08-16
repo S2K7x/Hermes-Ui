@@ -23,6 +23,15 @@ export interface HermesSession {
 	has_system_prompt?: boolean;
 	has_model_config?: boolean;
 	/**
+	 * Set only on a row whose id was rotated by a context compression.
+	 *
+	 * `list_sessions_rich(project_compression_tips=True)` projects a compressed
+	 * conversation forward onto its live continuation, so `id` above is the
+	 * continuation's and this is the id the conversation started life with.
+	 * Absent on every other row.
+	 */
+	_lineage_root_id?: string | null;
+	/**
 	 * The custom agent this conversation belongs to.
 	 *
 	 * NOT a Hermes field: the binding lives in this app's SQLite and the
