@@ -475,6 +475,24 @@ dans le code :
   (400 `invalid_body`) au lieu de le normaliser en `[]` : un bug côté client ne
   doit pas pouvoir effacer la bibliothèque. L'écriture est un remplacement
   complet, et le store adopte la réponse du serveur — c'est la version bornée.
+- **Ce remplacement complet est ce qui rend « pas encore lue » et « vide » deux
+  états distincts**, et les confondre efface tout. Mesuré : GET initial en
+  échec → `items` reste `[]`, le panneau affiche « Chargement… »
+  indéfiniment, et le premier enregistrement remplace les **trois** prompts
+  stockés par un seul, sous un toast vert « Prompt enregistré. » D'où
+  `PromptBaseline = SavedPrompt[] | null` : `addPrompt()` et `removePrompt()`
+  prennent une base **nullable** et rendent `{ok: false, reason: 'unloaded'}`
+  sur `null`, si bien que l'appel dangereux ne s'écrit plus. Le store expose
+  `baseline` (`loaded ? items : null`), et **les deux écritures rejouent
+  `ensureLoaded()` avant de composer** : une panne passagère se répare donc
+  toute seule au moment de l'enregistrement, et seule une bibliothèque toujours
+  illisible refuse — avec `loadError` affiché et un bouton « Réessayer », plus
+  jamais un « Chargement… » éternel.
+- Un compteur d'écritures (`#writes`) empêche un GET lent d'écraser une
+  écriture plus récente : la réponse n'est adoptée que si aucune écriture n'a
+  abouti entre-temps. Sans ça, ouvrir la palette puis enregistrer aussitôt
+  faisait réapparaître l'ancienne liste à l'écran — et la livrait au
+  remplacement suivant.
 
 Côté UI, un prompt choisi est **ajouté** au composeur, jamais substitué : un
 message à moitié écrit doit survivre à un tap malheureux sur la bibliothèque.

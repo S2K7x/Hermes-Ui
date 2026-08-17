@@ -85,11 +85,34 @@ test('addPrompt refuses empty, duplicate and overflowing saves', () => {
 
 test('removePrompt drops only the targeted id', () => {
 	const list = [make({ id: 'a' }), make({ id: 'b' })];
+	const dropped = removePrompt(list, 'a');
+	assert.ok(dropped.ok);
 	assert.deepEqual(
-		removePrompt(list, 'a').map((p) => p.id),
+		dropped.list.map((p) => p.id),
 		['b']
 	);
-	assert.equal(removePrompt(list, 'absent').length, 2);
+
+	const missing = removePrompt(list, 'absent');
+	assert.ok(missing.ok);
+	assert.equal(missing.list.length, 2);
+});
+
+// Every write is a replace-all (`PUT /api/prompts` rewrites the whole prefs
+// row), so an unread library must refuse rather than be treated as an empty
+// one. Measured before this guard: a failed initial GET left the store empty,
+// and one save replaced three stored prompts with one under a success toast.
+test('a write refuses an unread library instead of erasing it', () => {
+	assert.deepEqual(addPrompt(null, 'Nouveau prompt', 'x', 1), {
+		ok: false,
+		reason: 'unloaded'
+	});
+	assert.deepEqual(removePrompt(null, 'a'), { ok: false, reason: 'unloaded' });
+});
+
+test('an empty library is still writable — [] is not null', () => {
+	const result = addPrompt([], 'Premier prompt', 'x', 1);
+	assert.ok(result.ok);
+	assert.equal(result.list.length, 1);
 });
 
 test('matchPrompts ignores case and accents, and searches the body too', () => {

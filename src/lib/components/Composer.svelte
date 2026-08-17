@@ -219,7 +219,11 @@
 			</div>
 
 			{#if text.trim()}
-				<button class="p-save" onclick={saveCurrent} disabled={prompts.saving}>
+				<button
+					class="p-save"
+					onclick={saveCurrent}
+					disabled={prompts.saving || Boolean(prompts.loadError)}
+				>
 					＋ Enregistrer le message en cours
 				</button>
 			{/if}
@@ -252,7 +256,15 @@
 					</div>
 				{/each}
 
-				{#if prompts.items.length === 0}
+				{#if prompts.loadError}
+					<!-- Never "Chargement…" here: a failed load is not a slow one, and
+					     saving on top of a library we could not read would replace it. -->
+					<p class="p-none p-fail">
+						La bibliothèque n'a pas pu être chargée, l'enregistrement est donc
+						bloqué pour ne rien effacer.<br />{prompts.loadError}
+					</p>
+					<button class="p-retry" onclick={() => prompts.reload()}>Réessayer</button>
+				{:else if prompts.items.length === 0}
 					<p class="p-none">
 						{prompts.loaded
 							? 'Aucun prompt enregistré. Écrivez un message, puis enregistrez-le ici pour le retrouver sur tous vos appareils.'
@@ -583,6 +595,15 @@
 		padding: 12px 10px;
 		font-size: 12.5px;
 		color: var(--text-faint);
+	}
+	.p-fail {
+		color: var(--danger);
+	}
+	.palette .p-retry {
+		display: block;
+		width: 100%;
+		font-size: 13px;
+		color: var(--accent);
 	}
 	.sk-name {
 		flex: 0 0 auto;

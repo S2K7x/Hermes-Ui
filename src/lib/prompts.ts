@@ -76,21 +76,39 @@ export function normalizePrompts(value: unknown): SavedPrompt[] {
 	return out;
 }
 
-export type AddPromptResult =
+export type PromptWriteRefusal = 'unloaded' | 'empty' | 'duplicate' | 'full';
+
+export type PromptWriteResult =
 	| { ok: true; list: SavedPrompt[] }
-	| { ok: false; reason: 'empty' | 'duplicate' | 'full' };
+	| { ok: false; reason: PromptWriteRefusal };
+
+/**
+ * The library a write may be composed against, or `null` when it is unknown.
+ *
+ * `PUT /api/prompts` replaces the whole prefs row, so every write here is a
+ * replace-all: whatever list goes in *is* the library afterwards. That makes
+ * "we never managed to read it" a distinct state from "it is empty", and the
+ * two must not be confused — composing a save against an unread library
+ * deletes every prompt the user has, and reports success while doing it.
+ *
+ * Hence `null` rather than `[]`: the baseline is a required argument on both
+ * write planners below, so a caller cannot forget to make that distinction.
+ */
+export type PromptBaseline = SavedPrompt[] | null;
 
 /**
  * Prepend a prompt to the library. Newest first, because the reason to save a
  * prompt is to use it again soon.
  */
 export function addPrompt(
-	list: SavedPrompt[],
+	list: PromptBaseline,
 	text: string,
 	id: string,
 	now: number,
 	title?: string
-): AddPromptResult {
+): PromptWriteResult {
+	if (list === null) return { ok: false, reason: 'unloaded' };
+
 	const body = text.trim().slice(0, MAX_PROMPT_CHARS);
 	if (!body) return { ok: false, reason: 'empty' };
 	if (list.some((p) => p.text === body)) return { ok: false, reason: 'duplicate' };
@@ -106,8 +124,11 @@ export function addPrompt(
 	};
 }
 
-export const removePrompt = (list: SavedPrompt[], id: string): SavedPrompt[] =>
-	list.filter((p) => p.id !== id);
+/** Drop one prompt. Same baseline rule as {@link addPrompt}, same reason. */
+export function removePrompt(list: PromptBaseline, id: string): PromptWriteResult {
+	if (list === null) return { ok: false, reason: 'unloaded' };
+	return { ok: true, list: list.filter((p) => p.id !== id) };
+}
 
 // Strip combining marks so "resume" finds "résumé" — same rule as the sidebar
 // search.
