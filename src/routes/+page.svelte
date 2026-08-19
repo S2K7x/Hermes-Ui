@@ -1,18 +1,11 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick } from 'svelte';
 	import AgentPicker from '$lib/components/AgentPicker.svelte';
-	import AgentsPanel from '$lib/components/AgentsPanel.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import Composer from '$lib/components/Composer.svelte';
-	import JobsPanel from '$lib/components/JobsPanel.svelte';
 	import Message from '$lib/components/Message.svelte';
 	import ModelPicker from '$lib/components/ModelPicker.svelte';
-	import ProvidersPanel from '$lib/components/ProvidersPanel.svelte';
-	import Shortcuts from '$lib/components/Shortcuts.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
-	import SkillsPanel from '$lib/components/SkillsPanel.svelte';
-	import StatusPanel from '$lib/components/StatusPanel.svelte';
-	import ThemePanel from '$lib/components/ThemePanel.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { prompts } from '$lib/stores/prompts.svelte';
@@ -23,6 +16,7 @@
 	import { hasMod, modKey } from '$lib/client/platform';
 	import { usageSummary } from '$lib/sessions';
 	import { agentColor, agentLabel, directReports } from '$lib/agents';
+	import { lazyComponent } from '$lib/client/lazy.svelte';
 
 	let sidebarOpen = $state(false);
 	let sidebarCollapsed = $state(false);
@@ -43,6 +37,40 @@
 	 *  mid-stream isn't yanked back down. */
 	let pinnedToBottom = $state(true);
 	let composer = $state<Composer | null>(null);
+
+	/**
+	 * The settings panels, fetched on first open rather than at boot.
+	 *
+	 * None of them is on screen when the app starts, yet statically imported
+	 * they were the biggest part of the page bundle — parsed and compiled on
+	 * the Pi's CPU before the first message could be painted. Their own
+	 * `$effect(() => { if (open) … })` already gates every fetch they do, so
+	 * mounting them late changes nothing but when the code arrives.
+	 */
+	const panels = {
+		status: lazyComponent(() => import('$lib/components/StatusPanel.svelte')),
+		jobs: lazyComponent(() => import('$lib/components/JobsPanel.svelte')),
+		agents: lazyComponent(() => import('$lib/components/AgentsPanel.svelte')),
+		skills: lazyComponent(() => import('$lib/components/SkillsPanel.svelte')),
+		providers: lazyComponent(() => import('$lib/components/ProvidersPanel.svelte')),
+		theme: lazyComponent(() => import('$lib/components/ThemePanel.svelte')),
+		shortcuts: lazyComponent(() => import('$lib/components/Shortcuts.svelte'))
+	};
+
+	/** A chunk that cannot be fetched must say so, not leave a dead button. */
+	function reveal(panel: { load: () => Promise<void> }) {
+		void panel.load().catch(() => toasts.error("Ce panneau n'a pas pu être chargé. Réessayez."));
+	}
+
+	$effect(() => {
+		if (statusOpen) reveal(panels.status);
+		if (jobsOpen) reveal(panels.jobs);
+		if (agentsOpen) reveal(panels.agents);
+		if (skillsOpen) reveal(panels.skills);
+		if (providersOpen) reveal(panels.providers);
+		if (themeOpen) reveal(panels.theme);
+		if (shortcutsOpen) reveal(panels.shortcuts);
+	});
 
 	const SUGGESTIONS = [
 		"Quel est l'état du Raspberry Pi (CPU, RAM, disque) ?",
@@ -375,13 +403,37 @@
 </div>
 
 <CommandPalette open={paletteOpen} onclose={() => (paletteOpen = false)} {commands} />
-<StatusPanel open={statusOpen} onclose={() => (statusOpen = false)} onopenJobs={openJobsFromStatus} />
-<JobsPanel open={jobsOpen} onclose={() => (jobsOpen = false)} />
-<AgentsPanel open={agentsOpen} onclose={() => (agentsOpen = false)} />
-<SkillsPanel open={skillsOpen} onclose={() => (skillsOpen = false)} />
-<ProvidersPanel open={providersOpen} onclose={() => (providersOpen = false)} />
-<ThemePanel open={themeOpen} onclose={() => (themeOpen = false)} />
-<Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />
+
+<!-- Each panel appears in the tree only once its chunk has landed; from then on
+     it stays, so reopening is as immediate as it was before. -->
+{#if panels.status.current}
+	{@const StatusPanel = panels.status.current}
+	<StatusPanel open={statusOpen} onclose={() => (statusOpen = false)} onopenJobs={openJobsFromStatus} />
+{/if}
+{#if panels.jobs.current}
+	{@const JobsPanel = panels.jobs.current}
+	<JobsPanel open={jobsOpen} onclose={() => (jobsOpen = false)} />
+{/if}
+{#if panels.agents.current}
+	{@const AgentsPanel = panels.agents.current}
+	<AgentsPanel open={agentsOpen} onclose={() => (agentsOpen = false)} />
+{/if}
+{#if panels.skills.current}
+	{@const SkillsPanel = panels.skills.current}
+	<SkillsPanel open={skillsOpen} onclose={() => (skillsOpen = false)} />
+{/if}
+{#if panels.providers.current}
+	{@const ProvidersPanel = panels.providers.current}
+	<ProvidersPanel open={providersOpen} onclose={() => (providersOpen = false)} />
+{/if}
+{#if panels.theme.current}
+	{@const ThemePanel = panels.theme.current}
+	<ThemePanel open={themeOpen} onclose={() => (themeOpen = false)} />
+{/if}
+{#if panels.shortcuts.current}
+	{@const Shortcuts = panels.shortcuts.current}
+	<Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />
+{/if}
 
 <style>
 	/* Panels float: the page background shows between them, which is what

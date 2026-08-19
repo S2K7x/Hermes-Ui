@@ -796,6 +796,50 @@ propre `role="dialog"`. Les sept copies avaient déjà divergé (84 vs 86 vs 88v
 cible de fermeture à 44 px sur un seul, `env(safe-area-inset-bottom)` oublié
 là où le pied de page le posait déjà) : c'est ce que fait un bloc copié.
 
+**Et aucun de ces sept panneaux n'est chargé au démarrage.** Ils ne sont pas à
+l'écran quand l'app s'ouvre, mais importés statiquement ils formaient la plus
+grosse part de ce que le Pi devait télécharger, analyser et compiler avant de
+peindre le premier message. `lazyComponent()` (`src/lib/client/lazy.svelte.ts`)
+les récupère à la première ouverture, et `+page.svelte` ne les rend qu'une fois le
+chunk arrivé.
+
+**Mesuré sur l'application construite**, en additionnant le JS réellement
+atteignable depuis l'entrée et les nœuds de la page :
+
+| | JS critique (brut) | JS critique (brotli) | CSS du démarrage |
+|---|---|---|---|
+| Avant | 313 296 o | 97 060 o | 57 745 o |
+| Après | 227 928 o | 74 879 o | 29 872 o |
+
+Soit −27 % de JS à analyser et −48 % de CSS sur le chemin critique. Mesuré au
+CDP sur ce Pi, sur cinq chargements sans cache : le temps d'exécution JS par
+chargement passe d'environ 10 ms à 8,5 ms, et 22 ko de moins passent sur le
+fil. Le gain n'est pas spectaculaire en millisecondes — il l'est en octets, et
+c'est ce qui compte sur un lien lent.
+
+Trois choses qui rendent ça sûr, et qu'il ne faut pas défaire :
+
+- Chaque panneau gate déjà ses appels par `$effect(() => { if (open) … })`. Les
+  monter tard ne change donc *rien* à ce qu'ils font — seulement au moment où
+  leur code arrive.
+- Une fois chargé, le panneau **reste** dans l'arbre : la réouverture est aussi
+  immédiate qu'avant. Vérifié au CDP, ainsi que le contrat du point 22 — à la
+  toute première ouverture le focus atterrit bien sur `[role=dialog]`, et Échap
+  le rend au bouton d'origine.
+- Les chunks (JS **et** CSS, injecté par le helper de préchargement de Vite)
+  font partie du shell préchargé par le service worker : après la première
+  visite, ouvrir un panneau est un hit de cache, pas un aller-retour. C'est le
+  même marché que la coloration syntaxique au point 9.
+
+Un échec de chargement affiche un toast et se réessaie à l'ouverture suivante,
+plutôt que de laisser un bouton mort. `tests/panels.test.ts` échoue si un
+`import` statique d'un panneau revient dans `+page.svelte`, ou si un panneau est
+rendu sans son garde `panels.<clé>.current`.
+
+`CommandPalette` reste, lui, importé statiquement : c'est un contrôle au
+clavier où la latence se sent, et ses dépendances (`chat`, `$lib/sessions`) sont
+déjà sur le chemin critique — le split n'y gagnerait presque rien.
+
 ### 22. Le focus appartient au cadre, et l'anneau est une couleur du thème
 
 Deux choses qu'aucun panneau ne faisait, et qui tiennent maintenant en un seul
@@ -951,7 +995,8 @@ src/
 │   ├── client/        helpers navigateur
 │   │   ├── api.ts       fetch typé → ApiError, `withRetry`
 │   │   ├── storage.ts   localStorage qui ne peut pas jeter
-│   │   └── platform.ts  ⌘ vs Ctrl
+│   │   ├── platform.ts  ⌘ vs Ctrl
+│   │   └── lazy.svelte.ts  composant récupéré à la première utilisation
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
 │   │                  AgentPicker, Markdown, CommandPalette, Modal (cadre
 │   │                  commun des panneaux), StatusPanel, SkillsPanel,
