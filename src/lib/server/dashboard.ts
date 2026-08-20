@@ -1,5 +1,7 @@
 import { HERMES_DASHBOARD_TOKEN, HERMES_DASHBOARD_URL, REQUEST_TIMEOUT_MS } from './config';
-import { errorResponse } from './respond';
+import { proxy } from './respond';
+import { UpstreamError, retrying } from './upstream';
+import { decodeJson } from '$lib/json';
 import type {
 	EnvVarMap,
 	OauthPollResponse,
@@ -27,15 +29,11 @@ import type {
  * way an unmounted `SKILLS_DIR` disables the skills editor.
  */
 
-export class DashboardError extends Error {
-	readonly status: number;
-	readonly code: string;
-
+/** A dashboard failure. `code` is always one of DashboardErrorCode below. */
+export class DashboardError extends UpstreamError {
 	constructor(status: number, message: string, code: string) {
-		super(message);
+		super(status, message, code);
 		this.name = 'DashboardError';
-		this.status = status;
-		this.code = code;
 	}
 }
 
@@ -63,42 +61,22 @@ interface CallOptions {
 	retries?: number;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function isTransient(err: unknown): boolean {
-	if (!(err instanceof DashboardError)) return false;
-	return (
-		err.status >= 500 ||
-		err.code === DashboardErrorCode.Unreachable ||
-		err.code === DashboardErrorCode.Timeout
-	);
-}
-
 /**
- * One call against the dashboard, decoded.
+ * One call against the dashboard, decoded, with the shared read-only retry.
  *
  * FastAPI reports failures as `{"detail": "..."}`; those messages are about
  * names and reachability, never about the value that was sent, so they are
  * safe to pass through to the browser.
+ *
+ * The unconfigured case is raised BEFORE the retry: a missing token will not
+ * appear between two tries, and answering it three times over just delays the
+ * panel switching itself off.
  */
-async function dashboardJson<T>(path: string, opts: CallOptions = {}): Promise<T> {
+function dashboardJson<T>(path: string, opts: CallOptions = {}): Promise<T> {
 	if (!dashboardConfigured()) {
-		throw new DashboardError(503, DISABLED_MESSAGE, DashboardErrorCode.Disabled);
+		return Promise.reject(new DashboardError(503, DISABLED_MESSAGE, DashboardErrorCode.Disabled));
 	}
-
-	const attempts = (opts.retries ?? 0) + 1;
-	let lastError: unknown;
-
-	for (let attempt = 0; attempt < attempts; attempt++) {
-		if (attempt > 0) await sleep(150 * 2 ** (attempt - 1));
-		try {
-			return await once<T>(path, opts);
-		} catch (err) {
-			lastError = err;
-			if (attempt === attempts - 1 || !isTransient(err)) throw err;
-		}
-	}
-	throw lastError;
+	return retrying(() => once<T>(path, opts), { attempts: (opts.retries ?? 0) + 1 });
 }
 
 async function once<T>(path: string, opts: CallOptions): Promise<T> {
@@ -133,14 +111,7 @@ async function once<T>(path: string, opts: CallOptions): Promise<T> {
 	}
 
 	const text = await res.text();
-	let parsed: any = null;
-	if (text) {
-		try {
-			parsed = JSON.parse(text);
-		} catch {
-			/* non-JSON body — the status check below still reports it */
-		}
-	}
+	const parsed = decodeJson(text) as { detail?: string | { msg?: string }[] } | null;
 
 	if (!res.ok) {
 		if (res.status === 401 || res.status === 403) {
@@ -163,19 +134,9 @@ async function once<T>(path: string, opts: CallOptions): Promise<T> {
 	return parsed as T;
 }
 
-/** Same shape as `proxy()` in respond.ts, for DashboardError instead of HermesError. */
-export async function dashboardResponse<T>(fn: () => Promise<T>): Promise<Response> {
-	try {
-		const value = await fn();
-		return new Response(JSON.stringify(value ?? null), {
-			headers: { 'Content-Type': 'application/json' }
-		});
-	} catch (err) {
-		if (err instanceof DashboardError) return errorResponse(err.status, err.message, err.code);
-		const message = err instanceof Error ? err.message : String(err);
-		return errorResponse(502, message, DashboardErrorCode.Unreachable);
-	}
-}
+/** `proxy()` from respond.ts, with this upstream's name on the fallback. */
+export const dashboardResponse = <T>(fn: () => Promise<T>): Promise<Response> =>
+	proxy(fn, { status: 502, code: DashboardErrorCode.Unreachable });
 
 // ---------------------------------------------------------------------------
 // Credentials

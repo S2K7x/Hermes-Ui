@@ -11,15 +11,13 @@ import type {
 	SessionRuntime
 } from '$lib/types';
 import { AppErrorCode } from '$lib/errors';
+import { decodeJson } from '$lib/json';
+import { UpstreamError, retrying } from './upstream';
 
-export class HermesError extends Error {
-	constructor(
-		readonly status: number,
-		message: string,
-		readonly code?: string,
-		readonly retryAfter?: number
-	) {
-		super(message);
+/** A gateway failure. Everything a response needs is on `UpstreamError`. */
+export class HermesError extends UpstreamError {
+	constructor(status: number, message: string, code?: string, retryAfter?: number) {
+		super(status, message, code, retryAfter);
 		this.name = 'HermesError';
 	}
 }
@@ -66,8 +64,6 @@ function withTimeout(signal: AbortSignal | undefined, timeoutMs: number) {
 	};
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /** Raw fetch against the Hermes API server. Callers own the response. */
 export async function hermesFetch(path: string, opts: CallOptions = {}): Promise<Response> {
 	const headers = authHeaders(opts.headers);
@@ -96,60 +92,42 @@ export async function hermesFetch(path: string, opts: CallOptions = {}): Promise
 	}
 }
 
-function isTransient(err: unknown): boolean {
-	if (!(err instanceof HermesError)) return false;
-	return (
-		err.status >= 500 ||
-		err.code === AppErrorCode.Unreachable ||
-		err.code === AppErrorCode.Timeout
-	);
+/** Error bodies Hermes emits: OpenAI-shaped, or a bare string. */
+interface HermesErrorBody {
+	error?: string | { message?: string; code?: string };
+}
+
+/** One call, decoded, mapping Hermes' errors onto HermesError. */
+async function hermesOnce<T>(path: string, opts: CallOptions): Promise<T> {
+	const res = await hermesFetch(path, opts);
+	const text = await res.text();
+	const parsed = decodeJson(text) as HermesErrorBody | null;
+
+	if (!res.ok) {
+		const err = parsed?.error;
+		const retryAfter = Number(res.headers.get('Retry-After')) || undefined;
+		throw new HermesError(
+			res.status,
+			// Some handlers answer {"error": "..."} instead of the
+			// OpenAI-shaped {"error": {"message": ...}}.
+			(typeof err === 'string' ? err : err?.message) ||
+				text ||
+				`Hermes a renvoyé HTTP ${res.status}`,
+			typeof err === 'object' ? err?.code : undefined,
+			retryAfter
+		);
+	}
+	return parsed as T;
 }
 
 /**
- * Fetch + JSON decode, mapping Hermes' OpenAI-style errors onto HermesError.
+ * Fetch + JSON decode, with the shared read-only retry.
  *
  * `retries` is opt-in and only ever set on reads: replaying a POST that created
- * a session or started an agent turn would duplicate work. The backoff is
- * short because the upstream is on loopback — a slow retry helps nobody.
+ * a session or started an agent turn would duplicate work.
  */
-export async function hermesJson<T = unknown>(path: string, opts: CallOptions = {}): Promise<T> {
-	const attempts = (opts.retries ?? 0) + 1;
-	let lastError: unknown;
-
-	for (let attempt = 0; attempt < attempts; attempt++) {
-		if (attempt > 0) await sleep(150 * 2 ** (attempt - 1));
-		try {
-			const res = await hermesFetch(path, opts);
-			const text = await res.text();
-			let parsed: any = null;
-			if (text) {
-				try {
-					parsed = JSON.parse(text);
-				} catch {
-					/* non-JSON body — the status check below still reports it */
-				}
-			}
-			if (!res.ok) {
-				const err = parsed?.error;
-				const retryAfter = Number(res.headers.get('Retry-After')) || undefined;
-				throw new HermesError(
-					res.status,
-					// Some handlers answer {"error": "..."} instead of the
-					// OpenAI-shaped {"error": {"message": ...}}.
-					(typeof err === 'string' ? err : err?.message) ||
-						text ||
-						`Hermes a renvoyé HTTP ${res.status}`,
-					typeof err === 'object' ? err?.code : undefined,
-					retryAfter
-				);
-			}
-			return parsed as T;
-		} catch (err) {
-			lastError = err;
-			if (attempt === attempts - 1 || !isTransient(err)) throw err;
-		}
-	}
-	throw lastError;
+export function hermesJson<T = unknown>(path: string, opts: CallOptions = {}): Promise<T> {
+	return retrying(() => hermesOnce<T>(path, opts), { attempts: (opts.retries ?? 0) + 1 });
 }
 
 // ---------------------------------------------------------------------------
@@ -354,7 +332,7 @@ export const deleteJob = (id: string) =>
 	hermesJson<{ ok: boolean }>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 export const jobAction = (id: string, action: 'pause' | 'resume' | 'run') =>
-	hermesJson<Record<string, any>>(`/api/jobs/${encodeURIComponent(id)}/${action}`, {
+	hermesJson<Record<string, unknown>>(`/api/jobs/${encodeURIComponent(id)}/${action}`, {
 		method: 'POST',
 		body: {}
 	});

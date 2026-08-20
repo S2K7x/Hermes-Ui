@@ -1,4 +1,5 @@
 import { ApiError, AppErrorCode, type ApiErrorBody } from '$lib/errors';
+import { decodeJson } from '$lib/json';
 
 /**
  * Browser-side call into this app's own proxy routes.
@@ -36,14 +37,7 @@ export async function api<T>(
 	}
 
 	const text = await res.text();
-	let parsed: any = null;
-	if (text) {
-		try {
-			parsed = JSON.parse(text);
-		} catch {
-			/* fall through to the status check */
-		}
-	}
+	const parsed = decodeJson(text);
 
 	if (!res.ok) {
 		const body = parsed as ApiErrorBody | null;

@@ -980,6 +980,8 @@ src/
 │   │   ├── config.ts    variables d'env + validation au démarrage
 │   │   ├── hermes.ts    client de l'API Hermes (Bearer, timeouts, retries)
 │   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
+│   │   ├── upstream.ts  socle commun des trois clients amont : UpstreamError,
+│   │   │                  retry des lectures
 │   │   ├── sse.ts       en-têtes SSE + enveloppe d'erreur
 │   │   ├── agents.ts    magasin d'agents, lien conversation → agent, héritage
 │   │   │                  de `session_meta` après une compression
@@ -991,7 +993,7 @@ src/
 │   │   │                  — la table `agents` vit dans server/agents.ts
 │   │   ├── limits.ts    sémaphore de tours + token bucket
 │   │   ├── skills.ts    lecture/écriture des SKILL.md sur le disque
-│   │   └── respond.ts   HermesError → réponse JSON typée, `gate`, `readJson`
+│   │   └── respond.ts   UpstreamError → réponse JSON typée, `gate`, `readJson`
 │   ├── client/        helpers navigateur
 │   │   ├── api.ts       fetch typé → ApiError, `withRetry`
 │   │   ├── storage.ts   localStorage qui ne peut pas jeter
@@ -1013,6 +1015,7 @@ src/
 │   │   ├── theme.svelte.ts      palette active + cache d'avant-rendu
 │   │   └── toast.svelte.ts      notifications dans la page
 │   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus)
+│   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── jobs.ts        horaires cron validés/traduits/composés, état et tri
@@ -1043,15 +1046,37 @@ src/
 Une seule règle : **rien n'échoue en silence, et chaque message dit quoi
 faire**. Trois couches, chacune avec son rôle.
 
+**0. `lib/server/upstream.ts`** — ce que les trois clients amont ont en
+commun. Le gateway (`hermes.ts`), le dashboard (`dashboard.ts`) et le
+répertoire de skills (`skills.ts`) sont trois choses sans rapport, mais une
+route traite leurs échecs à l'identique : un statut, un code, un message déjà
+écrit pour un humain. D'où `UpstreamError`, dont `HermesError`,
+`DashboardError` et `SkillsFsError` héritent — les sous-classes ne servent plus
+qu'à dire *lequel* des trois a échoué (`err instanceof HermesError`). Trois
+conséquences à connaître :
+
+- **Un seul ordre d'arguments** : `(status, message, code)`. `SkillsFsError`
+  prenait `(status, code, message)`, et intervertir deux chaînes ne se voit ni
+  à la compilation ni à l'exécution — ça livre juste un code là où
+  l'utilisateur devait lire une phrase. `tests/upstream.test.ts` relit la
+  source pour que l'ancien ordre ne revienne pas.
+- **Une seule définition de « ça vaut la peine de réessayer »** :
+  `status >= 500`, et rien d'autre. Les codes que les clients forgent
+  eux-mêmes (timeout, injoignable) portent déjà 504 et 502 ; un 429 n'est pas
+  transitoire — se faire dire de ralentir n'est pas une raison de refrapper.
+- **Une seule boucle de retry**, `retrying()`, opt-in à chaque appel.
+
 **1. `lib/server/hermes.ts`** — timeout par appel (`REQUEST_TIMEOUT_MS`, 30 s ;
 les flux SSE passent `timeoutMs: 0` car un tour d'agent dure légitimement des
 minutes), et `retries` **uniquement sur les lectures**. Rejouer un POST qui a
 créé une session ou lancé un tour dupliquerait le travail — ne jamais mettre
 `retries` sur `createSession`, `forkSession` ou un stream.
 
-**2. `lib/server/respond.ts` + `limits.ts`** — `proxy()` traduit `HermesError`
-en JSON `{error:{message,code,retry_after}}` avec le statut amont. `gate()`
-applique un token bucket par classe de route. Le sémaphore de
+**2. `lib/server/respond.ts` + `limits.ts`** — `proxy()` traduit une
+`UpstreamError` en JSON `{error:{message,code,retry_after}}` avec le statut
+amont. Son second argument est le repli quand l'exception n'en est pas une :
+`dashboardResponse()` et `skillsJson()` ne sont plus que `proxy()` avec ce
+repli lié. `gate()` applique un token bucket par classe de route. Le sémaphore de
 `MAX_CONCURRENT_TURNS` (3 par défaut) refuse un 4ᵉ tour **avant** Hermes : le
 cap amont est de 10, mais un Pi 5 rame bien avant, surtout si plusieurs agents
 lancent Chromium.

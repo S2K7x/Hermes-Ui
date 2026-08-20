@@ -2,7 +2,8 @@ import { mkdir, readFile, readdir, realpath, rename, stat, unlink, writeFile } f
 import { join, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SKILLS_DIR } from './config';
-import { errorResponse } from './respond';
+import { proxy } from './respond';
+import { UpstreamError } from './upstream';
 import {
 	DESCRIPTION_FILE,
 	MAX_SKILL_BYTES,
@@ -36,15 +37,18 @@ import {
  * the feature instead of breaking.
  */
 
-export class SkillsFsError extends Error {
-	readonly status: number;
-	readonly code: string;
-
-	constructor(status: number, code: string, message: string) {
-		super(message);
+/**
+ * A filesystem failure, dressed as an upstream one.
+ *
+ * The skills directory is not a server, but a route answers a bad path here
+ * exactly as it answers a bad request to the gateway — same status, same code,
+ * same JSON — so it shares the base class and, since a refactor, the same
+ * `(status, message, code)` argument order as its two siblings.
+ */
+export class SkillsFsError extends UpstreamError {
+	constructor(status: number, message: string, code: string) {
+		super(status, message, code);
 		this.name = 'SkillsFsError';
-		this.status = status;
-		this.code = code;
 	}
 }
 
@@ -54,16 +58,16 @@ const UNAVAILABLE =
 
 /** Realpath of the skills root, or a typed failure. Cheap enough to redo per call. */
 async function skillsRoot(): Promise<string> {
-	if (!SKILLS_DIR) throw new SkillsFsError(503, 'skills_dir_unavailable', UNAVAILABLE);
+	if (!SKILLS_DIR) throw new SkillsFsError(503, UNAVAILABLE, 'skills_dir_unavailable');
 	let resolved: string;
 	try {
 		resolved = await realpath(SKILLS_DIR);
 	} catch {
-		throw new SkillsFsError(503, 'skills_dir_unavailable', UNAVAILABLE);
+		throw new SkillsFsError(503, UNAVAILABLE, 'skills_dir_unavailable');
 	}
 	const info = await stat(resolved).catch(() => null);
 	if (!info?.isDirectory()) {
-		throw new SkillsFsError(503, 'skills_dir_unavailable', UNAVAILABLE);
+		throw new SkillsFsError(503, UNAVAILABLE, 'skills_dir_unavailable');
 	}
 	return resolved;
 }
@@ -82,10 +86,10 @@ async function resolveDir(root: string, segments: string[]): Promise<string> {
 	try {
 		real = await realpath(join(root, ...segments));
 	} catch {
-		throw new SkillsFsError(404, 'skill_not_found', "Ce skill n'existe pas (ou plus).");
+		throw new SkillsFsError(404, "Ce skill n'existe pas (ou plus).", 'skill_not_found');
 	}
 	if (!isInside(root, real)) {
-		throw new SkillsFsError(400, 'invalid_skill_path', 'Chemin de skill refusé.');
+		throw new SkillsFsError(400, 'Chemin de skill refusé.', 'invalid_skill_path');
 	}
 	return real;
 }
@@ -95,8 +99,8 @@ function segmentsOrThrow(ref: SkillRef): string[] {
 	if (!segments) {
 		throw new SkillsFsError(
 			400,
-			'invalid_skill_path',
-			'Nom de catégorie, de skill ou de fichier invalide.'
+			'Nom de catégorie, de skill ou de fichier invalide.',
+			'invalid_skill_path'
 		);
 	}
 	return segments;
@@ -197,14 +201,14 @@ export async function readSkillFile(ref: SkillRef): Promise<SkillFileContent> {
 
 	const info = await stat(path).catch(() => null);
 	if (!info?.isFile()) {
-		throw new SkillsFsError(404, 'skill_not_found', "Ce fichier n'existe pas (ou plus).");
+		throw new SkillsFsError(404, "Ce fichier n'existe pas (ou plus).", 'skill_not_found');
 	}
 	if (info.size > MAX_SKILL_BYTES) {
 		throw new SkillsFsError(
 			413,
-			'skill_too_large',
 			`Fichier trop volumineux pour l'éditeur (${Math.round(info.size / 1024)} Ko). ` +
-				`Modifiez-le en ligne de commande.`
+				`Modifiez-le en ligne de commande.`,
+			'skill_too_large'
 		);
 	}
 
@@ -235,19 +239,19 @@ async function writeAtomic(path: string, content: string): Promise<void> {
 	} catch (err) {
 		await unlink(tmp).catch(() => {});
 		const message = err instanceof Error ? err.message : String(err);
-		throw new SkillsFsError(500, 'skill_write_failed', `Écriture impossible : ${message}`);
+		throw new SkillsFsError(500, `Écriture impossible : ${message}`, 'skill_write_failed');
 	}
 }
 
 function checkSize(content: string): void {
 	if (typeof content !== 'string') {
-		throw new SkillsFsError(400, 'invalid_body', 'Le contenu doit être une chaîne.');
+		throw new SkillsFsError(400, 'Le contenu doit être une chaîne.', 'invalid_body');
 	}
 	if (utf8Length(content) > MAX_SKILL_BYTES) {
 		throw new SkillsFsError(
 			413,
-			'skill_too_large',
-			`Contenu trop volumineux (max ${MAX_SKILL_BYTES / 1024} Ko).`
+			`Contenu trop volumineux (max ${MAX_SKILL_BYTES / 1024} Ko).`,
+			'skill_too_large'
 		);
 	}
 }
@@ -289,8 +293,8 @@ export async function createSkill(input: CreateSkillInput): Promise<SkillFileEnt
 	if (!isValidSkillName(input.category) || !isValidSkillName(input.name)) {
 		throw new SkillsFsError(
 			400,
-			'invalid_skill_path',
-			'Les noms doivent être en minuscules, chiffres et tirets (ex. : ma-veille-tech).'
+			'Les noms doivent être en minuscules, chiffres et tirets (ex. : ma-veille-tech).',
+			'invalid_skill_path'
 		);
 	}
 	const content = input.content?.trim()
@@ -310,24 +314,24 @@ export async function createSkill(input: CreateSkillInput): Promise<SkillFileEnt
 		await mkdir(categoryPath).catch((err) => {
 			throw new SkillsFsError(
 				500,
-				'skill_write_failed',
-				`Création de la catégorie impossible : ${err instanceof Error ? err.message : err}`
+				`Création de la catégorie impossible : ${err instanceof Error ? err.message : err}`,
+				'skill_write_failed'
 			);
 		});
 	} else if (!categoryInfo.isDirectory()) {
-		throw new SkillsFsError(400, 'invalid_skill_path', "Cette catégorie n'est pas un répertoire.");
+		throw new SkillsFsError(400, "Cette catégorie n'est pas un répertoire.", 'invalid_skill_path');
 	}
 	categoryReal = await resolveDir(root, [input.category]);
 
 	const skillPath = join(categoryReal, input.name);
 	if (await stat(skillPath).catch(() => null)) {
-		throw new SkillsFsError(409, 'skill_exists', 'Un skill porte déjà ce nom dans cette catégorie.');
+		throw new SkillsFsError(409, 'Un skill porte déjà ce nom dans cette catégorie.', 'skill_exists');
 	}
 	await mkdir(skillPath).catch((err) => {
 		throw new SkillsFsError(
 			500,
-			'skill_write_failed',
-			`Création du skill impossible : ${err instanceof Error ? err.message : err}`
+			`Création du skill impossible : ${err instanceof Error ? err.message : err}`,
+			'skill_write_failed'
 		);
 	});
 
@@ -363,16 +367,6 @@ export function refFromParams(params: URLSearchParams): SkillRef {
 	};
 }
 
-/** Same shape as `proxy()` in respond.ts, for filesystem errors instead of Hermes ones. */
-export async function skillsJson<T>(fn: () => Promise<T>): Promise<Response> {
-	try {
-		const value = await fn();
-		return new Response(JSON.stringify(value), {
-			headers: { 'Content-Type': 'application/json' }
-		});
-	} catch (err) {
-		if (err instanceof SkillsFsError) return errorResponse(err.status, err.message, err.code);
-		const message = err instanceof Error ? err.message : String(err);
-		return errorResponse(500, message, 'skill_write_failed');
-	}
-}
+/** `proxy()` from respond.ts, with this upstream's name on the fallback. */
+export const skillsJson = <T>(fn: () => Promise<T>): Promise<Response> =>
+	proxy(fn, { status: 500, code: 'skill_write_failed' });

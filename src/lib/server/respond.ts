@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { HermesError } from './hermes';
+import { UpstreamError } from './upstream';
 import { AppErrorCode, type ApiErrorBody } from '$lib/errors';
 import { allowRequest } from './limits';
 
@@ -18,20 +18,37 @@ export function errorResponse(
 	return json(body(message, code, retryAfter), { status, headers });
 }
 
+/** What to answer when the failure is not an `UpstreamError` at all. */
+export interface ProxyFallback {
+	status: number;
+	code: string;
+}
+
+const HERMES_FALLBACK: ProxyFallback = { status: 502, code: AppErrorCode.Unreachable };
+
 /**
- * Run a Hermes call and shape the result as a JSON response, mapping
- * HermesError onto its upstream status and code so the browser can decide
- * whether to retry, re-sync, or just tell the user.
+ * Run an upstream call and shape the result as a JSON response, mapping
+ * `UpstreamError` onto its status and code so the browser can decide whether
+ * to retry, re-sync, or just tell the user.
+ *
+ * The default fallback is the gateway's, since most routes proxy it; the
+ * dashboard and the skills editor pass their own through `dashboardResponse()`
+ * and `skillsJson()`, which are this function with one argument bound.
  */
-export async function proxy<T>(fn: () => Promise<T>): Promise<Response> {
+export async function proxy<T>(
+	fn: () => Promise<T>,
+	fallback: ProxyFallback = HERMES_FALLBACK
+): Promise<Response> {
 	try {
-		return json((await fn()) as any);
+		// `?? null` because a handler that answers nothing must still send valid
+		// JSON: `undefined` would serialise to a body no client can read.
+		return json((await fn()) ?? null);
 	} catch (err) {
-		if (err instanceof HermesError) {
+		if (err instanceof UpstreamError) {
 			return errorResponse(err.status, err.message, err.code, err.retryAfter);
 		}
 		const message = err instanceof Error ? err.message : String(err);
-		return errorResponse(502, message, AppErrorCode.Unreachable);
+		return errorResponse(fallback.status, message, fallback.code);
 	}
 }
 
