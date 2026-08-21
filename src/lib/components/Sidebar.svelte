@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dialogFocus, trapTab } from '$lib/client/dialog.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
 	import { agentColor } from '$lib/agents';
@@ -7,6 +8,12 @@
 
 	interface Props {
 		open: boolean;
+		/**
+		 * Under 820px the sidebar is not a column but a drawer sliding over the
+		 * thread, scrim included — which makes it a modal dialog, with
+		 * everything that entails for the keyboard and for VoiceOver.
+		 */
+		drawer: boolean;
 		collapsed: boolean;
 		onclose: () => void;
 		ontoggleCollapse: () => void;
@@ -19,6 +26,7 @@
 	}
 	let {
 		open,
+		drawer,
 		collapsed,
 		onclose,
 		ontoggleCollapse,
@@ -29,6 +37,17 @@
 		onopenAgents,
 		onopenTheme
 	}: Props = $props();
+
+	let panel = $state<HTMLElement | null>(null);
+	/** A drawer that is out and covering the thread: a dialog, not a column. */
+	let modal = $derived(drawer && open);
+
+	// Same contract as every settings panel (point 22): focus enters the drawer
+	// when it slides out, and goes back to the ☰ button when it closes.
+	dialogFocus(
+		() => modal,
+		() => panel
+	);
 
 	let filter = $state('');
 	let showArchived = $state(false);
@@ -78,11 +97,46 @@
 		if (!menuFor) return;
 		if (!(event.target as HTMLElement).closest('.row')) menuFor = null;
 	}
+
+	/**
+	 * Tab must not walk out of the open drawer into the thread behind it.
+	 *
+	 * Handled on the window rather than on the drawer itself because focus can
+	 * legitimately sit on the element the browser is about to leave, and
+	 * because as a column — every screen wider than 820px — the sidebar is not
+	 * a dialog and must trap nothing at all.
+	 *
+	 * It also only acts on a Tab pressed *inside* the drawer. A settings panel
+	 * opened on top has its own trap, and two traps pulling in opposite
+	 * directions is worse than none: the drawer would drag the focus out of the
+	 * dialog the user is actually in.
+	 */
+	function onWindowKeydown(event: KeyboardEvent) {
+		if (!modal || !panel || !panel.contains(event.target as Node)) return;
+		trapTab(panel, event);
+	}
 </script>
 
-<svelte:window onclick={onWindowClick} />
+<svelte:window onclick={onWindowClick} onkeydown={onWindowKeydown} />
 
-<aside class="sidebar" class:open class:collapsed>
+<!-- Closed, the drawer is still there: parked at `translateX(-100%)` off the
+     left edge, but as reachable by Tab and by VoiceOver as if it were on
+     screen. `inert` is what makes "off screen" mean "out of reach".
+
+     `tabindex="-1"` is unconditional — it means "focusable by script, not by
+     Tab", harmless on the desktop column, and it is what lets the open drawer
+     take the focus and be announced by name. -->
+<aside
+	class="sidebar"
+	class:open
+	class:collapsed
+	bind:this={panel}
+	inert={drawer && !open}
+	role={modal ? 'dialog' : undefined}
+	aria-modal={modal ? 'true' : undefined}
+	aria-label={modal ? 'Discussions' : undefined}
+	tabindex="-1"
+>
 	{#if collapsed}
 		<div class="rail">
 			<button class="rail-btn" onclick={ontoggleCollapse} aria-label="Déplier les discussions"
@@ -272,6 +326,12 @@
 		overflow: hidden;
 		transition: flex-basis 0.16s ease, width 0.16s ease;
 	}
+	/* The drawer takes focus when it opens so it is announced by name; a ring
+	   drawn around the whole panel is not the signal, the announcement is —
+	   same call as the modal card in `Modal.svelte`. */
+	.sidebar:focus {
+		outline: none;
+	}
 	.sidebar.collapsed {
 		width: var(--rail-width);
 		flex-basis: var(--rail-width);
@@ -415,11 +475,20 @@
 	.more {
 		padding: 6px 9px;
 		color: var(--text-faint);
-		opacity: 0;
 	}
-	.row:hover .more,
-	.row.active .more {
-		opacity: 1;
+	/* Renaming, pinning, branching, archiving and deleting all live behind this
+	   ⋯ — and it used to be revealed by hover, which a finger does not have and
+	   a Tab key does not either. It hides only where a pointer can bring it
+	   back, and even there a focused row shows it. */
+	@media (hover: hover) and (min-width: 821px) {
+		.more {
+			opacity: 0;
+		}
+		.row:hover .more,
+		.row:focus-within .more,
+		.row.active .more {
+			opacity: 1;
+		}
 	}
 	.rename {
 		flex: 1;
@@ -545,9 +614,23 @@
 		.collapse {
 			display: none;
 		}
+		/* Thumb-sized targets, like every other control on a phone. The list
+		   flexes, so a taller footer costs rows of conversation, not layout. */
+		.entry {
+			min-height: 44px;
+			padding-top: 10px;
+			padding-bottom: 10px;
+		}
+		.more {
+			min-width: 44px;
+			min-height: 44px;
+		}
+		.search {
+			min-height: 44px;
+		}
 		.archive-toggle,
 		.status {
-			min-height: 34px;
+			min-height: 44px;
 		}
 	}
 </style>

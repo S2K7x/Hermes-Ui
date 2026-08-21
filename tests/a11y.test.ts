@@ -65,7 +65,9 @@ test('no control drops its focus ring behind the global one', () => {
 		// The skills editor fills its pane; the caret is the indicator there.
 		['SkillsPanel.svelte', 1],
 		// The dialog card takes focus on open so it is announced, not ringed.
-		['Modal.svelte', 1]
+		['Modal.svelte', 1],
+		// Same call for the mobile drawer, which is that same dialog.
+		['Sidebar.svelte', 1]
 	]);
 	const files = readdirSync(dir).filter((f) => f.endsWith('.svelte'));
 	assert.ok(files.length > 10, 'the components should be there');
@@ -77,4 +79,97 @@ test('no control drops its focus ring behind the global one', () => {
 
 	const css = readFileSync(new URL('../src/app.css', import.meta.url), 'utf8');
 	assert.match(css, /:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\)/);
+});
+
+/**
+ * The mobile drawer is a dialog, and a closed drawer is not merely off screen.
+ *
+ * Under 820px the sidebar leaves the layout and slides over the thread behind
+ * a scrim. Parked at `translateX(-100%)` it stayed fully reachable: Tab walked
+ * through some twenty invisible controls before reaching the composer, and
+ * VoiceOver read out a conversation list nobody could see. These tests pin the
+ * three attributes that fix it, because none of them shows up in a screenshot.
+ */
+const SIDEBAR = readFileSync(
+	new URL('../src/lib/components/Sidebar.svelte', import.meta.url),
+	'utf8'
+);
+
+test('a closed drawer is inert, not just translated out of view', () => {
+	assert.match(SIDEBAR, /inert=\{drawer && !open\}/);
+});
+
+test('an open drawer announces itself as a modal dialog', () => {
+	// Only as a drawer: on a wide screen it is a plain column of the layout,
+	// and a permanently visible `role="dialog"` would be a lie.
+	assert.match(SIDEBAR, /role=\{modal \? 'dialog' : undefined\}/);
+	assert.match(SIDEBAR, /aria-modal=\{modal \? 'true' : undefined\}/);
+	assert.match(SIDEBAR, /aria-label=\{modal \? 'Discussions' : undefined\}/);
+	assert.match(SIDEBAR, /let modal = \$derived\(drawer && open\)/);
+});
+
+test('the drawer reuses the dialog focus contract instead of copying it', () => {
+	assert.match(SIDEBAR, /import \{ dialogFocus, trapTab \} from '\$lib\/client\/dialog\.svelte'/);
+	const modal = readFileSync(new URL('../src/lib/components/Modal.svelte', import.meta.url), 'utf8');
+	assert.match(modal, /import \{ dialogFocus, trapTab \} from '\$lib\/client\/dialog\.svelte'/);
+	// The trap arithmetic and the focusable selector stay in one place too.
+	const dialog = readFileSync(new URL('../src/lib/client/dialog.svelte.ts', import.meta.url), 'utf8');
+	assert.match(dialog, /from '\$lib\/a11y'/);
+});
+
+/**
+ * `Escape` closes the drawer, because Tab cannot leave it.
+ *
+ * A trap without a documented way out is a cage; every other modal surface in
+ * the app already answers Escape.
+ */
+test('Escape closes the drawer before it stops a running turn', () => {
+	const page = readFileSync(new URL('../src/routes/+page.svelte', import.meta.url), 'utf8');
+	const escape = page.slice(page.indexOf("if (event.key === 'Escape')"));
+	const drawer = escape.indexOf('sidebarOpen = false');
+	const stop = escape.indexOf('chat.stop()');
+	assert.ok(drawer > 0 && stop > 0, 'both branches must exist');
+	assert.ok(drawer < stop, 'closing the drawer comes first');
+});
+
+/**
+ * The row menu — rename, pin, branch, archive, delete — used to appear on
+ * hover only. A finger has no hover, so on a phone those five actions were
+ * unreachable on every row but the selected one; a Tab stop with `opacity: 0`
+ * was just as invisible to a keyboard.
+ */
+test('the row actions are not hidden behind hover alone', () => {
+	assert.match(SIDEBAR, /@media \(hover: hover\) and \(min-width: 821px\)/);
+	assert.match(SIDEBAR, /\.row:focus-within \.more/);
+	// `opacity: 0` on `.more` may only be declared inside that guarded block.
+	const guarded = SIDEBAR.slice(SIDEBAR.indexOf('@media (hover: hover)'));
+	const all = SIDEBAR.match(/\.more \{[^}]*opacity:\s*0/g) ?? [];
+	const inside = guarded.match(/\.more \{[^}]*opacity:\s*0/g) ?? [];
+	assert.equal(all.length, inside.length, '.more may only be hidden where a pointer can reveal it');
+	assert.equal(inside.length, 1);
+});
+
+/**
+ * One trap at a time.
+ *
+ * On a phone a settings panel opened from the drawer would sit on a dialog
+ * that is itself trapping Tab, and two traps pulling in opposite directions is
+ * worse than none — the drawer would drag the focus out of the panel the user
+ * is actually in. So the drawer only answers a Tab pressed inside itself, and
+ * opening a panel from it closes it.
+ */
+test('the drawer never traps a Tab pressed outside itself', () => {
+	assert.match(SIDEBAR, /panel\.contains\(event\.target as Node\)/);
+});
+
+test('a settings panel opened from the sidebar closes it', () => {
+	const page = readFileSync(new URL('../src/routes/+page.svelte', import.meta.url), 'utf8');
+	for (const prop of ['onopenStatus', 'onopenSkills', 'onopenProviders', 'onopenJobs', 'onopenAgents', 'onopenTheme']) {
+		assert.match(
+			page,
+			new RegExp(`${prop}=\\{\\(\\) => openFromSidebar\\(`),
+			`${prop} must go through openFromSidebar`
+		);
+	}
+	assert.match(page, /function openFromSidebar\([\s\S]{0,120}sidebarOpen = false/);
 });

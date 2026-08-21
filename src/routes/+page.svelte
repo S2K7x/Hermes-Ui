@@ -84,7 +84,13 @@
 
 		const mq = window.matchMedia('(max-width: 820px)');
 		narrow = mq.matches;
-		const onChange = (e: MediaQueryListEvent) => (narrow = e.matches);
+		const onChange = (e: MediaQueryListEvent) => {
+			narrow = e.matches;
+			// A drawer left open while the window grows would become a column
+			// with a scrim still over the page — and an Escape that no longer
+			// means "close me". It stops being a drawer, so it closes.
+			if (!narrow) sidebarOpen = false;
+		};
 		mq.addEventListener('change', onChange);
 
 		/**
@@ -164,6 +170,18 @@
 	function openJobsFromStatus() {
 		statusOpen = false;
 		jobsOpen = true;
+	}
+
+	/**
+	 * A settings panel opened from the sidebar replaces it.
+	 *
+	 * On a phone the sidebar is a drawer over the thread, so the two would
+	 * otherwise stack — a dialog on top of a dialog, each trapping Tab. On a
+	 * wide screen the sidebar is a column and closing it is a no-op.
+	 */
+	function openFromSidebar(open: () => void) {
+		open();
+		sidebarOpen = false;
 	}
 
 	function toggleCollapse() {
@@ -248,6 +266,10 @@
 		if (event.key === 'Escape') {
 			if (paletteOpen || statusOpen || shortcutsOpen) {
 				paletteOpen = statusOpen = shortcutsOpen = false;
+			} else if (sidebarOpen) {
+				// On a narrow window the drawer covers the thread and traps Tab:
+				// Escape is the way out, as it is for every other modal surface.
+				sidebarOpen = false;
 			} else if (chat.streaming) {
 				chat.stop();
 			}
@@ -275,15 +297,16 @@
 <div class="app" style="--keyboard: {keyboard}px">
 	<Sidebar
 		open={sidebarOpen}
+		drawer={narrow}
 		collapsed={sidebarCollapsed && !narrow}
 		onclose={() => (sidebarOpen = false)}
 		ontoggleCollapse={toggleCollapse}
-		onopenStatus={() => (statusOpen = true)}
-		onopenSkills={() => (skillsOpen = true)}
-		onopenProviders={() => (providersOpen = true)}
-		onopenJobs={() => (jobsOpen = true)}
-		onopenAgents={() => (agentsOpen = true)}
-		onopenTheme={() => (themeOpen = true)}
+		onopenStatus={() => openFromSidebar(() => (statusOpen = true))}
+		onopenSkills={() => openFromSidebar(() => (skillsOpen = true))}
+		onopenProviders={() => openFromSidebar(() => (providersOpen = true))}
+		onopenJobs={() => openFromSidebar(() => (jobsOpen = true))}
+		onopenAgents={() => openFromSidebar(() => (agentsOpen = true))}
+		onopenTheme={() => openFromSidebar(() => (themeOpen = true))}
 	/>
 
 	{#if sidebarOpen}

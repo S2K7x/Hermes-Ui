@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { tick, type Snippet } from 'svelte';
-	import { FOCUSABLE_SELECTOR, trapIndex } from '$lib/a11y';
+	import { type Snippet } from 'svelte';
+	import { dialogFocus, trapTab } from '$lib/client/dialog.svelte';
 
 	/**
 	 * The shell every settings panel shares: scrim, centred dialog, title bar
@@ -36,44 +36,16 @@
 	let card = $state<HTMLElement | null>(null);
 
 	/**
-	 * Focus follows the dialog.
-	 *
-	 * On open it moves onto the card itself rather than onto the first control:
-	 * a screen reader then announces the dialog and its name before anything
-	 * else, and no field steals the caret (which on iOS would raise the
-	 * keyboard for a panel the user only meant to read). On close it goes back
-	 * to whatever opened the dialog — usually the rail button — so the next Tab
-	 * carries on from there instead of restarting at the top of the page.
+	 * Focus follows the dialog: onto the card when it opens — so a screen reader
+	 * announces the dialog before its contents — and back to whatever opened it
+	 * on close, usually the rail button, so the next Tab carries on from there
+	 * instead of restarting at the top of the page. The mobile drawer of
+	 * `Sidebar.svelte` shares both behaviours.
 	 */
-	$effect(() => {
-		if (!open) return;
-		const opener = document.activeElement;
-		void tick().then(() => card?.focus({ preventScroll: true }));
-		return () => {
-			if (opener instanceof HTMLElement && opener.isConnected) {
-				opener.focus({ preventScroll: true });
-			}
-		};
-	});
-
-	/** Tab wraps inside the dialog instead of walking into the page behind it. */
-	function ontrap(event: KeyboardEvent) {
-		if (event.key !== 'Tab' || !card) return;
-		// `getClientRects()` is how a hidden stop (a collapsed form, a panel not
-		// on screen) is told from a real one — it also works inside `position:
-		// fixed`, unlike `offsetParent`.
-		const stops = [...card.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
-			(el) => el.getClientRects().length > 0
-		);
-		const index = trapIndex(
-			stops.length,
-			stops.indexOf(document.activeElement as HTMLElement),
-			event.shiftKey
-		);
-		if (index === null && stops.length > 0) return;
-		event.preventDefault();
-		(index === null ? card : stops[index]).focus();
-	}
+	dialogFocus(
+		() => open,
+		() => card
+	);
 </script>
 
 {#if open}
@@ -83,7 +55,7 @@
 		class="panel"
 		class:fill
 		bind:this={card}
-		onkeydown={ontrap}
+		onkeydown={(event) => card && trapTab(card, event)}
 		role="dialog"
 		aria-modal="true"
 		aria-label={label ?? title}

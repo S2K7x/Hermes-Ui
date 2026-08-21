@@ -1,5 +1,7 @@
 {
 	"path": "/",
-	"js": "(async()=>{const b=[...document.querySelectorAll('button')].find(x=>/Providers/i.test((x.getAttribute('aria-label')||'')+(x.title||'')+x.textContent));if(!b)return 'introuvable';b.click();await new Promise(r=>setTimeout(r,2200));return document.querySelector('[role=dialog]')?'ok':'pas de dialogue'})()",
-	"caption": "Rien n'a changé à l'écran, et c'est le but : refactor interne. Le panneau Providers passe par le client du dashboard, qui partageait avec le client du gateway et l'éditeur de skills trois copies de la même chose — une classe d'erreur, une boucle de retry, et le try/catch qui fabrique la réponse JSON. Les trois copies avaient divergé (ordre des arguments différent, corps vide contre `null`). Il n'en reste qu'une, `src/lib/server/upstream.ts`, avec 15 tests."
+	"js": "(async()=>{const b=[...document.querySelectorAll('button')].find(x=>x.getAttribute('aria-label')==='Discussions');if(!b)return 'burger introuvable';b.focus();b.click();await new Promise(r=>setTimeout(r,1200));const a=document.querySelector('aside.sidebar');return JSON.stringify({role:a.getAttribute('role'),inert:a.inert,focus:document.activeElement===a})})()",
+	"width": 414,
+	"height": 896,
+	"caption": "Le tiroir des discussions, ouvert sur un écran de téléphone. Ce qui a changé se voit à moitié : les lignes et les boutons du pied font maintenant 44 px, et le menu « ⋯ » de chaque conversation (renommer, épingler, brancher, archiver, supprimer) ne se cache plus derrière un survol qu'un doigt n'a pas. Le reste ne se photographie pas : fermé, le tiroir était encore parcouru par la tabulation et lu par VoiceOver — il est désormais inert ; ouvert, il s'annonce comme un dialogue, prend le focus, retient Tab, et le rend au bouton ☰ sur Échap."
 }

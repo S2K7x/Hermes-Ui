@@ -759,6 +759,11 @@ bas**, arrondies en haut seulement.
 Cette feuille n'est écrite qu'**une fois**, dans `Modal.svelte` : voir le
 point 21.
 
+**Et la sidebar, sous 820 px, n'est pas une colonne mais un tiroir** : elle
+quitte le flux, se pose en `position: fixed`, glisse par-dessus le fil derrière
+un voile. C'est un dialogue modal, avec tout ce que ça implique — voir le
+point 22.
+
 ### 21. Un seul cadre pour tous les panneaux modaux
 
 `Modal.svelte` porte le voile, la carte centrée, la barre de titre (titre,
@@ -875,6 +880,52 @@ panneau, un champ creusé. Sans ça, l'indigo de « Nocturne » ou n'importe que
 couleur sombre saisie dans le champ d'accent donnerait un anneau invisible.
 `tests/theme.test.ts` rejoue les quatre préréglages × deux modes × les accents
 pathologiques.
+
+**Le tiroir mobile est ce même dialogue.** Sous 820 px la sidebar sort du
+flux et recouvre le fil : elle est donc modale, et `Modal.svelte` et
+`Sidebar.svelte` partagent maintenant `src/lib/client/dialog.svelte.ts`
+(`dialogFocus`, `trapTab`) plutôt que d'en tenir chacun une copie. Ce qui a été
+**mesuré** au CDP sur l'application construite, en 414 × 896 :
+
+- **Fermé, un tiroir n'est pas hors de portée.** Garé en
+  `translateX(-100%)`, il reste dans l'ordre de tabulation et dans l'arbre
+  d'accessibilité : mesuré, 4 arrêts de tabulation atteints en 25 Tab depuis le
+  haut du document — et bien plus dès qu'il y a des conversations, chacune
+  ajoutant deux boutons. D'où `inert={drawer && !open}`, qui ramène ce compte à
+  **0** sans rien changer à l'animation. En 1280 px de large, `inert` reste
+  faux : la colonne est du contenu ordinaire.
+- **Ouvert, il s'annonce** : `role="dialog"`, `aria-modal`, `aria-label`
+  « Discussions », posés **seulement** quand `drawer && open` — un
+  `role="dialog"` permanent sur la colonne de bureau serait un mensonge. Le
+  focus va sur l'`<aside>` lui-même (même raison qu'au-dessus : l'annonce plutôt
+  qu'un anneau autour de 300 px de panneau, d'où le `.sidebar:focus { outline:
+  none }` que compte `tests/a11y.test.ts`).
+- **Tab n'en sort pas** (mesuré : 30 Tab et 8 ⇧Tab, zéro fuite), et **Échap le
+  ferme** en rendant le focus au bouton ☰ — vérifié en ouvrant le tiroir au
+  clavier. Le piège est branché sur `<svelte:window>` et non sur l'`<aside>` :
+  en colonne, la sidebar ne doit rien retenir du tout.
+- Redimensionner la fenêtre au-delà de 820 px pendant que le tiroir est ouvert
+  le **ferme** : il cesse d'être un tiroir, un voile resterait sur la page et
+  Échap ne voudrait plus dire « ferme-moi ».
+- **Un seul piège à la fois.** Un panneau ouvert depuis le pied du tiroir se
+  poserait sur un dialogue qui retient déjà Tab, et deux pièges qui tirent en
+  sens inverse valent moins qu'aucun : le tiroir arracherait le focus du
+  panneau où l'utilisateur se trouve. Deux verrous — le tiroir n'agit que sur
+  un Tab pressé **à l'intérieur de lui-même**, et `openFromSidebar()` referme
+  le tiroir en ouvrant le panneau. Mesuré : tiroir ouvert au clavier → « 📚
+  Skills » → tiroir fermé et `inert`, focus dans le panneau, 12 Tab sans une
+  seule fuite.
+
+Deux détails tactiles du même ordre, dans le tiroir :
+
+- Le menu « ⋯ » d'une ligne (renommer, épingler, brancher, archiver,
+  supprimer) était révélé par le survol — qu'un doigt n'a pas, et qu'une
+  tabulation n'a pas non plus : c'était cinq actions inatteignables au
+  téléphone sur toute ligne sauf la ligne active, et un arrêt de tabulation en
+  `opacity: 0` sur le bureau. Il n'est masqué que sous `@media (hover: hover)
+  and (min-width: 821px)`, et même là `.row:focus-within` le rend visible.
+- Les lignes, le champ de recherche et les boutons du pied passent à 44 px sous
+  820 px, comme tout le reste de l'app tactile.
 
 La règle globale est dans `app.css`, en `:focus-visible` (jamais `:focus` : un
 clic à la souris ne doit rien dessiner). Comme presque tout ici est un bouton nu
@@ -998,6 +1049,7 @@ src/
 │   │   ├── api.ts       fetch typé → ApiError, `withRetry`
 │   │   ├── storage.ts   localStorage qui ne peut pas jeter
 │   │   ├── platform.ts  ⌘ vs Ctrl
+│   │   ├── dialog.svelte.ts  focus d'un dialogue : entrée, piège de Tab, retour
 │   │   └── lazy.svelte.ts  composant récupéré à la première utilisation
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
 │   │                  AgentPicker, Markdown, CommandPalette, Modal (cadre

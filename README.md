@@ -59,12 +59,15 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   et le bureau sont d'accord
 - **PWA** installable sur téléphone : plein cadre, feuilles qui montent du bas,
   encoche et barre d'accueil respectées, composeur qui reste au-dessus du
-  clavier iOS
+  clavier iOS, cibles tactiles de 44 px — y compris dans le tiroir des
+  discussions, dont le menu de ligne ne se cache plus derrière un survol
 - **Raccourcis clavier** (`?` pour la liste). L'app se pilote entièrement au
   clavier : le focus entre dans un panneau quand il s'ouvre, Tab n'en sort pas,
   Échap le ferme et rend le focus au bouton d'origine — et chaque contrôle
   porte un anneau de focus visible, dérivé de l'accent choisi et maintenu à
-  3:1 sur tous les fonds
+  3:1 sur tous les fonds. Le tiroir mobile suit le même contrat, et fermé il
+  disparaît de la tabulation comme des lecteurs d'écran au lieu de rester
+  parcourable hors de l'écran
 - **Détachement** d'un tour en cours (voir la limite ci-dessous)
 
 ### Robustesse
