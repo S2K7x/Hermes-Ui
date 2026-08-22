@@ -1,7 +1,7 @@
 {
 	"path": "/",
-	"js": "(async()=>{const b=[...document.querySelectorAll('button')].find(x=>x.getAttribute('aria-label')==='Discussions');if(!b)return 'burger introuvable';b.focus();b.click();await new Promise(r=>setTimeout(r,1200));const a=document.querySelector('aside.sidebar');return JSON.stringify({role:a.getAttribute('role'),inert:a.inert,focus:document.activeElement===a})})()",
-	"width": 414,
-	"height": 896,
-	"caption": "Le tiroir des discussions, ouvert sur un écran de téléphone. Ce qui a changé se voit à moitié : les lignes et les boutons du pied font maintenant 44 px, et le menu « ⋯ » de chaque conversation (renommer, épingler, brancher, archiver, supprimer) ne se cache plus derrière un survol qu'un doigt n'a pas. Le reste ne se photographie pas : fermé, le tiroir était encore parcouru par la tabulation et lu par VoiceOver — il est désormais inert ; ouvert, il s'annonce comme un dialogue, prend le focus, retient Tab, et le rend au bouton ☰ sur Échap."
+	"js": "(async()=>{const h=[...document.querySelectorAll('aside.sidebar .group')].map(e=>e.textContent.trim());await new Promise(r=>setTimeout(r,600));return JSON.stringify(h)})()",
+	"width": 1280,
+	"height": 900,
+	"caption": "La sidebar et ses bandes de récence — « Aujourd'hui », « Hier », « 7 derniers jours ». Ce sont elles qui changent : ces bandes, et les libellés « hier » / « 3 j » de chaque ligne, se comptaient en heures écoulées et non en jours calendaires. Deux jours par an, au changement d'heure, une conversation de la veille était donc rangée sous « 7 derniers jours » et étiquetée « 2 j » — et un horodatage tombant pile à minuit se décalait toute l'année. Rien ne se voit sur cette capture : c'est justement ce que les cinq nouveaux tests, qui échouent tous sur l'ancien calcul, servent à garder vrai."
 }

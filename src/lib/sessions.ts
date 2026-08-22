@@ -12,23 +12,38 @@ export function sessionLabel(s: HermesSession): string {
 }
 
 /** Short relative time for a sidebar row. */
-export function relativeTime(ts: number): string {
+export function relativeTime(ts: number, now: Date = new Date()): string {
 	if (!ts) return '';
 	const date = new Date(ts * 1000);
-	const days = daysAgo(ts);
+	const days = daysAgo(ts, now);
 	if (days === 0) return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 	if (days === 1) return 'hier';
 	if (days < 7) return `${days} j`;
 	return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
-/** Whole days between a timestamp and now, counted from local midnight. */
-function daysAgo(ts: number): number {
-	const then = new Date(ts * 1000);
-	const midnight = new Date();
-	midnight.setHours(0, 0, 0, 0);
-	const diff = midnight.getTime() - then.getTime();
-	return diff < 0 ? 0 : Math.floor(diff / 86_400_000) + 1;
+/**
+ * The local calendar day a moment falls on, as a count of days since the
+ * epoch. Going through `Date.UTC` on the *local* year/month/day is what makes
+ * the subtraction below exact: UTC days are always 86 400 s, whereas the local
+ * days being compared are not. Subtracting two wall-clock instants and dividing
+ * by 86 400 000 — the obvious version — is off by one across every daylight
+ * saving change, in both directions.
+ */
+const localDay = (d: Date): number =>
+	Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000;
+
+/**
+ * Whole calendar days between a timestamp and now: 0 today, 1 yesterday.
+ *
+ * Counted in days, not in elapsed time, because that is what the labels mean —
+ * something from 23:50 yesterday is "hier" ten minutes later, and something
+ * from this morning stays "today" all evening. A timestamp in the future
+ * (clock skew between the Pi and Hermes) reads as today rather than negative.
+ */
+function daysAgo(ts: number, now: Date = new Date()): number {
+	const days = localDay(now) - localDay(new Date(ts * 1000));
+	return days > 0 ? days : 0;
 }
 
 export interface SessionGroup {
@@ -42,7 +57,7 @@ export interface SessionGroup {
  * recency band. Bands with nothing in them are dropped so the sidebar never
  * shows an empty heading.
  */
-export function groupSessions(sessions: HermesSession[]): SessionGroup[] {
+export function groupSessions(sessions: HermesSession[], now: Date = new Date()): SessionGroup[] {
 	const sorted = [...sessions].sort((a, b) => activityAt(b) - activityAt(a));
 
 	const bands: SessionGroup[] = [
@@ -60,7 +75,7 @@ export function groupSessions(sessions: HermesSession[]): SessionGroup[] {
 			byKey.pinned.sessions.push(session);
 			continue;
 		}
-		const days = daysAgo(activityAt(session));
+		const days = daysAgo(activityAt(session), now);
 		if (days === 0) byKey.today.sessions.push(session);
 		else if (days === 1) byKey.yesterday.sessions.push(session);
 		else if (days < 7) byKey.week.sessions.push(session);

@@ -983,6 +983,30 @@ Ouvrir le parent d'un fork peut donc renvoyer le transcript du fork. Le champ
 `_lineage_root_id`, lui, ne vient que de `get_compression_tip`, qui exige
 `parent.end_reason == 'compression'` : c'est le seul signal non ambigu.
 
+### 24. Les dates de la sidebar se comptent en jours, pas en heures
+
+`relativeTime()` et `groupSessions()` (`src/lib/sessions.ts`) rangent une
+conversation par **jour calendaire local** — 0 aujourd'hui, 1 hier — et non par
+temps écoulé. C'est ce que les libellés promettent : une conversation de 23 h 50
+est « hier » dix minutes plus tard, et celle de ce matin reste sous
+« Aujourd'hui » jusqu'au soir.
+
+D'où `localDay()`, qui projette l'année/mois/jour **locaux** sur `Date.UTC`
+avant de soustraire. La version évidente — deux instants soustraits puis divisés
+par 86 400 000 — se trompe d'un jour à **chaque** changement d'heure, dans les
+deux sens, parce que le jour local dure alors 23 h ou 25 h. **Mesuré** avant
+correction, sur les deux zones (Asia/Jerusalem, celle du Pi, et Europe/Paris) :
+au lendemain du passage à l'heure d'hiver, une conversation de la veille
+s'affichait « 2 j » et tombait dans « 7 derniers jours » ; au lendemain du
+passage à l'heure d'été, une conversation d'avant-hier devenait « hier ». Un
+horodatage tombant pile à minuit local était décalé lui aussi — « hier » pour
+aujourd'hui.
+
+Les deux fonctions prennent un `now` facultatif — même convention que
+`parseSchedule()` au point 14 — parce qu'une bascule d'heure ne se teste pas
+sans horloge fixe. `tests/sessions.test.ts` rejoue les deux transitions de 2026
+dans les deux zones ; ces cinq cas échouent sur l'ancienne arithmétique.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |

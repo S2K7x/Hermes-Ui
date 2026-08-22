@@ -5,6 +5,7 @@ import {
 	groupSessions,
 	lineageRotations,
 	matchesQuery,
+	relativeTime,
 	rotatedSessionId,
 	sessionLabel,
 	usageSummary
@@ -147,4 +148,127 @@ test('the open conversation follows its compression continuation', () => {
 	assert.equal(rotatedSessionId(rows, null), null);
 	assert.equal(rotatedSessionId(rows, 'gone'), null);
 	assert.equal(rotatedSessionId([], 'root-1'), null);
+});
+
+// ---------------------------------------------------------------------------
+// Calendar-day bucketing
+//
+// `relativeTime` and `groupSessions` both count in *calendar days*, not in
+// elapsed hours. Testing that distinction needs a fixed clock and a fixed
+// zone, hence the `now` argument both take and the helper below.
+// ---------------------------------------------------------------------------
+
+/** Run `fn` with the process on `tz`, then put the ambient zone back. */
+function withTz<T>(tz: string, fn: () => T): T {
+	const before = process.env.TZ;
+	process.env.TZ = tz;
+	try {
+		return fn();
+	} finally {
+		if (before === undefined) delete process.env.TZ;
+		else process.env.TZ = before;
+	}
+}
+
+/** Seconds since the epoch for a wall-clock instant in the current zone. */
+const at = (localIso: string) => new Date(localIso).getTime() / 1000;
+
+/** The band `groupSessions` filed a session under. */
+const bandOf = (ts: number, now: Date) =>
+	groupSessions([session({ id: 'x', last_active: ts })], now)[0]?.key;
+
+// The Pi runs Asia/Jerusalem; Europe/Paris moves its clocks on other dates, so
+// a fix that only happened to line up with one zone would show up here.
+const ZONES = [
+	{ zone: 'Asia/Jerusalem', springForward: '2026-03-27', fallBack: '2026-10-25' },
+	{ zone: 'Europe/Paris', springForward: '2026-03-29', fallBack: '2026-10-25' }
+];
+
+for (const { zone, springForward, fallBack } of ZONES) {
+	test(`${zone}: a 25-hour day does not push yesterday into "2 j"`, () => {
+		withTz(zone, () => {
+			// Clocks went back during `fallBack`, so that local day lasted 25h.
+			// Elapsed-time arithmetic reads 24.5h here and rounds up to two days.
+			const ts = at(`${fallBack}T00:30:00`);
+			const now = new Date(`${fallBack}T10:00:00`);
+			now.setDate(now.getDate() + 1);
+
+			assert.equal(relativeTime(ts, now), 'hier');
+			assert.equal(bandOf(ts, now), 'yesterday');
+		});
+	});
+
+	test(`${zone}: a 23-hour day does not pull two days ago into "hier"`, () => {
+		withTz(zone, () => {
+			// Clocks went forward during `springForward`: the day before it is two
+			// calendar days back, but only 23.5h of elapsed time away.
+			const eve = new Date(`${springForward}T23:30:00`);
+			eve.setDate(eve.getDate() - 1);
+			const ts = eve.getTime() / 1000;
+			const now = new Date(`${springForward}T10:00:00`);
+			now.setDate(now.getDate() + 1);
+
+			assert.equal(relativeTime(ts, now), '2 j');
+			assert.equal(bandOf(ts, now), 'week');
+		});
+	});
+}
+
+test('a session stamped at exactly local midnight belongs to that day', () => {
+	withTz('Asia/Jerusalem', () => {
+		const now = new Date('2026-08-22T10:00:00');
+		// Seconds-resolution timestamps land on 00:00:00 exactly often enough
+		// (a job firing at midnight, for one) for the boundary to matter.
+		assert.equal(bandOf(at('2026-08-22T00:00:00'), now), 'today');
+		assert.equal(relativeTime(at('2026-08-22T00:00:00'), now), '00:00');
+		assert.equal(bandOf(at('2026-08-21T00:00:00'), now), 'yesterday');
+		assert.equal(relativeTime(at('2026-08-21T00:00:00'), now), 'hier');
+	});
+});
+
+test('ten minutes across midnight is already "hier", not a few hours', () => {
+	withTz('Asia/Jerusalem', () => {
+		const now = new Date('2026-08-22T00:10:00');
+		assert.equal(relativeTime(at('2026-08-21T23:50:00'), now), 'hier');
+		// …and this morning stays today all evening.
+		assert.equal(
+			bandOf(at('2026-08-22T00:05:00'), new Date('2026-08-22T23:50:00')),
+			'today'
+		);
+	});
+});
+
+test('the day count rolls over the end of a year', () => {
+	withTz('Europe/Paris', () => {
+		const now = new Date('2027-01-01T09:00:00');
+		assert.equal(relativeTime(at('2026-12-31T23:30:00'), now), 'hier');
+		assert.equal(bandOf(at('2026-12-30T12:00:00'), now), 'week');
+	});
+});
+
+test('band edges: 6 days is still the week, 7 is not', () => {
+	withTz('Europe/Paris', () => {
+		const now = new Date('2026-08-22T10:00:00');
+		assert.equal(bandOf(at('2026-08-16T10:00:00'), now), 'week'); // 6 days
+		assert.equal(relativeTime(at('2026-08-16T10:00:00'), now), '6 j');
+		assert.equal(bandOf(at('2026-08-15T10:00:00'), now), 'month'); // 7 days
+		// Past a week the label becomes a date, never "7 j".
+		assert.doesNotMatch(relativeTime(at('2026-08-15T10:00:00'), now), /\bj$/);
+		assert.equal(bandOf(at('2026-07-24T10:00:00'), now), 'month'); // 29 days
+		assert.equal(bandOf(at('2026-07-23T10:00:00'), now), 'older'); // 30 days
+	});
+});
+
+test('a timestamp in the future reads as today, not as a negative day', () => {
+	withTz('Europe/Paris', () => {
+		// The Pi's clock and Hermes' can disagree by a few seconds; a session
+		// dated ahead must not fall out of every band.
+		const now = new Date('2026-08-22T10:00:00');
+		assert.equal(bandOf(at('2026-08-23T10:00:00'), now), 'today');
+		assert.equal(relativeTime(at('2026-08-22T10:00:30'), now), '10:00');
+	});
+});
+
+test('a session with no timestamp shows nothing rather than 1970', () => {
+	assert.equal(relativeTime(0), '');
 });
