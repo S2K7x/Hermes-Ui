@@ -25,6 +25,14 @@
 	let accentCheck = $derived(readability(palette.accent));
 	let accent2Check = $derived(readability(palette.accent2));
 
+	// A theme that could not be read must not be written on top of: every
+	// control below stays disabled until it is. Opening the panel is also the
+	// natural moment to retry, so a transient failure heals itself here.
+	$effect(() => {
+		if (open) void theme.ensureLoaded();
+	});
+	let blocked = $derived(!theme.loaded);
+
 	let customised = $derived(settings.accent !== null || settings.accent2 !== null);
 	let pristine = $derived(
 		settings.preset === DEFAULT_THEME.preset && settings.mode === DEFAULT_THEME.mode && !customised
@@ -44,16 +52,30 @@
 
 <Modal {open} title="Apparence" width={520} {onclose}>
 	<div class="body">
+		{#if theme.loadError}
+			<!-- Not "Chargement…": a failed load is not a slow one, and PUT
+			     /api/theme replaces the row, so a change composed now would write
+			     the default palette over the saved one. -->
+			<p class="fail">
+				Votre thème n'a pas pu être chargé — les réglages sont bloqués pour ne pas écraser
+				la palette enregistrée. L'écran affiche la dernière palette connue de cet appareil.<br
+				/>{theme.loadError}
+			</p>
+			<button class="retry" onclick={() => theme.reload()}>Réessayer</button>
+		{/if}
+
 		<h3>Mode</h3>
 		<div class="modes">
 			<button
 				class="mode"
 				class:sel={settings.mode === 'dark'}
+				disabled={blocked}
 				onclick={() => theme.update({ mode: 'dark' })}>🌙 Sombre</button
 			>
 			<button
 				class="mode"
 				class:sel={settings.mode === 'light'}
+				disabled={blocked}
 				onclick={() => theme.update({ mode: 'light' })}>☀️ Clair</button
 			>
 		</div>
@@ -65,6 +87,7 @@
 				<button
 					class="preset"
 					class:sel={preset.id === settings.preset}
+					disabled={blocked}
 					onclick={() => theme.update({ preset: preset.id })}
 				>
 					<span class="swatch" style="background: {p.bg}">
@@ -89,6 +112,7 @@
 				<input
 					type="color"
 					value={palette.accent}
+					disabled={blocked}
 					oninput={(e) => theme.update({ accent: e.currentTarget.value })}
 					aria-label="Couleur d'accent"
 				/>
@@ -103,6 +127,7 @@
 				<input
 					type="color"
 					value={palette.accent2}
+					disabled={blocked}
 					oninput={(e) => theme.update({ accent2: e.currentTarget.value })}
 					aria-label="Couleur d'accent secondaire"
 				/>
@@ -122,7 +147,11 @@
 		{/if}
 
 		{#if customised}
-			<button class="revert" onclick={() => theme.update({ accent: null, accent2: null })}>
+			<button
+				class="revert"
+				disabled={blocked}
+				onclick={() => theme.update({ accent: null, accent2: null })}
+			>
 				Revenir aux accents de « {PRESETS.find((p) => p.id === settings.preset)?.name} »
 			</button>
 		{/if}
@@ -148,7 +177,7 @@
 	</div>
 
 	{#snippet footer()}
-		<button class="reset" onclick={() => theme.reset()} disabled={pristine}>
+		<button class="reset" onclick={() => theme.reset()} disabled={pristine || blocked}>
 			Réglages par défaut
 		</button>
 		<button class="done" onclick={onclose}>Terminé</button>
@@ -172,6 +201,17 @@
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		padding: 4px 16px 18px;
+	}
+	.fail {
+		margin: 8px 0 6px;
+		font-size: 12.5px;
+		line-height: 1.5;
+		color: var(--danger);
+	}
+	.retry {
+		margin-bottom: 4px;
+		font-size: 13px;
+		color: var(--accent);
 	}
 	.lead {
 		margin: 0 0 4px;

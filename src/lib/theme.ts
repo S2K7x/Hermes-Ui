@@ -404,3 +404,57 @@ export function themeVariables(raw: unknown): Record<string, string> {
 
 /** What goes in `<meta name="theme-color">`: the page background. */
 export const themeColor = (raw: unknown): string => effectivePalette(normalizeTheme(raw)).bg;
+
+// ---------------------------------------------------------------------------
+// Writing a change back
+// ---------------------------------------------------------------------------
+
+/**
+ * The settings a change may be composed on top of, or `null` while unknown.
+ *
+ * Same shape and same reason as `PromptBaseline`: `PUT /api/theme` is a
+ * replace-all, so building a patch on `DEFAULT_THEME` when the GET never
+ * answered does not "fall back to the defaults" — it *writes* them over the
+ * palette the user actually chose.
+ */
+export type ThemeBaseline = ThemeSettings | null;
+
+export type ThemeWriteResult =
+	| { ok: true; settings: ThemeSettings }
+	| { ok: false; reason: 'unloaded' };
+
+/** Compose a change, or refuse when there is nothing trustworthy to build on. */
+export function planThemeUpdate(
+	base: ThemeBaseline,
+	patch: Partial<ThemeSettings>
+): ThemeWriteResult {
+	if (base === null) return { ok: false, reason: 'unloaded' };
+	return { ok: true, settings: normalizeTheme({ ...base, ...patch }) };
+}
+
+/**
+ * The settings behind the pre-paint cache, or `null` when it holds none.
+ *
+ * The cached blob exists for the inline script in `app.html`, which replays
+ * `vars` and needs no logic of its own; `settings` rides along so that after a
+ * failed load the panel can still show which palette is on screen instead of
+ * highlighting the default one. It is deliberately NOT a baseline: it says
+ * what this device painted last, not what the server holds.
+ *
+ * Returns `null` — never `DEFAULT_THEME` — for a missing, corrupt or
+ * older-format cache, because "no idea" and "the defaults" are the two states
+ * that must not be confused here.
+ */
+export function cachedTheme(raw: string | null | undefined): ThemeSettings | null {
+	if (!raw) return null;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return null;
+	}
+	if (!parsed || typeof parsed !== 'object') return null;
+	const settings = (parsed as { settings?: unknown }).settings;
+	if (!settings || typeof settings !== 'object') return null;
+	return normalizeTheme(settings);
+}

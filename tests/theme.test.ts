@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
 	DEFAULT_PRESET,
+	DEFAULT_THEME,
 	PRESETS,
+	cachedTheme,
 	contrastRatio,
 	effectivePalette,
 	ensureContrast,
@@ -12,11 +14,13 @@ import {
 	mixHex,
 	normalizeHex,
 	normalizeTheme,
+	planThemeUpdate,
 	presetById,
 	readability,
 	readableInk,
 	themeColor,
-	themeVariables
+	themeVariables,
+	type ThemeSettings
 } from '../src/lib/theme.ts';
 
 // --- hex parsing -----------------------------------------------------------
@@ -271,4 +275,78 @@ test('every themable token in app.css is produced by themeVariables', () => {
 		if (shapes.test(name)) continue;
 		assert.ok(produced.has(name), `${name} is in app.css but never themed`);
 	}
+});
+
+// ---------------------------------------------------------------------------
+// Writing a change back
+// ---------------------------------------------------------------------------
+
+/**
+ * `PUT /api/theme` replaces the row. Composing a change on `DEFAULT_THEME`
+ * when the GET never answered therefore does not "fall back to the defaults":
+ * it writes them over the chosen palette. Measured against the real store with
+ * a stubbed browser — server holding Nocturne / clair / `#00b3a4`, GET
+ * failing: `init()` repainted the defaults, overwrote the localStorage cache
+ * with them, and one click on "Sombre" sent
+ * `{preset:"terracotta",mode:"dark",accent:null,accent2:null}`.
+ */
+test('a theme change is refused when nothing trustworthy was read', () => {
+	assert.deepEqual(planThemeUpdate(null, { mode: 'light' }), { ok: false, reason: 'unloaded' });
+	assert.deepEqual(planThemeUpdate(null, {}), { ok: false, reason: 'unloaded' });
+});
+
+test('a theme change composes on the baseline, normalised', () => {
+	const base: ThemeSettings = {
+		preset: 'nocturne',
+		mode: 'light',
+		accent: '#00b3a4',
+		accent2: null
+	};
+	const result = planThemeUpdate(base, { mode: 'dark' });
+	assert.ok(result.ok);
+	assert.deepEqual(result.settings, {
+		preset: 'nocturne',
+		mode: 'dark',
+		accent: '#00b3a4',
+		accent2: null
+	});
+	// The patch goes through normalizeTheme, so junk cannot reach setProperty.
+	const junk = planThemeUpdate(base, { preset: 'nope', accent: 'red' });
+	assert.ok(junk.ok);
+	assert.equal(junk.settings.preset, DEFAULT_PRESET);
+	assert.equal(junk.settings.accent, null);
+});
+
+/**
+ * The cache says what this device painted last. It is allowed to seed the
+ * display — otherwise the panel highlights "Terracotta" while Nocturne is on
+ * screen — but "no idea" must never decay into "the defaults", or the guard
+ * above would be handed a baseline it invented.
+ */
+test('cachedTheme returns null for anything it did not actually store', () => {
+	assert.equal(cachedTheme(null), null);
+	assert.equal(cachedTheme(''), null);
+	assert.equal(cachedTheme('{'), null);
+	assert.equal(cachedTheme('null'), null);
+	assert.equal(cachedTheme('"nocturne"'), null);
+	// The format written before `settings` rode along: computed vars only.
+	assert.equal(cachedTheme(JSON.stringify({ mode: 'light', vars: { '--bg': '#fff' } })), null);
+	assert.equal(cachedTheme(JSON.stringify({ settings: null })), null);
+});
+
+test('cachedTheme normalises what it did store', () => {
+	const raw = JSON.stringify({
+		mode: 'light',
+		vars: {},
+		settings: { preset: 'nocturne', mode: 'light', accent: '#00B3A4', accent2: 'nope' }
+	});
+	assert.deepEqual(cachedTheme(raw), {
+		preset: 'nocturne',
+		mode: 'light',
+		accent: '#00b3a4',
+		accent2: null
+	});
+	// A cache written by a build that knew other presets must not resurrect a
+	// preset id this one cannot render.
+	assert.deepEqual(cachedTheme(JSON.stringify({ settings: { preset: 'gone' } })), DEFAULT_THEME);
 });

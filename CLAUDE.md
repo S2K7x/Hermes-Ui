@@ -714,11 +714,33 @@ Points de détail qui comptent :
   est la seule validation — préréglage inconnu, mode inconnu, accent qui n'est
   pas un `#rrggbb` : tout retombe sur le défaut, donc rien d'arbitraire ne peut
   atteindre `style.setProperty()`.
-- **Le navigateur garde une copie**, mais des **variables calculées**, pas des
-  réglages : le script inline d'`app.html` rejoue une table clé → valeur et ne
-  porte aucune logique. Il n'existe donc pas de seconde copie des règles de
-  dérivation à tenir à jour. Sans ce cache, chaque ouverture de la PWA flashe
-  la palette par défaut avant l'hydratation.
+- **Le navigateur garde une copie**, dont des **variables calculées** : le
+  script inline d'`app.html` rejoue une table clé → valeur et ne porte aucune
+  logique. Il n'existe donc pas de seconde copie des règles de dérivation à
+  tenir à jour. Sans ce cache, chaque ouverture de la PWA flashe la palette par
+  défaut avant l'hydratation. Les réglages voyagent avec, mais **seulement pour
+  l'affichage** : ils disent ce que cet appareil a peint en dernier, pas ce que
+  le serveur détient.
+- **`PUT /api/theme` remplace la ligne**, donc composer un changement sur un
+  thème qu'on n'a pas su lire ne « retombe pas sur les défauts » : ça les
+  **écrit** par-dessus la palette choisie. C'est la même leçon que la
+  bibliothèque de prompts (point 15), et le même remède : `ThemeBaseline =
+  ThemeSettings | null`, `planThemeUpdate()` qui rend `{ok: false, reason:
+  'unloaded'}` sur `null`, et un `store.baseline` qui vaut `null` tant que le
+  GET n'a pas répondu. **Mesuré** avant le garde-fou, en rejouant le vrai store
+  contre un navigateur simulé — serveur sur Nocturne / clair / accent
+  `#00b3a4`, GET initial en échec : `init()` repeignait les défauts, écrasait
+  le cache localStorage avec eux, et un clic sur « Sombre » envoyait
+  `{preset:"terracotta",mode:"dark",accent:null,accent2:null}`. La palette
+  disparaissait des deux côtés, sans un mot.
+- Deux conséquences côté UI : `init()` ne peint plus les défauts avant d'avoir
+  lu quoi que ce soit (le script inline a déjà posé la bonne palette — c'était
+  aussi un flash à chaque lancement, mesuré `#ee7c2b` puis `#00b3a4`), et le
+  panneau Apparence affiche `loadError` avec un bouton « Réessayer » et
+  désactive ses contrôles au lieu de laisser croire que « Terracotta » est le
+  choix de l'utilisateur. Chaque écriture rejoue `ensureLoaded()` d'abord :
+  une panne passagère se répare donc au moment du clic, et seule une ligne
+  toujours illisible refuse.
 - `src/app.css` déclare les mêmes noms avec des littéraux : c'est le rendu
   d'avant hydratation, et seulement ça. Un token déclaré là mais absent de
   `themeVariables()` garderait sa couleur d'usine au changement de
@@ -1105,7 +1127,8 @@ src/
 │   │                  candidats de la vue archivée, rotations de compression
 │   ├── skills.ts      chemins de skills validés, gabarits, groupement
 │   ├── sse.ts         parseur SSE incrémental (partagé)
-│   ├── theme.ts       préréglages, dérivation color-mix, contraste WCAG
+│   ├── theme.ts       préréglages, dérivation color-mix, contraste WCAG, refus
+│   │                  d'écrire un thème composé sur une ligne non lue
 │   ├── turns.ts       résumé d'un tour + « faut-il notifier ? »
 │   ├── markdown.ts    rendu tolérant à l'incomplet
 │   └── transcript.ts  regroupement du transcript persisté en tours UI

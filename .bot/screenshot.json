@@ -1,7 +1,7 @@
 {
 	"path": "/",
-	"js": "(async()=>{const h=[...document.querySelectorAll('aside.sidebar .group')].map(e=>e.textContent.trim());await new Promise(r=>setTimeout(r,600));return JSON.stringify(h)})()",
+	"js": "(async()=>{const b=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('aria-label')||'')==='Apparence');if(b)b.click();await new Promise(r=>setTimeout(r,1200));return 'ok'})()",
 	"width": 1280,
 	"height": 900,
-	"caption": "La sidebar et ses bandes de récence — « Aujourd'hui », « Hier », « 7 derniers jours ». Ce sont elles qui changent : ces bandes, et les libellés « hier » / « 3 j » de chaque ligne, se comptaient en heures écoulées et non en jours calendaires. Deux jours par an, au changement d'heure, une conversation de la veille était donc rangée sous « 7 derniers jours » et étiquetée « 2 j » — et un horodatage tombant pile à minuit se décalait toute l'année. Rien ne se voit sur cette capture : c'est justement ce que les cinq nouveaux tests, qui échouent tous sur l'ancien calcul, servent à garder vrai."
+	"caption": "Le panneau Apparence, ouvert sans rien toucher. C'est lui qui change : jusqu'ici, quand GET /api/theme échouait au démarrage, le store repeignait la palette par défaut, écrasait le cache localStorage avec elle, et le premier clic ici envoyait cette palette par défaut au serveur — la palette choisie disparaissait des deux côtés, en silence. Mesuré en rejouant le vrai store contre un navigateur simulé : serveur sur Nocturne / clair / accent #00b3a4, puis PUT {preset:\"terracotta\",mode:\"dark\",accent:null}. Désormais une écriture composée sur un thème non lu est refusée, le panneau affiche l'erreur avec « Réessayer » et grise ses contrôles. Cet état ne se met pas en scène ici : sur la machine de production l'API répond, donc la capture montre le panneau normal — et c'est justement ce qui ne devait pas changer."
 }
