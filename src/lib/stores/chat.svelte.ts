@@ -5,6 +5,7 @@ import { isModelAvailable, providerForModel, shortModelName } from '$lib/models'
 import { isTerminalTurnEvent, newSSEState, parseSSEChunk } from '$lib/sse';
 import { rotatedSessionId } from '$lib/sessions';
 import { emptyAssistant, groupTranscript, uid, type UiMessage } from '$lib/transcript';
+import { drafts } from './drafts.svelte';
 import { toasts } from './toast.svelte';
 import type {
 	Attachment,
@@ -189,7 +190,11 @@ class ChatStore {
 			// — the in-flight stream is bound to the id it was started with.
 			if (!this.streaming) {
 				const moved = rotatedSessionId(this.sessions, this.sessionId);
-				if (moved) this.sessionId = moved;
+				if (moved) {
+					// The unsent text is keyed on the id too, so it has to follow.
+					drafts.rename(this.sessionId, moved);
+					this.sessionId = moved;
+				}
 			}
 		} catch (err) {
 			toasts.error(err, { label: 'Réessayer', run: () => this.refreshSessions() });
@@ -425,6 +430,8 @@ class ChatStore {
 
 	async deleteSession(id: string) {
 		const snapshot = this.sessions;
+		const draft = drafts.get(id);
+		drafts.clear(id);
 		const archivedSnapshot = this.archivedSessions;
 		this.sessions = this.sessions.filter((s) => s.id !== id);
 		this.archivedSessions = this.archivedSessions.filter((s) => s.id !== id);
@@ -439,6 +446,7 @@ class ChatStore {
 			if (err instanceof ApiError && err.code === AppErrorCode.SessionGone) return;
 			this.sessions = snapshot;
 			this.archivedSessions = archivedSnapshot;
+			if (draft) drafts.set(id, draft);
 			toasts.error(err);
 		}
 	}

@@ -1,12 +1,22 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { chat } from '$lib/stores/chat.svelte';
+	import { drafts } from '$lib/stores/drafts.svelte';
 	import { prompts } from '$lib/stores/prompts.svelte';
 	import { toasts } from '$lib/stores/toast.svelte';
 	import { matchPrompts } from '$lib/prompts';
 	import { uid } from '$lib/transcript';
 	import type { Attachment } from '$lib/types';
 
-	let text = $state('');
+	/**
+	 * The conversation the text below belongs to.
+	 *
+	 * This component is mounted once for the whole app, so without this the
+	 * composer's contents simply followed the user from one conversation to the
+	 * next — one Enter away from being sent to the wrong agent.
+	 */
+	let boundId = $state<string | null>(chat.sessionId);
+	let text = $state(drafts.get(chat.sessionId));
 	let attachments = $state<Attachment[]>([]);
 	let textarea = $state<HTMLTextAreaElement | null>(null);
 	let dragging = $state(false);
@@ -28,6 +38,30 @@
 	let promptFilter = $state('');
 	let promptMatches = $derived(matchPrompts(prompts.items, promptFilter));
 	const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+	/**
+	 * Park the text on the conversation being left, pick up the one being
+	 * opened. `untrack` keeps this effect keyed on the session id alone, so it
+	 * does not re-run on every keystroke.
+	 */
+	$effect(() => {
+		const id = chat.sessionId;
+		untrack(() => {
+			if (id === boundId) return;
+			drafts.set(boundId, text);
+			boundId = id;
+			text = drafts.get(id);
+			paletteOpen = false;
+			promptsOpen = false;
+			queueMicrotask(autosize);
+		});
+	});
+
+	// A draft restored at mount arrives before the textarea is bound, so its
+	// height would stay at one line until the first keystroke.
+	$effect(() => {
+		if (textarea) untrack(autosize);
+	});
 
 	const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
@@ -140,12 +174,14 @@
 
 	function choose(name: string) {
 		text = `/${name} `;
+		drafts.set(boundId, text);
 		paletteOpen = false;
 		textarea?.focus();
 	}
 
 	function onInput() {
 		autosize();
+		drafts.set(boundId, text);
 		paletteOpen = text.startsWith('/') && !text.includes('\n') && chat.skills.length > 0;
 		paletteIndex = 0;
 	}
@@ -162,6 +198,7 @@
 	export function insert(value: string) {
 		const kept = text.replace(/\s+$/, '');
 		text = kept ? `${kept}\n\n${value}` : value;
+		drafts.set(boundId, text);
 		promptsOpen = false;
 		paletteOpen = false;
 		textarea?.focus();
@@ -185,6 +222,9 @@
 		const payload = text;
 		const files = attachments;
 		if (!payload.trim() && files.length === 0) return;
+		// Cleared before the turn starts: `send()` may create the conversation,
+		// which moves `chat.sessionId` and with it the key this text is under.
+		drafts.clear(boundId);
 		text = '';
 		attachments = [];
 		paletteOpen = false;

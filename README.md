@@ -46,6 +46,10 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Notifications push** (panneau d'état → « Notifications ») : quand un tour se
   termine alors que l'app n'est pas à l'écran, la réponse arrive sur l'iPhone ou
   le desktop, et un tap ouvre la bonne conversation
+- **Brouillons par conversation** : un message commencé et pas envoyé reste sur
+  sa conversation — il ne suit plus au changement de fil, et il est toujours là
+  après un rechargement ou une PWA relancée par iOS. La sidebar marque d'un ✎
+  les conversations qui en portent un
 - **Images en entrée** : coller ou déposer, envoyées en base64
 - **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
   applicable à la conversation ouverte dès le message suivant

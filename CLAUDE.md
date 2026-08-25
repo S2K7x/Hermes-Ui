@@ -1029,6 +1029,51 @@ Les deux fonctions prennent un `now` facultatif — même convention que
 sans horloge fixe. `tests/sessions.test.ts` rejoue les deux transitions de 2026
 dans les deux zones ; ces cinq cas échouent sur l'ancienne arithmétique.
 
+### 25. Le message pas encore envoyé appartient à sa conversation
+
+Le composeur est monté **une seule fois** pour toute l'application : son texte
+ne se vidait donc pas en changeant de conversation, il **suivait**
+l'utilisateur. Une demi-question écrite pour un agent se retrouvait à un Entrée
+près d'être envoyée à un autre. Et une PWA installée est tuée sans préavis en
+arrière-plan — sur iPhone, au bout de quelques minutes : le texte à moitié tapé
+n'existait plus au retour.
+
+D'où un brouillon **par conversation**, gardé côté navigateur
+(`localStorage`, clé `hermes-drafts`). Les règles sont dans `src/lib/drafts.ts`
+(pur, testé), l'accès navigateur dans `src/lib/stores/drafts.svelte.ts` :
+
+- La clé est l'`id` de la conversation, ou `new` pour ce qui est tapé avant
+  qu'il y en ait une. `Composer.svelte` retient l'id auquel son texte
+  appartient (`boundId`) : quand `chat.sessionId` change, il **gare** le texte
+  sur la conversation qu'on quitte et **reprend** celui de la conversation
+  qu'on ouvre. L'effet est lu en `untrack()` pour ne dépendre que de l'id, pas
+  de chaque frappe.
+- **Rien n'est jamais tronqué.** Un brouillon plus long que
+  `MAX_DRAFT_CHARS` (100 000 caractères) n'est simplement pas persisté, et
+  l'entrée périmée est retirée : un texte qui reviendrait raccourci serait
+  envoyé raccourci, sans que rien ne le dise. Il reste en mémoire tant que la
+  page vit.
+- Les bornes sont 24 conversations et 120 000 caractères au total, les plus
+  anciennes évincées d'abord — **jamais celle qu'on est en train d'écrire**, ce
+  qui serait exactement l'inverse du besoin. Au-delà de 30 jours sans retouche,
+  un brouillon est oublié à la lecture. `normalizeDrafts()` répare une ligne
+  écrite par une version antérieure au lieu de jeter.
+- Le stockage est **local**, pas serveur — contrairement aux prompts
+  enregistrés (point 15) et au thème (point 19). Un brouillon est attaché à
+  l'appareil où on l'a tapé ; le synchroniser voudrait dire arbitrer deux
+  composeurs ouverts en même temps, et écraser le texte de l'un avec celui de
+  l'autre.
+- L'écriture est débouncée (700 ms) et **vidée sur `pagehide` et sur
+  `visibilitychange`** : c'est l'événement qu'iOS émet avant de suspendre une
+  PWA installée, donc le seul moment où le débounce coûterait quelque chose.
+- Deux clés suivent la conversation : `deleteSession()` oublie le brouillon
+  (et le remet si la suppression amont échoue), et une compression le
+  **déplace** sur le nouvel id en même temps que `chat.sessionId`
+  (point 23) — sinon il disparaîtrait avec l'ancien.
+- La sidebar affiche un ✎ accentué sur toute ligne qui en porte un, avec le
+  début du texte en infobulle : sans ça, un message écrit et jamais envoyé est
+  invisible depuis n'importe quelle autre conversation.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -1109,10 +1154,12 @@ src/
 │   │   ├── prompts.svelte.ts    bibliothèque de prompts enregistrés
 │   │   ├── providers.svelte.ts  état du panneau providers (dont le flux OAuth)
 │   │   ├── jobs.svelte.ts       état du panneau des tâches planifiées
+│   │   ├── drafts.svelte.ts     brouillon par conversation (localStorage)
 │   │   ├── push.svelte.ts       abonnement Web Push + report de présence
 │   │   ├── theme.svelte.ts      palette active + cache d'avant-rendu
 │   │   └── toast.svelte.ts      notifications dans la page
 │   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus)
+│   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction
 │   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
 │   ├── errors.ts      ApiError + codes + `humanizeError`

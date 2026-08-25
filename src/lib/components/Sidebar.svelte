@@ -2,6 +2,7 @@
 	import { dialogFocus, trapTab } from '$lib/client/dialog.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
+	import { drafts } from '$lib/stores/drafts.svelte';
 	import { agentColor } from '$lib/agents';
 	import { groupSessions, matchesQuery, relativeTime, sessionLabel, activityAt } from '$lib/sessions';
 	import type { HermesSession } from '$lib/types';
@@ -192,7 +193,12 @@
 							/>
 						{:else}
 							{@const agent = agents.byId(entry.agent_id)}
-							<button class="entry" onclick={() => pick(entry.id)} title={entry.preview ?? ''}>
+							{@const draft = drafts.preview(entry.id)}
+							<button
+								class="entry"
+								onclick={() => pick(entry.id)}
+								title={draft ? `Brouillon : ${draft}` : (entry.preview ?? '')}
+							>
 								<span class="title">
 									{#if entry.parent_session_id}<span class="branch" title="branche">⑂</span>{/if}
 									{#if agent}<span
@@ -202,6 +208,9 @@
 										>{/if}
 									{sessionLabel(entry)}
 								</span>
+								<!-- A message typed here and never sent is invisible from any
+								     other conversation; this is the only thing that says so. -->
+								{#if draft}<span class="draft" aria-hidden="true">✎</span>{/if}
 								<span class="when">{relativeTime(activityAt(entry))}</span>
 							</button>
 							<button
@@ -471,6 +480,14 @@
 		flex: 0 0 auto;
 		font-size: 11px;
 		color: var(--text-faint);
+	}
+	/* Accented rather than faint: an unsent message is the one thing in a row
+	   that is waiting on the user. */
+	.draft {
+		flex: 0 0 auto;
+		font-size: 11px;
+		line-height: 1;
+		color: var(--accent);
 	}
 	.more {
 		padding: 6px 9px;
