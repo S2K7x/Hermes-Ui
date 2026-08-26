@@ -159,14 +159,63 @@ d'envoi sur `POST /v1/runs` + `GET /v1/runs/{id}/events`, ce qui ferait perdre
 la persistance native du transcript. Choix assumé : pas d'approbation dans
 l'UI web.
 
-### 9. Le rendu markdown est débouncé, pas immédiat
+### 9. Le rendu markdown est débouncé, et la cadence dépend de la longueur
 
 Un parse markdown complet à chaque token sature le CPU du Pi. `Markdown.svelte`
-re-parse toutes les `RENDER_DEBOUNCE_MS` (70 ms) pendant le stream, puis une
-fois immédiatement à la fin. `closeOpenConstructs()` équilibre les fences, le
-gras et les liens tronqués pour que le texte partiel s'affiche comme ce qu'il
-est en train de devenir. La coloration syntaxique n'est appliquée qu'aux
-messages terminés.
+re-parse sur un minuteur pendant le stream, puis une fois immédiatement à la
+fin. `closeOpenConstructs()` équilibre les fences, le gras et les liens
+tronqués pour que le texte partiel s'affiche comme ce qu'il est en train de
+devenir. La coloration syntaxique n'est appliquée qu'aux messages terminés.
+
+**Le délai n'est pas fixe, parce que le coût d'un rendu ne l'est pas.** Un
+rendu re-parse tout le tampon, re-assainit toute la sortie et donne à
+`{@html}` un sous-arbre qui remplace intégralement le précédent — trois coûts
+linéaires en la longueur de la réponse, qui ne fait que grandir. **Mesuré sur
+ce Pi 5**, en Chromium headless, un rendu + échange DOM complet :
+
+| message | parse + sanitize | échange DOM | total | part d'un cœur à 70 ms |
+|---|---|---|---|---|
+| 1,9 ko | 1,4 ms | 1,3 ms | 2,8 ms | 4 % |
+| 5 ko | 2,7 ms | 3,0 ms | 5,7 ms | 8 % |
+| 10 ko | 4,8 ms | 5,7 ms | 10,6 ms | 15 % |
+| 20 ko | 8,8 ms | 11,5 ms | 20,3 ms | 29 % |
+| 34 ko | 14,5 ms | 18,7 ms | 33,2 ms | 47 % |
+
+Environ 1 ms par kilo-octet, dont plus de la moitié à reconstruire du DOM qui
+n'a pas changé — sur le CPU qui fait justement tourner l'agent en train
+d'écrire la réponse. À cadence fixe, le coût d'affichage d'un tour long croît
+donc sans borne alors que chaque redessin n'apporte que quelques tokens de
+plus.
+
+D'où `renderDelayMs(chars)` (pur, testé) : le délai grandit avec le message —
+`chars / 100`, borné à `RENDER_DEBOUNCE_MS` (70 ms) et
+`MAX_RENDER_DEBOUNCE_MS` (300 ms) — pour que le **rythme** de travail reste
+plat, autour d'un dixième de cœur quelle que soit la longueur. Les réponses
+courtes, c'est-à-dire la grande majorité, restent exactement au plancher de
+70 ms ; une réponse de 20 ko se redessine toutes les 204 ms au lieu de 70 ms.
+Le plafond n'est pas un budget mais un plancher de réactivité : au-delà de
+~30 ko la machine à écrire doit continuer d'avancer même si ça coûte plus que
+la cible.
+
+Sur un tour entier — texte arrivant à 120 caractères par seconde, rendus
+rejoués pour de vrai dans Chromium sur ce Pi — ça donne le CPU total dépensé à
+afficher une réponse pendant qu'elle s'écrit :
+
+| réponse | durée du tour | avant | après |
+|---|---|---|---|
+| 3,7 ko | 31 s | 1,10 s | 1,02 s |
+| 10 ko | 85 s | 6,4 s | 5,8 s |
+| 20 ko | 170 s | 23,9 s | 13,7 s |
+| 34 ko | 287 s | 64,8 s | 24,4 s |
+
+Autrement dit : les réponses courtes ne bougent pas (elles sont au plancher),
+et une longue rend 40 secondes de cœur au Pi — celui-là même qui fait tourner
+l'agent.
+
+Ce que ça ne change pas : le rendu final est toujours immédiat et non débouncé,
+donc le texte affiché à la fin d'un tour est le même qu'avant, à la même
+milliseconde. Seule la fréquence des états intermédiaires baisse — et le
+curseur clignotant reste ce qui dit que du texte arrive entre deux parses.
 
 **Le post-traitement d'un message terminé doit attendre `tick()`.** `html` est
 affecté *depuis* un effet, donc quand l'effet suivant s'exécute Svelte n'a pas

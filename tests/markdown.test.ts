@@ -6,7 +6,10 @@ import {
 	closeOpenConstructs,
 	highlightCodeBlocks,
 	highlighterReady,
-	loadHighlighter
+	loadHighlighter,
+	MAX_RENDER_DEBOUNCE_MS,
+	RENDER_DEBOUNCE_MS,
+	renderDelayMs
 } from '../src/lib/markdown.ts';
 
 // `renderMarkdown` itself needs a DOM for DOMPurify, so these tests cover the
@@ -87,4 +90,61 @@ test('loadHighlighter is idempotent and flips highlighterReady', async () => {
 	assert.equal(loadHighlighter(), first, 'a second call must reuse the in-flight import');
 	assert.ok(await first);
 	assert.equal(highlighterReady(), true);
+});
+
+// ---------------------------------------------------------------------------
+// Re-render cadence
+// ---------------------------------------------------------------------------
+
+// A streaming re-render re-parses, re-sanitises and replaces the whole message
+// subtree, so it costs about a millisecond per kilobyte on the Pi (measured:
+// 2.8 ms at 1.9 kB, 20.3 ms at 20 kB, 33.2 ms at 34 kB). At a flat 70 ms that
+// is 4% of a core for a short answer and 47% for a long one. The delay grows
+// with the message so the rate of work stays flat instead.
+
+test('short answers keep the original typewriter cadence', () => {
+	assert.equal(renderDelayMs(0), RENDER_DEBOUNCE_MS);
+	assert.equal(renderDelayMs(400), RENDER_DEBOUNCE_MS);
+	// The floor holds right up to where the scaled value overtakes it.
+	assert.equal(renderDelayMs(6999), RENDER_DEBOUNCE_MS);
+	assert.equal(renderDelayMs(7000), RENDER_DEBOUNCE_MS);
+});
+
+test('the delay grows with the message, then stops', () => {
+	assert.equal(renderDelayMs(10_000), 100);
+	assert.equal(renderDelayMs(20_000), 200);
+	assert.equal(renderDelayMs(30_000), MAX_RENDER_DEBOUNCE_MS);
+	// Past the cap the typewriter must keep moving, whatever it costs.
+	assert.equal(renderDelayMs(500_000), MAX_RENDER_DEBOUNCE_MS);
+});
+
+test('the delay never leaves the bounds, whatever it is handed', () => {
+	for (const chars of [-1, Number.NaN, Number.POSITIVE_INFINITY, 1.5, 1e9]) {
+		const delay = renderDelayMs(chars);
+		assert.ok(
+			delay >= RENDER_DEBOUNCE_MS && delay <= MAX_RENDER_DEBOUNCE_MS,
+			`renderDelayMs(${chars}) = ${delay} is out of bounds`
+		);
+	}
+});
+
+test('the work rate stays near flat instead of growing with the answer', () => {
+	// Measured cost of one render + DOM swap on this Pi, in ms.
+	const measured: Array<[chars: number, ms: number]> = [
+		[1877, 2.75],
+		[5106, 5.74],
+		[10_214, 10.55],
+		[20_438, 20.27],
+		[34_420, 33.21]
+	];
+	const share = (chars: number, ms: number, delay: number) => (ms / delay) * 100;
+	const flat = measured.map(([chars, ms]) => share(chars, ms, RENDER_DEBOUNCE_MS));
+	const adaptive = measured.map(([chars, ms]) => share(chars, ms, renderDelayMs(chars)));
+	// The flat cadence ends up spending nearly half a core on redraw alone.
+	assert.ok(Math.max(...flat) > 45, `flat peak was ${Math.max(...flat)}%`);
+	// The adaptive one never gets close, and never costs *more* than before.
+	assert.ok(Math.max(...adaptive) < 15, `adaptive peak was ${Math.max(...adaptive)}%`);
+	for (let i = 0; i < measured.length; i++) {
+		assert.ok(adaptive[i] <= flat[i] + 1e-9, `${measured[i][0]} chars got slower`);
+	}
 });

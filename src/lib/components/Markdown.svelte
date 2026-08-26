@@ -4,7 +4,7 @@
 		highlightCodeBlocks,
 		highlighterReady,
 		loadHighlighter,
-		RENDER_DEBOUNCE_MS,
+		renderDelayMs,
 		renderMarkdown
 	} from '$lib/markdown';
 	import { onDestroy, tick } from 'svelte';
@@ -33,9 +33,14 @@
 		}
 	}
 
-	// While streaming, re-parse on a timer instead of per token: a full
-	// markdown parse at frame rate saturates the Pi's CPU. When the stream
-	// ends, render once immediately so the final text is never stale.
+	// While streaming, re-parse on a timer instead of per token: a full markdown
+	// parse at frame rate saturates the Pi's CPU. The interval is not fixed —
+	// a re-render costs about a millisecond per kilobyte of answer, all of it
+	// redone from scratch, so a flat cadence would let a long turn spend half a
+	// core redrawing text the reader is nowhere near. `renderDelayMs` stretches
+	// the wait with the message so the *rate* of work stays flat; short answers
+	// keep the 70 ms typewriter unchanged. When the stream ends, render once
+	// immediately so the final text is never stale.
 	$effect(() => {
 		void source;
 		if (!streaming) {
@@ -48,7 +53,7 @@
 		timer = setTimeout(() => {
 			timer = null;
 			render();
-		}, RENDER_DEBOUNCE_MS);
+		}, renderDelayMs(source.length));
 	});
 
 	// Syntax highlighting and copy buttons, only once the message is final —
