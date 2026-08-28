@@ -1,7 +1,7 @@
 {
 	"path": "/",
-	"js": "(async()=>{const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));const rows=[...document.querySelectorAll('.sidebar .list .row .entry')];let best=null,len=0;for(const r of rows.slice(0,12)){r.click();await sleep(1800);const t=document.querySelector('.thread');const n=t?t.textContent.length:0;if(n>len){len=n;best=r;}}if(best){best.click();await sleep(2600);}const s=document.querySelector('.scroll');if(s)s.scrollTo({top:s.scrollHeight});await sleep(600);return 'ok'})()",
-	"width": 1280,
-	"height": 900,
-	"caption": "Rien de neuf à l'écran aujourd'hui : c'est le coût d'affichage qui a changé. Pendant qu'une réponse s'écrit, l'app re-parse tout le message, le ré-assainit et remplace tout son sous-arbre DOM — mesuré sur ce Pi, environ 1 ms par kilo-octet, dont plus de la moitié à reconstruire du DOM identique. À la cadence fixe de 70 ms, une réponse de 34 ko passait 47 % d'un cœur à se redessiner, sur le CPU qui fait justement tourner l'agent. Le délai suit maintenant la longueur du message (70 ms plancher, 300 ms plafond) : sur un tour entier, 64,8 s de CPU → 24,4 s pour une réponse de 34 ko, 23,9 s → 13,7 s pour 20 ko, et rien ne change pour les réponses courtes, qui restent au plancher. Le texte final s'affiche à la même milliseconde qu'avant — seuls les états intermédiaires sont moins nombreux."
+	"js": "(async()=>{const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));const burger=[...document.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Discussions');if(burger){burger.click();await sleep(700);}const more=[...document.querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')||'').startsWith('Actions sur'));if(more){more.focus();more.click();await sleep(500);}return 'ok'})()",
+	"width": 414,
+	"height": 896,
+	"caption": "Le menu d'une conversation, ouvert sur un écran de téléphone. Ses cinq actions passent de 35 à 44 px de haut — « Supprimer » était collé sous « Archiver ». Ce menu, celui du modèle et celui de l'agent répondent maintenant aussi au clavier : ⬆︎⬇︎ Début Fin pour parcourir la liste, Échap pour la refermer en rendant le focus au bouton d'origine. Et surtout Échap s'arrête là : avant, il traversait le menu jusqu'à la page, où il veut dire « ferme le tiroir » ou, pendant qu'une réponse s'écrit, « détache le tour en cours »."
 }

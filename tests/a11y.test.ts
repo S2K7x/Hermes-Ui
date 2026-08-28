@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { FOCUSABLE_SELECTOR, trapIndex } from '../src/lib/a11y.ts';
+import { FOCUSABLE_SELECTOR, menuIndex, trapIndex } from '../src/lib/a11y.ts';
 
 /**
  * The focus trap of `Modal.svelte`, without a DOM.
@@ -172,4 +172,92 @@ test('a settings panel opened from the sidebar closes it', () => {
 		);
 	}
 	assert.match(page, /function openFromSidebar\([\s\S]{0,120}sidebarOpen = false/);
+});
+
+
+/**
+ * The three popup menus — the model picker, the agent picker and the ⋯ of a
+ * sidebar row — were pointer-only surfaces. `menuIndex` is the arrow-key half;
+ * the rest of the contract is asserted against the sources below.
+ */
+
+test('Down and Up enter an open popup from its trigger', () => {
+	// -1 is where focus sits when the popup has just been opened: on the button.
+	assert.equal(menuIndex(5, -1, 'ArrowDown'), 0);
+	assert.equal(menuIndex(5, -1, 'ArrowUp'), 4);
+});
+
+test('a popup list wraps at both ends instead of dropping out', () => {
+	assert.equal(menuIndex(5, 4, 'ArrowDown'), 0);
+	assert.equal(menuIndex(5, 0, 'ArrowUp'), 4);
+	assert.equal(menuIndex(5, 1, 'ArrowDown'), 2);
+	assert.equal(menuIndex(5, 1, 'ArrowUp'), 0);
+});
+
+test('Home and End reach the ends of a long list', () => {
+	// The model picker shows up to 60 entries; counting them is not a plan.
+	assert.equal(menuIndex(60, 31, 'Home'), 0);
+	assert.equal(menuIndex(60, 31, 'End'), 59);
+});
+
+test('any other key is left to the browser', () => {
+	for (const key of ['Tab', 'Enter', ' ', 'a', 'ArrowLeft', 'Escape']) {
+		assert.equal(menuIndex(5, 1, key), null, key);
+	}
+});
+
+test('an empty popup asks for no move', () => {
+	// The model picker with no authenticated provider shows a hint and nothing else.
+	assert.equal(menuIndex(0, -1, 'ArrowDown'), null);
+	assert.equal(menuIndex(0, -1, 'End'), null);
+});
+
+test('a stale index is treated as focus sitting outside the list', () => {
+	// The list can shrink under the focus: the picker filters as you type.
+	assert.equal(menuIndex(3, 7, 'ArrowDown'), 0);
+	assert.equal(menuIndex(3, 7, 'ArrowUp'), 2);
+});
+
+/**
+ * Escape must die inside the popup.
+ *
+ * `+page.svelte` reads a bare Escape as a much larger intent — close the mobile
+ * drawer, or, while a turn is streaming, detach the answer being written. A
+ * dropdown left over the header used to hand it exactly that: dismissing the
+ * model list stopped watching the reply. The stop lives in the shared helper so
+ * that no popup can forget it.
+ */
+test('the shared popup helper swallows Escape', () => {
+	const menu = readFileSync(new URL('../src/lib/client/menu.svelte.ts', import.meta.url), 'utf8');
+	const escape = menu.slice(menu.indexOf("if (event.key === 'Escape')"));
+	assert.match(escape.slice(0, 200), /event\.stopPropagation\(\)/);
+	assert.match(menu, /from '\$lib\/a11y'/);
+});
+
+test('every popup routes its keys through that helper and gives the focus back', () => {
+	const dir = new URL('../src/lib/components/', import.meta.url);
+	for (const name of ['ModelPicker.svelte', 'AgentPicker.svelte', 'Sidebar.svelte']) {
+		const source = readFileSync(new URL(name, dir), 'utf8');
+		assert.match(source, /import \{ menuKeydown \} from '\$lib\/client\/menu\.svelte'/, name);
+		assert.match(source, /menuKeydown\([\s\S]{0,40}\) === 'close'/, name);
+		// The trigger announces the popup, and takes the focus back on Escape.
+		assert.match(source, /aria-haspopup="true"/, name);
+		assert.match(source, /aria-expanded=/, name);
+		assert.match(source, /refocus[\s\S]{0,80}\.focus\(\)/, name);
+	}
+});
+
+/**
+ * A popup row is a tap target like any other. 6px of padding around 13px of
+ * text is 30px tall — and in the sidebar menu "Supprimer" sits right under
+ * "Archiver".
+ */
+test('popup rows are thumb-sized on a phone', () => {
+	const dir = new URL('../src/lib/components/', import.meta.url);
+	for (const name of ['ModelPicker.svelte', 'AgentPicker.svelte', 'Sidebar.svelte']) {
+		const source = readFileSync(new URL(name, dir), 'utf8');
+		const narrow = source.slice(source.indexOf('@media (max-width: 820px)'));
+		assert.ok(narrow.length > 0, `${name} has no phone block`);
+		assert.match(narrow, /\.(items button|menu button)[\s\S]{0,120}min-height: 44px/, name);
+	}
 });

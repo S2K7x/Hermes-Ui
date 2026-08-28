@@ -1007,6 +1007,44 @@ le composeur (c'est la boîte qui s'allume, `:focus-within`), l'éditeur de skil
 (le curseur fait office d'indicateur sur une surface pleine page) et la carte
 modale ci-dessus.
 
+**Et un menu surgissant est le troisième dialogue de l'app.** Trois surfaces
+ouvrent un panneau flottant depuis un bouton : le sélecteur de modèle, celui
+d'agent et le « ⋯ » d'une ligne de sidebar. Toutes trois étaient purement
+pointeur. Le problème n'était pas seulement ce qui manquait, mais ce que
+l'absence provoquait : **Échap traversait le menu jusqu'à `+page.svelte`**, où
+un Échap nu veut dire « ferme le tiroir » ou, pendant qu'un tour s'écrit,
+`chat.stop()`. Refermer une liste de modèles détachait donc la réponse en
+cours.
+
+Le contrat commun vit dans `src/lib/client/menu.svelte.ts` (`menuStops`,
+`menuKeydown`) et son arithmétique dans `menuIndex()` (`src/lib/a11y.ts`, pur et
+testé), exactement comme `dialog.svelte.ts` / `trapIndex()` au-dessus :
+
+- **Échap est arrêté dans le helper**, pas dans l'appelant, pour qu'aucun menu
+  ne puisse oublier de le faire ; l'appelant referme et **rend le focus à son
+  déclencheur**, la seule moitié qu'un helper ne peut pas faire à sa place.
+- **⬆︎ ⬇︎ Début Fin** parcourent la liste, en bouclant aux deux bouts — un menu
+  est une liste fermée. Depuis le déclencheur, ⬇︎ entre en haut et ⬆︎ en bas.
+  Tab continue de fonctionner : le helper rend `null` sur toute autre touche.
+- Le déclencheur porte `aria-haspopup` / `aria-expanded` et un `aria-label`
+  complet (« Modèle : anthropic/claude-opus-4 », « Actions sur « … » » — vingt
+  boutons nommés « Actions » dans une liste ne disent rien).
+- **Le clic pose le focus sur le déclencheur** (`event.currentTarget.focus()`) :
+  Safari ne focalise pas un bouton cliqué, et sans ça l'Échap suivant serait
+  tapé sur `<body>` et repartirait vers la page.
+- Les lignes de ces trois menus passent à 44 px sous 820 px. Dans celui d'une
+  conversation, « Supprimer » était à 35 px juste sous « Archiver ».
+
+**Mesuré au CDP sur l'application construite**, contre un faux gateway : menu
+du modèle ouvert au clavier → ⬇︎ entre dans le champ de filtre puis sur le
+premier modèle, Fin atteint le dernier, ⬇︎ reboucle en haut ; Échap referme,
+`aria-expanded` repasse à `false`, le focus revient sur le déclencheur et **le
+gestionnaire de la fenêtre ne voit pas la touche** (compteur à 0) — alors qu'un
+second Échap, menu fermé, l'atteint bien (1). Idem sur le menu d'une ligne :
+⬇︎ « Renommer », ⬆︎ reboucle sur « Supprimer », Échap referme sans toucher au
+tiroir. En 414 × 896 : ⋯ à 44 × 44, les cinq actions à 44 px, les entrées du
+sélecteur de modèle à 44 px.
+
 Dernier point du même ordre : un `<input type="file">` en `display: none` n'est
 **pas** dans l'ordre de tabulation, et son `<label>` ne peut pas prendre le
 focus à sa place — joindre une image était à la souris uniquement. L'input est
@@ -1190,6 +1228,7 @@ src/
 │   │   ├── storage.ts   localStorage qui ne peut pas jeter
 │   │   ├── platform.ts  ⌘ vs Ctrl
 │   │   ├── dialog.svelte.ts  focus d'un dialogue : entrée, piège de Tab, retour
+│   │   ├── menu.svelte.ts    clavier d'un menu surgissant : Échap, flèches
 │   │   └── lazy.svelte.ts  composant récupéré à la première utilisation
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
 │   │                  AgentPicker, Markdown, CommandPalette, Modal (cadre
@@ -1207,7 +1246,8 @@ src/
 │   │   ├── push.svelte.ts       abonnement Web Push + report de présence
 │   │   ├── theme.svelte.ts      palette active + cache d'avant-rendu
 │   │   └── toast.svelte.ts      notifications dans la page
-│   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus)
+│   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus) et
+│   │                  déplacement des flèches dans un menu surgissant
 │   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction
 │   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé

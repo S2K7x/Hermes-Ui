@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { shortModelName } from '$lib/models';
 	import { chat } from '$lib/stores/chat.svelte';
+	import { menuKeydown } from '$lib/client/menu.svelte';
 
 	let open = $state(false);
 	let filter = $state('');
+	let trigger = $state<HTMLButtonElement | null>(null);
+	let menu = $state<HTMLDivElement | null>(null);
 
 	// Only providers with credentials can actually serve a turn.
 	let usable = $derived((chat.models?.providers ?? []).filter((p) => p.authenticated && p.models.length));
@@ -20,18 +23,44 @@
 	/** A gateway too old to expose POST /api/sessions/{id}/model still pins the
 	 *  model at session creation: the choice only lands on the next discussion. */
 	let deferred = $derived(Boolean(chat.sessionId) && !chat.canSwitchModel);
+
+	/** Escape hands the focus back to the button the list came from. */
+	function close(refocus = false) {
+		open = false;
+		if (refocus) trigger?.focus();
+	}
 </script>
 
-<div class="picker">
-	<button class="trigger" onclick={() => (open = !open)} title={chat.activeModel}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="picker"
+	onkeydown={(event) => {
+		if (open && menuKeydown(menu, event) === 'close') close(true);
+	}}
+>
+	<button
+		class="trigger"
+		bind:this={trigger}
+		onclick={(event) => {
+			// Safari does not focus a clicked button; without this, Escape would
+			// be typed at <body> and reach the page handler, where it means
+			// "close the drawer" or "detach the running turn".
+			event.currentTarget.focus();
+			open = !open;
+		}}
+		aria-haspopup="true"
+		aria-expanded={open}
+		aria-label="Modèle : {chat.activeModel || 'aucun'}"
+		title={chat.activeModel}
+	>
 		{short || 'modèle'}
-		<span class="chev">▾</span>
+		<span class="chev" aria-hidden="true">▾</span>
 	</button>
 
 	{#if open}
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-		<div class="scrim" onclick={() => (open = false)}></div>
-		<div class="menu">
+		<div class="scrim" onclick={() => close()}></div>
+		<div class="menu" bind:this={menu}>
 			{#if deferred}
 				<p class="hint">
 					Ce gateway fige le modèle par conversation : ce choix s'appliquera à la prochaine
@@ -49,7 +78,7 @@
 						class:sel={entry.model === chat.activeModel}
 						onclick={() => {
 							chat.setModel(entry.model);
-							open = false;
+							close(true);
 						}}
 					>
 						<span class="m">{entry.model}</span>
@@ -156,5 +185,13 @@
 		color: var(--text-muted);
 		background: var(--bg-sunken);
 		border-radius: 10px;
+	}
+	/* Thumb-sized rows on a phone, like every other control of the app. A
+	   mis-tap here changes the model of the open conversation. */
+	@media (max-width: 820px) {
+		.menu input,
+		.items button {
+			min-height: 44px;
+		}
 	}
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { dialogFocus, trapTab } from '$lib/client/dialog.svelte';
+	import { menuKeydown } from '$lib/client/menu.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
 	import { drafts } from '$lib/stores/drafts.svelte';
@@ -55,6 +56,8 @@
 	let renaming = $state<string | null>(null);
 	let renameValue = $state('');
 	let menuFor = $state<string | null>(null);
+	/** The ⋯ the open row menu came from, so Escape can hand the focus back. */
+	let menuTrigger = $state<HTMLElement | null>(null);
 
 	// Archived conversations come from a different list, not a filter: Hermes
 	// excludes them from every listing, so `chat.sessions` never holds one.
@@ -74,6 +77,12 @@
 		onclose();
 	}
 
+	/** Escape hands the focus back to the ⋯ the menu came from. */
+	function closeMenu(refocus = false) {
+		menuFor = null;
+		if (refocus && menuTrigger?.isConnected) menuTrigger.focus();
+	}
+
 	function startRename(s: HermesSession) {
 		renaming = s.id;
 		renameValue = s.title ?? '';
@@ -87,7 +96,7 @@
 	}
 
 	async function confirmDelete(s: HermesSession) {
-		menuFor = null;
+		closeMenu();
 		if (confirm(`Supprimer « ${sessionLabel(s)} » ? Cette action est définitive.`)) {
 			await chat.deleteSession(s.id);
 		}
@@ -178,7 +187,19 @@
 			{#each groups as group (group.key)}
 				<div class="group">{group.label}</div>
 				{#each group.sessions as entry (entry.id)}
-					<div class="row" class:active={entry.id === chat.sessionId}>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="row"
+						class:active={entry.id === chat.sessionId}
+						onkeydown={(event) => {
+							if (menuFor !== entry.id) return;
+							// Read the panel off the row rather than binding it: only one row
+							// menu is ever open, but a `bind:this` inside an {#each} would go
+							// through null while the open menu moves from one row to another.
+							const panel = event.currentTarget.querySelector<HTMLElement>('.menu');
+							if (menuKeydown(panel, event) === 'close') closeMenu(true);
+						}}
+					>
 						{#if renaming === entry.id}
 							<!-- svelte-ignore a11y_autofocus -->
 							<input
@@ -215,9 +236,15 @@
 							</button>
 							<button
 								class="more"
-								aria-label="Actions"
+								aria-label="Actions sur « {sessionLabel(entry)} »"
+								aria-haspopup="true"
+								aria-expanded={menuFor === entry.id}
 								onclick={(e) => {
 									e.stopPropagation();
+									// Safari leaves a clicked button unfocused; Escape would then
+									// be typed at <body> and close the whole drawer instead.
+									e.currentTarget.focus();
+									menuTrigger = e.currentTarget;
 									menuFor = menuFor === entry.id ? null : entry.id;
 								}}>⋯</button
 							>
@@ -226,13 +253,13 @@
 						{#if menuFor === entry.id}
 							<div class="menu">
 								<button onclick={() => startRename(entry)}>Renommer</button>
-								<button onclick={() => { chat.togglePin(entry.id); menuFor = null; }}>
+								<button onclick={() => { chat.togglePin(entry.id); closeMenu(true); }}>
 									{entry.pinned ? 'Désépingler' : 'Épingler'}
 								</button>
-								<button onclick={() => { chat.forkSession(entry.id); menuFor = null; onclose(); }}>
+								<button onclick={() => { chat.forkSession(entry.id); closeMenu(); onclose(); }}>
 									Brancher
 								</button>
-								<button onclick={() => { chat.toggleArchive(entry.id); menuFor = null; }}>
+								<button onclick={() => { chat.toggleArchive(entry.id); closeMenu(true); }}>
 									{entry.archived ? 'Désarchiver' : 'Archiver'}
 								</button>
 								<button class="danger" onclick={() => confirmDelete(entry)}>Supprimer</button>
@@ -640,6 +667,11 @@
 		}
 		.more {
 			min-width: 44px;
+			min-height: 44px;
+		}
+		/* Five actions stacked 35px apart, "Supprimer" right under
+		   "Archiver": exactly where a mis-tap is expensive. */
+		.menu button {
 			min-height: 44px;
 		}
 		.search {

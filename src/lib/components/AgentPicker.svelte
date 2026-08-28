@@ -2,6 +2,7 @@
 	import { agents } from '$lib/stores/agents.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { agentColor, agentLabel, directReports } from '$lib/agents';
+	import { menuKeydown } from '$lib/client/menu.svelte';
 
 	interface Props {
 		/** Opens the editor — the picker only picks. */
@@ -10,33 +11,57 @@
 	let { onmanage }: Props = $props();
 
 	let open = $state(false);
+	let trigger = $state<HTMLButtonElement | null>(null);
+	let menu = $state<HTMLDivElement | null>(null);
 
 	let active = $derived(agents.byId(chat.activeAgentId));
 	let reports = $derived(active ? directReports(agents.items, active) : []);
 
+	/** Escape hands the focus back to the button the list came from. */
+	function close(refocus = false) {
+		open = false;
+		if (refocus) trigger?.focus();
+	}
+
 	function choose(id: string) {
 		chat.setAgent(id);
-		open = false;
+		close(true);
 	}
 </script>
 
-<div class="picker">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="picker"
+	onkeydown={(event) => {
+		if (open && menuKeydown(menu, event) === 'close') close(true);
+	}}
+>
 	<button
 		class="trigger"
+		bind:this={trigger}
 		style="--agent: {active ? agentColor(active) : 'var(--text-faint)'}"
-		onclick={() => (open = !open)}
+		onclick={(event) => {
+			// Safari does not focus a clicked button; without this, Escape would
+			// be typed at <body> and reach the page handler, where it means
+			// "close the drawer" or "detach the running turn".
+			event.currentTarget.focus();
+			open = !open;
+		}}
+		aria-haspopup="true"
+		aria-expanded={open}
+		aria-label={active ? `Agent : ${active.name}` : 'Agent : aucun, prompt par défaut de Hermes'}
 		title={active ? `Agent : ${active.name}` : 'Aucun agent — prompt par défaut de Hermes'}
 	>
 		<span class="dot"></span>
 		<span class="label">{active ? agentLabel(active) : 'Agent'}</span>
 		<span class="mini">{active ? active.emoji || '●' : 'Agent'}</span>
-		<span class="chev">▾</span>
+		<span class="chev" aria-hidden="true">▾</span>
 	</button>
 
 	{#if open}
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-		<div class="scrim" onclick={() => (open = false)}></div>
-		<div class="menu">
+		<div class="scrim" onclick={() => close()}></div>
+		<div class="menu" bind:this={menu}>
 			<p class="hint">
 				{#if chat.sessionId}
 					L'agent choisi prend la main sur cette conversation dès le prochain message.
@@ -65,7 +90,7 @@
 					{active?.name} peut déléguer à {reports.map((a) => a.name).join(', ')}.
 				</p>
 			{/if}
-			<button class="manage" onclick={() => { open = false; onmanage(); }}>Gérer l'équipe…</button>
+			<button class="manage" onclick={() => { close(); onmanage(); }}>Gérer l'équipe…</button>
 		</div>
 	{/if}
 </div>
@@ -201,5 +226,12 @@
 	}
 	.manage:hover {
 		color: var(--text);
+	}
+	/* Thumb-sized rows on a phone, like every other control of the app. */
+	@media (max-width: 820px) {
+		.items button,
+		.manage {
+			min-height: 44px;
+		}
 	}
 </style>

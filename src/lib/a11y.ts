@@ -40,3 +40,33 @@ export function trapIndex(count: number, active: number, backwards: boolean): nu
 	if (backwards) return active === 0 ? count - 1 : null;
 	return active === count - 1 ? 0 : null;
 }
+
+/**
+ * Where an arrow key must put the focus inside an open popup menu.
+ *
+ * `count` is how many focus stops the popup holds, `active` the index of the
+ * one holding focus — `-1`, or anything out of range, when focus is still on
+ * the button that opened it. Returns the index to focus, or `null` when the
+ * key means nothing here and must be left to the browser.
+ *
+ * Down and up wrap, because a popup is a closed list: walking off the end of
+ * five actions should return to the first, not fall silently out of the menu.
+ * From the trigger, Down enters at the top and Up at the bottom — the two ways
+ * a keyboard user reaches "the last item" without counting.
+ */
+export function menuIndex(count: number, active: number, key: string): number | null {
+	if (count <= 0) return null;
+	const outside = active < 0 || active >= count;
+	switch (key) {
+		case 'ArrowDown':
+			return outside ? 0 : (active + 1) % count;
+		case 'ArrowUp':
+			return outside ? count - 1 : (active - 1 + count) % count;
+		case 'Home':
+			return 0;
+		case 'End':
+			return count - 1;
+		default:
+			return null;
+	}
+}
