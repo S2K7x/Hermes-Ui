@@ -6,6 +6,7 @@ import {
 	lineageRotations,
 	matchesQuery,
 	relativeTime,
+	renameSession,
 	rotatedSessionId,
 	sessionLabel,
 	usageSummary
@@ -271,4 +272,58 @@ test('a timestamp in the future reads as today, not as a negative day', () => {
 
 test('a session with no timestamp shows nothing rather than 1970', () => {
 	assert.equal(relativeTime(0), '');
+});
+
+// ---------------------------------------------------------------------------
+// renameSession — carrying a row onto the id a compression rotated it to
+// ---------------------------------------------------------------------------
+
+const row = (id: string, extra: Partial<HermesSession> = {}): HermesSession => ({
+	id,
+	title: `titre ${id}`,
+	...extra
+});
+
+test('a rotated conversation keeps its row, its place and its contents', () => {
+	const list = [row('a'), row('b', { agent_id: 'chef', message_count: 12 }), row('c')];
+	const out = renameSession(list, 'b', 'b2');
+	assert.deepEqual(
+		out.map((s) => s.id),
+		['a', 'b2', 'c']
+	);
+	assert.equal(out[1].title, 'titre b');
+	assert.equal(out[1].agent_id, 'chef');
+	assert.equal(out[1].message_count, 12);
+	// The root is remembered so the listing's own rotation lookup stays a no-op.
+	assert.equal(out[1]._lineage_root_id, 'b');
+});
+
+test('renaming leaves the original array untouched', () => {
+	const list = [row('a'), row('b')];
+	const out = renameSession(list, 'b', 'b2');
+	assert.equal(list[1].id, 'b');
+	assert.notEqual(out, list);
+});
+
+test('an already-known continuation absorbs the old row instead of duplicating it', () => {
+	// The listing can land between the stream ending and the store adopting it.
+	const list = [row('b2'), row('b')];
+	const out = renameSession(list, 'b', 'b2');
+	assert.deepEqual(
+		out.map((s) => s.id),
+		['b2']
+	);
+});
+
+test('renaming nothing is a no-op that keeps the same array', () => {
+	const list = [row('a'), row('b')];
+	assert.equal(renameSession(list, 'b', 'b'), list);
+	assert.equal(renameSession(list, null, 'b2'), list);
+	assert.equal(renameSession(list, 'b', null), list);
+	assert.equal(renameSession(list, 'zzz', 'b2'), list);
+});
+
+test('a renamed row is no longer seen as rotated by the listing lookup', () => {
+	const out = renameSession([row('b')], 'b', 'b2');
+	assert.equal(rotatedSessionId(out, 'b2'), null);
 });

@@ -170,6 +170,36 @@ export function rotatedSessionId(
 	return null;
 }
 
+/**
+ * Move a conversation's row onto the id a compression rotated it to.
+ *
+ * The row keeps its place in the sort and everything hanging off it — title,
+ * agent, counters — because it is the same conversation; only its id changed.
+ * Used when a turn's own stream announces the rotation, so the sidebar does not
+ * have to blink through "no such conversation" until the next listing.
+ *
+ * A row already carrying the new id wins and the old one is dropped: two rows
+ * for one conversation would show it twice.
+ */
+export function renameSession(
+	sessions: HermesSession[],
+	from: string | null | undefined,
+	to: string | null | undefined
+): HermesSession[] {
+	if (!from || !to || from === to) return sessions;
+	if (!sessions.some((s) => s.id === from)) return sessions;
+	const alreadyThere = sessions.some((s) => s.id === to);
+	const out: HermesSession[] = [];
+	for (const s of sessions) {
+		if (s.id !== from) {
+			out.push(s);
+		} else if (!alreadyThere) {
+			out.push({ ...s, id: to, _lineage_root_id: s._lineage_root_id ?? from });
+		}
+	}
+	return out;
+}
+
 /** Compact token/cost summary for a session, or null when nothing ran yet. */
 export function usageSummary(s: HermesSession | undefined): string | null {
 	if (!s) return null;

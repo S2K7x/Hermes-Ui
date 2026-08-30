@@ -1,7 +1,6 @@
 {
 	"path": "/",
-	"js": "(async()=>{const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));const burger=[...document.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Discussions');if(burger){burger.click();await sleep(700);}const more=[...document.querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')||'').startsWith('Actions sur'));if(more){more.focus();more.click();await sleep(500);}return 'ok'})()",
-	"width": 414,
-	"height": 896,
-	"caption": "Le menu d'une conversation, ouvert sur un écran de téléphone. Ses cinq actions passent de 35 à 44 px de haut — « Supprimer » était collé sous « Archiver ». Ce menu, celui du modèle et celui de l'agent répondent maintenant aussi au clavier : ⬆︎⬇︎ Début Fin pour parcourir la liste, Échap pour la refermer en rendant le focus au bouton d'origine. Et surtout Échap s'arrête là : avant, il traversait le menu jusqu'à la page, où il veut dire « ferme le tiroir » ou, pendant qu'une réponse s'écrit, « détache le tour en cours »."
+	"width": 1280,
+	"height": 900,
+	"caption": "Rien de neuf à l'écran aujourd'hui : le changement est invisible par construction. Quand une conversation devient trop longue, Hermes la compresse — il la termine et la continue sous un NOUVEL identifiant, sans prévenir. Jusqu'ici l'app ne l'apprenait qu'au rafraîchissement suivant de la sidebar ; entre les deux, le message suivant repartait sur l'ancien id et l'agent de la conversation était perdu. Or le tour lui-même l'annonce : ses deux dernières trames SSE portent l'identifiant effectif. Le serveur y déplace donc le lien conversation → agent dès la fin du tour, et le navigateur suit la ligne de sidebar au lieu de la voir disparaître. Mesuré contre un faux gateway : avec le changement la nouvelle session hérite du titre et de l'agent, sans lui elle n'existe pas."
 }

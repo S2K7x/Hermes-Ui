@@ -22,6 +22,7 @@ import { MAX_TURN_MS } from './config';
 import { getSession } from './hermes';
 import { pushToAll } from './push';
 import { cachedTitle } from './db';
+import { inheritSessionMeta } from './agents';
 import { newSSEState, parseSSEChunk } from '$lib/sse';
 import {
 	applyTurnFrame,
@@ -33,6 +34,10 @@ import {
 import { turnNotification } from '$lib/push';
 
 interface InFlightTurn {
+	/**
+	 * The conversation this turn belongs to. Mutable: a context compression
+	 * rotates it onto a new id mid-turn (see `adoptRotation`).
+	 */
 	sessionId: string;
 	/** Set while a browser is reading; null once it detaches. */
 	listener: ReadableStreamDefaultController<Uint8Array> | null;
@@ -150,10 +155,37 @@ async function pump(turn: InFlightTurn, options: BeginTurnOptions): Promise<void
 	} finally {
 		reader.cancel().catch(() => {});
 		options.abort.abort();
+		adoptRotation(turn);
 		const attached = turn.listener !== null;
 		closeListener(turn);
 		if (options.notifiable) await maybeNotify(turn, attached);
 	}
+}
+
+/**
+ * Follow the conversation when Hermes compressed it out from under this turn.
+ *
+ * Compression ends a session and continues it under a fresh id (CLAUDE.md §23),
+ * and the turn's own terminal frames are what announce it — the sidebar only
+ * learns it at the next listing. Everything this app hangs off a session id
+ * lives in `session_meta`: the conversation's agent and its cached title. Left
+ * alone, the very next message would be composed with no persona at all,
+ * because it would be sent to an id `session_meta` has never seen.
+ *
+ * `GET /api/sessions` does the same inheritance for the sidebar; doing it here
+ * too means it has happened *before* the next turn can be sent, instead of
+ * depending on a refresh landing first.
+ */
+function adoptRotation(turn: InFlightTurn): void {
+	const rotated = turn.summary.sessionId;
+	if (!rotated || rotated === turn.sessionId) return;
+	try {
+		inheritSessionMeta(turn.sessionId, rotated);
+	} catch {
+		// Best effort: a failed carry-over costs the persona on one turn, not
+		// the notification this function stands in front of.
+	}
+	turn.sessionId = rotated;
 }
 
 /** Mirror bytes to the browser, dropping it rather than buffering forever. */

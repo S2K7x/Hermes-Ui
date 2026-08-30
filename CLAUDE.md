@@ -1082,6 +1082,34 @@ compressait**, et repassait en silence au prompt par défaut du gateway.
   dont `_conversation_history_for_session` rejouerait tout le transcript
   d'avant compression (`get_messages_as_conversation` ne suit pas la chaîne).
 
+**Mais le tour lui-même le dit, et plus tôt que la sidebar.** `assistant.completed`
+et `run.completed` portent le `session_id` **effectif** — celui sur lequel
+l'agent a réellement écrit. Ce n'est pas une déduction : `_run_agent` pose
+`result["session_id"] = agent.session_id` avec, en commentaire amont, « so
+callers can track compression-triggered session rotations ». Attention, ces
+**deux événements seulement** : `_event_payload` remplit `session_id` par
+défaut avec l'id *demandé* sur toutes les autres trames, `run.started` et
+`assistant.delta` comprises. Le rendre exploitable tient en deux moitiés :
+
+- Côté serveur, `applyTurnFrame()` le retient dans `TurnSummary.sessionId` et
+  `adoptRotation()` (`server/turns.ts`) appelle `inheritSessionMeta()` **à la
+  fin du tour**, pas au prochain listing. C'est ce qui compte : sinon le message
+  suivant est composé avec un `system_message` vide, parce qu'il part sur un id
+  que `session_meta` n'a jamais vu. **Mesuré** sur l'application construite,
+  contre un faux gateway qui annonce la rotation dans ses trames terminales :
+  avec le changement, `sess-new` porte le titre et l'agent de `sess-old` dès la
+  fin du tour ; sans lui, la table n'a toujours qu'une ligne. La notification
+  part elle aussi sur l'id de la continuation, donc `?s=<id>` ouvre la ligne que
+  la sidebar affichera.
+- Côté client, `#adoptStreamRotation()` déplace `chat.sessionId` et le brouillon
+  dans le `finally` de `send()`, **avant** le `refreshSessions()` qui suit. La
+  ligne de sidebar est reportée sur le nouvel id par `renameSession()`
+  (`src/lib/sessions.ts`, pure et testée) plutôt que jetée : sans ça,
+  `chat.current` serait indéfini le temps d'un aller-retour et les sélecteurs de
+  modèle et d'agent afficheraient « aucun ». `refreshSessions()` reste le filet
+  pour une compression survenue app fermée — sur une ligne déjà reportée,
+  `rotatedSessionId()` ne trouve plus rien à faire.
+
 **Ce qu'on ne fait délibérément pas** : se fier au `session_id` renvoyé par
 `GET /api/sessions/{id}/messages`. Ce handler résout par
 `resolve_resume_session_id`, dont la seconde passe suit `parent_session_id`
@@ -1171,15 +1199,16 @@ D'où un brouillon **par conversation**, gardé côté navigateur
 | `tool.progress` | `tool_name`, `delta` | `_thinking` → bloc raisonnement |
 | `tool.started` | `tool_name`, `preview`, `args` | ajoute une étape `running` |
 | `tool.completed` / `tool.failed` | `tool_name`, `preview` | clôt la dernière étape `running` du même outil |
-| `assistant.completed` | `content` (texte final **autoritaire**) | écrase le buffer de deltas |
-| `run.completed` | `messages`, `usage`, `runtime` | fin de tour |
+| `assistant.completed` | `content` (texte final **autoritaire**), `session_id` | écrase le buffer de deltas |
+| `run.completed` | `messages`, `usage`, `runtime`, `session_id` | fin de tour |
 | `error` | `message` | bandeau d'erreur |
 | `done` | — | ferme le lecteur |
 
 Des commentaires `: keepalive` arrivent toutes les N secondes ; le parseur
 (`src/lib/sse.ts`) les ignore. `assistant.completed` est autoritaire parce que
 certains contenus (médias résolus en `data:` URL) ne passent pas par les
-deltas.
+deltas. Le `session_id` de ces deux trames est le seul **effectif** — toutes
+les autres portent l'id demandé, posé par défaut : voir le point 23.
 
 ### Le transcript rechargé, lui, n'a pas la même forme
 

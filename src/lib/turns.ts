@@ -18,9 +18,26 @@ export interface TurnSummary {
 	error: string | null;
 	/** True once `run.completed` or `assistant.completed` has been seen. */
 	completed: boolean;
+	/**
+	 * The session id the turn actually wrote to, when the stream said one.
+	 *
+	 * A context compression ends the conversation and continues it under a new
+	 * id (CLAUDE.md §23). `assistant.completed` and `run.completed` carry the
+	 * *effective* id — upstream sets it from the agent expressly so callers can
+	 * track that rotation (`result["session_id"]` in `_run_agent`) — while every
+	 * other frame only gets the requested one filled in by default. So these two
+	 * events are the only ones read here, and the only place the rotation is
+	 * knowable at the moment it happens rather than at the next sidebar listing.
+	 */
+	sessionId: string | null;
 }
 
-export const newTurnSummary = (): TurnSummary => ({ text: '', error: null, completed: false });
+export const newTurnSummary = (): TurnSummary => ({
+	text: '',
+	error: null,
+	completed: false,
+	sessionId: null
+});
 
 /**
  * Fold one SSE frame into the summary.
@@ -45,9 +62,15 @@ export function applyTurnFrame(
 				summary.text = data.content.slice(0, TURN_TEXT_CAP);
 			}
 			summary.completed = true;
+			if (typeof data.session_id === 'string' && data.session_id) {
+				summary.sessionId = data.session_id;
+			}
 			break;
 		case 'run.completed':
 			summary.completed = true;
+			if (typeof data.session_id === 'string' && data.session_id) {
+				summary.sessionId = data.session_id;
+			}
 			break;
 		case 'error':
 			if (typeof data.message === 'string' && data.message) summary.error = data.message;

@@ -88,3 +88,44 @@ test('stale presence is ignored in favour of the attachment', () => {
 	assert.equal(shouldNotifyTurn({ attached: true, presence: { visible: false, at }, now }), false);
 	assert.equal(shouldNotifyTurn({ attached: false, presence: { visible: true, at }, now }), true);
 });
+
+// ---------------------------------------------------------------------------
+// The effective session id — what a mid-turn compression rotates it to
+// ---------------------------------------------------------------------------
+
+test('a turn that was not compressed reports no rotation', () => {
+	const summary = newTurnSummary();
+	assert.equal(summary.sessionId, null);
+	applyTurnFrame(summary, 'run.started', { session_id: 'sess-a' });
+	applyTurnFrame(summary, 'assistant.delta', { delta: 'bonjour', session_id: 'sess-a' });
+	applyTurnFrame(summary, 'assistant.completed', { content: 'bonjour', session_id: 'sess-a' });
+	applyTurnFrame(summary, 'run.completed', { session_id: 'sess-a' });
+	assert.equal(summary.sessionId, 'sess-a');
+});
+
+test('only the terminal frames carry the effective session id', () => {
+	// Every frame gets the REQUESTED id filled in by default upstream; a
+	// rotation only ever shows up on assistant.completed / run.completed.
+	const summary = newTurnSummary();
+	applyTurnFrame(summary, 'run.started', { session_id: 'sess-a' });
+	applyTurnFrame(summary, 'tool.started', { session_id: 'sess-a', tool_name: 'terminal' });
+	assert.equal(summary.sessionId, null);
+	applyTurnFrame(summary, 'assistant.completed', { content: 'ok', session_id: 'sess-b' });
+	assert.equal(summary.sessionId, 'sess-b');
+});
+
+test('run.completed alone is enough to report the rotation', () => {
+	const summary = newTurnSummary();
+	applyTurnFrame(summary, 'run.completed', { session_id: 'sess-b' });
+	assert.equal(summary.sessionId, 'sess-b');
+	assert.equal(summary.completed, true);
+});
+
+test('a terminal frame without a session id leaves the last known one alone', () => {
+	const summary = newTurnSummary();
+	applyTurnFrame(summary, 'assistant.completed', { content: 'ok', session_id: 'sess-b' });
+	applyTurnFrame(summary, 'run.completed', {});
+	applyTurnFrame(summary, 'run.completed', { session_id: '' });
+	applyTurnFrame(summary, 'run.completed', { session_id: 42 });
+	assert.equal(summary.sessionId, 'sess-b');
+});

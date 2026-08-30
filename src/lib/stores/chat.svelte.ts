@@ -3,7 +3,7 @@ import { readJSON, writeJSON } from '$lib/client/storage';
 import { ApiError, AppErrorCode } from '$lib/errors';
 import { isModelAvailable, providerForModel, shortModelName } from '$lib/models';
 import { isTerminalTurnEvent, newSSEState, parseSSEChunk } from '$lib/sse';
-import { rotatedSessionId } from '$lib/sessions';
+import { renameSession, rotatedSessionId } from '$lib/sessions';
 import { emptyAssistant, groupTranscript, uid, type UiMessage } from '$lib/transcript';
 import { drafts } from './drafts.svelte';
 import { toasts } from './toast.svelte';
@@ -64,6 +64,13 @@ class ChatStore {
 
 	#abort: AbortController | null = null;
 	#lastPrompt: LastPrompt | null = null;
+	/**
+	 * Session id the running turn's terminal frames reported.
+	 *
+	 * Differs from the id the turn was sent to only when Hermes compressed the
+	 * conversation mid-turn and continued it elsewhere (CLAUDE.md §23).
+	 */
+	#streamSessionId: string | null = null;
 	#healthTimer: ReturnType<typeof setTimeout> | null = null;
 	#healthBackoff = 0;
 
@@ -574,6 +581,7 @@ class ChatStore {
 		const assistant = this.messages[this.messages.length - 1];
 
 		this.streaming = true;
+		this.#streamSessionId = null;
 		this.#abort = new AbortController();
 
 		try {
@@ -600,9 +608,47 @@ class ChatStore {
 			assistant.streaming = false;
 			this.streaming = false;
 			this.#abort = null;
+			this.#adoptStreamRotation(id);
 			// message_count / preview / last_active only change server-side.
 			this.refreshSessions();
 		}
+	}
+
+	/**
+	 * Remember the session id a terminal frame reported.
+	 *
+	 * Only `assistant.completed` and `run.completed` carry the *effective* id
+	 * upstream — every other frame gets the requested one filled in by default —
+	 * so this is deliberately called from those two cases only.
+	 */
+	#noteSessionId(value: unknown) {
+		if (typeof value === 'string' && value) this.#streamSessionId = value;
+	}
+
+	/**
+	 * Follow a compression that rotated this conversation while the turn ran.
+	 *
+	 * `refreshSessions()` already moves the open conversation onto its
+	 * continuation, but only once a listing has come back with
+	 * `_lineage_root_id`. The turn's own last frames say it earlier and without
+	 * a round-trip, which matters because between the two the next message would
+	 * be posted to the old id — and Hermes would replay the whole
+	 * pre-compression transcript it just spent a turn compressing.
+	 *
+	 * The sidebar row is carried over rather than dropped so the model and agent
+	 * pickers do not blink through "unknown conversation" until the refresh
+	 * lands. The server has already moved the agent binding onto the new id by
+	 * the time the stream ends (`adoptRotation` in `server/turns.ts`).
+	 */
+	#adoptStreamRotation(startedWith: string) {
+		const moved = this.#streamSessionId;
+		this.#streamSessionId = null;
+		if (!moved || moved === startedWith) return;
+		this.sessions = renameSession(this.sessions, startedWith, moved);
+		// The unsent text is keyed on the id too, so it has to follow.
+		drafts.rename(startedWith, moved);
+		// Not if the user has moved on: the open conversation is someone else's.
+		if (this.sessionId === startedWith) this.sessionId = moved;
 	}
 
 	/** @returns true if the turn reached a conclusion, false if the stream just stopped. */
@@ -682,10 +728,12 @@ class ChatStore {
 				// produced through non-streaming paths (e.g. tool-rendered media
 				// resolved to data: URLs).
 				if (typeof data.content === 'string' && data.content) assistant.content = data.content;
+				this.#noteSessionId(data.session_id);
 				break;
 
 			case 'run.completed':
 				assistant.streaming = false;
+				this.#noteSessionId(data.session_id);
 				break;
 
 			case 'error': {
