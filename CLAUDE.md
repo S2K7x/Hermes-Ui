@@ -1189,6 +1189,63 @@ D'où un brouillon **par conversation**, gardé côté navigateur
   début du texte en infobulle : sans ça, un message écrit et jamais envoyé est
   invisible depuis n'importe quelle autre conversation.
 
+### 26. Le catalogue de modèles ne doit pas retarder la conversation
+
+Ouvrir l'app lance plusieurs appels de front, et l'un d'eux n'est pas comme les
+autres. `GET /api/model/options` ne lit pas un fichier : `_handle_model_options`
+appelle `build_model_options_payload()`, qui reconstruit l'inventaire des
+fournisseurs derrière un **cache disque d'une heure** et va rechercher les
+catalogues des fournisseurs sur internet dès qu'il a expiré.
+
+**Mesuré contre l'application en production sur ce Pi**, endpoint par endpoint :
+
+| appel | à froid | à chaud |
+|---|---|---|
+| `/api/capabilities` | — | 5 ms |
+| `/api/sessions?limit=200` | — | 6–60 ms |
+| `/api/sessions/{id}/messages` | — | 6 ms |
+| `/api/skills` | — | 26–88 ms |
+| **`/api/models`** | **1,9 s** | **134 ms** |
+
+`chat.init()` attendait les trois branches, dont `refreshCatalog()`, avant que
+`boot()` puisse appeler `openSession()`. La requête du transcript ne pouvait
+donc pas partir tant qu'une liste de modèles que personne n'a demandé à voir
+n'était pas revenue — et une fois par heure, elle mettait deux secondes.
+
+D'où : `init()` **démarre** le catalogue et ne l'attend pas. Rejoué contre
+l'application qui tourne, six fois chacun, du premier appel à la fin du
+transcript : **médiane 181 ms → 52 ms** à chaud, et ~1,9 s → ~50 ms sur le
+premier chargement après expiration du cache.
+
+Ce qui rend ça sûr, et qu'il ne faut pas défaire :
+
+- Rien de ce qui est à l'écran au démarrage n'en dépend. L'entête affiche le
+  modèle de la conversation ouverte (`chat.activeModel`, qui vient de la ligne
+  de session), et le sélecteur de modèle, la palette `/` et le compteur
+  d'outils sont des choses qu'on va chercher. Tous gèrent déjà
+  `chat.models === null`, qui est leur état initial de toute façon.
+- **Une exception, et une seule** : créer une conversation épingle un id de
+  modèle sur la ligne de session, et un id que Hermes ne sait pas router fait
+  échouer *chaque* tour (point 1). C'est `refreshCatalog()` qui valide
+  `nextModel` contre ce qui est routable, donc `send()` appelle
+  `catalogReady()` **avant** `newSession()`. La dette est payée là, une fois,
+  et en pratique elle est déjà réglée : il a fallu taper un message d'abord.
+  (Cette course existait déjà — `boot()` n'empêche pas de taper pendant qu'il
+  charge —, elle est maintenant fermée explicitement.)
+- Le catalogue est stocké **non rejetant** (`.catch(() => undefined)`) : rien
+  ne l'attend jusqu'à un éventuel `catalogReady()`, et une promesse rejetée
+  laissée en l'air atterrirait dans le filet `unhandledrejection` de
+  `+layout.svelte`, transformant un échec silencieux en bandeau d'erreur.
+- `refreshCatalog()` lance ses deux appels **de front** plutôt qu'à la suite :
+  `/api/models` et `/api/skills` ne lisent pas la réponse l'un de l'autre, les
+  enchaîner ajoutait juste la latence du lent à celle du rapide. Chacun garde
+  son `catch` — un gateway qui n'arrive pas à lister ses modèles doit encore
+  pouvoir lister ses skills.
+
+`tests/boot.test.ts` relit la source : il échoue si `init()` réattend le
+catalogue, si les deux listings redeviennent séquentiels, ou si `send()` cesse
+d'attendre `catalogReady()` avant `newSession()`.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |

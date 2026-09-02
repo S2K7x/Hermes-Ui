@@ -54,6 +54,11 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
   applicable à la conversation ouverte dès le message suivant
 - **Export markdown** de la conversation
+- **Démarrage rapide** : l'app n'attend plus l'inventaire des modèles pour
+  afficher la conversation. Cet appel-là reconstruit le catalogue des
+  fournisseurs derrière un cache d'une heure — mesuré à 134 ms à chaud mais
+  1,9 s juste après expiration —, il part maintenant en arrière-plan. Du
+  premier appel au transcript affiché : 181 ms → 52 ms
 - **Blocs de code colorés**, avec un bouton « copier » au survol. Les grammaires
   (37 langages, 164 Ko) ne sont chargées qu'à la première apparition d'un bloc
   de code, pas au démarrage de l'app

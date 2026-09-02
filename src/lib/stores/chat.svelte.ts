@@ -73,6 +73,13 @@ class ChatStore {
 	#streamSessionId: string | null = null;
 	#healthTimer: ReturnType<typeof setTimeout> | null = null;
 	#healthBackoff = 0;
+	/**
+	 * The catalogue fetch, while it is in flight.
+	 *
+	 * Kept so the one thing that genuinely needs it — pinning a model on a
+	 * brand-new conversation — can wait for it, without the whole boot doing so.
+	 */
+	#catalog: Promise<void> | null = null;
 
 	get current(): HermesSession | undefined {
 		const id = this.sessionId;
@@ -102,11 +109,48 @@ class ChatStore {
 
 	// -- bootstrap ----------------------------------------------------------
 
+	/**
+	 * Boot.
+	 *
+	 * The catalogue is started here but deliberately **not** awaited. Nothing on
+	 * screen at boot needs it: the header shows the open conversation's own
+	 * model, and the model picker, the `/` skills palette and the tool counter
+	 * are all things you have to reach for. Meanwhile it is by far the slowest
+	 * call of the fan-out, because `GET /api/model/options` rebuilds Hermes'
+	 * provider inventory behind a one-hour disk cache and refetches the provider
+	 * catalogues over the internet when it has expired.
+	 *
+	 * **Measured against the running app on this Pi**, warm: capabilities 5 ms,
+	 * sessions 6–60 ms, transcript 6 ms — but models 134 ms, and 1.9 s on the
+	 * first call after the cache expired. Awaited, that was the whole
+	 * time-to-first-message: replayed against the running app, first call to
+	 * rendered transcript, the median went 181 ms → 52 ms — and ~1.9 s → ~50 ms
+	 * once an hour, for a list nobody had asked to see. Started and left
+	 * running, opening the app costs the session list plus the transcript, and
+	 * the picker fills in behind.
+	 */
 	async init() {
 		this.nextModel = readJSON('hermes-next-model', '');
 		this.nextAgent = readJSON('hermes-next-agent', '');
-		await Promise.allSettled([this.refreshHealth(), this.refreshSessions(), this.refreshCatalog()]);
+		// Nothing awaits this until `catalogReady()` might, so it is kept
+		// non-rejecting: a floating rejection would reach the global
+		// `unhandledrejection` net in +layout.svelte.
+		this.#catalog = this.refreshCatalog().catch(() => undefined);
+		await Promise.allSettled([this.refreshHealth(), this.refreshSessions()]);
 		this.#scheduleHealth();
+	}
+
+	/**
+	 * Wait for the catalogue if it has not landed yet.
+	 *
+	 * Only worth doing before creating a conversation: Hermes pins the model id
+	 * on the session row, and a stale one makes every single turn fail with a
+	 * 400 from the provider (CLAUDE.md §1). `refreshCatalog()` is what vets
+	 * `nextModel` against what the gateway can actually route, so that is the
+	 * one place the wait is owed.
+	 */
+	async catalogReady(): Promise<void> {
+		await this.#catalog;
 	}
 
 	dispose() {
@@ -145,7 +189,7 @@ class ChatStore {
 				toasts.success('Connexion à Hermes rétablie.');
 				// State may have moved on while we were blind.
 				this.refreshSessions();
-				this.refreshCatalog();
+				this.#catalog = this.refreshCatalog().catch(() => undefined);
 			}
 		} catch {
 			this.connected = false;
@@ -161,7 +205,19 @@ class ChatStore {
 		}
 	}
 
+	/**
+	 * The model inventory and the skills/toolsets list.
+	 *
+	 * Fetched side by side: they are two unrelated endpoints and neither reads
+	 * the other's answer, so chaining them only added the slower one's latency
+	 * to the faster one's. Each keeps its own catch — a gateway that cannot list
+	 * its models must still be able to list its skills.
+	 */
 	async refreshCatalog() {
+		await Promise.all([this.#refreshModels(), this.#refreshSkills()]);
+	}
+
+	async #refreshModels() {
 		try {
 			this.models = await withRetry(() => api<ModelOptions>('/api/models'));
 			// A model saved from a previous session may no longer be offered.
@@ -169,6 +225,9 @@ class ChatStore {
 		} catch {
 			/* the picker stays empty; chat still works on the server default */
 		}
+	}
+
+	async #refreshSkills() {
 		try {
 			const res = await api<{
 				skills: Array<{ name: string; description?: string }>;
@@ -548,6 +607,12 @@ class ChatStore {
 
 		let id = this.sessionId;
 		if (!id) {
+			// The catalogue is no longer awaited at boot, so this is where the
+			// debt is settled: a new conversation pins a model id on its session
+			// row for good, and one the gateway cannot route makes every turn
+			// fail (CLAUDE.md §1). Already resolved in the common case — the
+			// user had to type something first.
+			await this.catalogReady();
 			id = await this.newSession(titleFrom(trimmed));
 			if (!id) return;
 		}
