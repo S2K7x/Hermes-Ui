@@ -1267,6 +1267,27 @@ certains contenus (médias résolus en `data:` URL) ne passent pas par les
 deltas. Le `session_id` de ces deux trames est le seul **effectif** — toutes
 les autres portent l'id demandé, posé par défaut : voir le point 23.
 
+**Ce flux n'est lu qu'à un seul endroit.** Le navigateur
+(`chat.svelte.ts#consume()`) et le registre de tours du serveur
+(`server/turns.ts::pump()`) tenaient chacun sa copie de la même boucle :
+`getReader`, `TextDecoder`, `parseSSEChunk`, puis un `JSON.parse` dans un
+`try/catch` qui **saute** une trame illisible au lieu de tuer le tour. C'est
+maintenant `readTurnStream()` (`src/lib/sse.ts`), un générateur asynchrone qui
+rend, pour chaque morceau reçu, **les octets bruts et les trames qu'ils ont
+complétées** — les octets d'abord, parce que le serveur les recopie vers le
+navigateur et que l'ordre du fil doit être conservé. Il relâche aussi le
+lecteur amont dans son `finally`, ce que le client ne faisait pas quand il
+sortait de la boucle sur `done`.
+
+La charge utile d'une trame n'est plus un `Record<string, any>` mais
+`StreamEventData` (`src/lib/types.ts`), dont les champs sont ceux que
+`_event_payload` et ses appelants construisent dans `api_server.py` (0.20.0) —
+`status` et `code` exceptés, qui n'apparaissent que sur une trame `error`
+fabriquée par notre propre `sseErrorResponse()`. Rien n'est validé à
+l'arrivée : les gardes `typeof` d'`applyTurnFrame()` restent la seule
+vérification réelle, et le test qui leur passe un `session_id` numérique le
+fait par un cast délibéré.
+
 ### Le transcript rechargé, lui, n'a pas la même forme
 
 `groupTranscript()` (`src/lib/transcript.ts`, pur et testé) replie les lignes
@@ -1348,7 +1369,7 @@ src/
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage,
 │   │                  candidats de la vue archivée, rotations de compression
 │   ├── skills.ts      chemins de skills validés, gabarits, groupement
-│   ├── sse.ts         parseur SSE incrémental (partagé)
+│   ├── sse.ts         parseur SSE incrémental + lecture d'un tour (partagés)
 │   ├── theme.ts       préréglages, dérivation color-mix, contraste WCAG, refus
 │   │                  d'écrire un thème composé sur une ligne non lue
 │   ├── turns.ts       résumé d'un tour + « faut-il notifier ? »

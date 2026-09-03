@@ -126,6 +126,9 @@ test('a terminal frame without a session id leaves the last known one alone', ()
 	applyTurnFrame(summary, 'assistant.completed', { content: 'ok', session_id: 'sess-b' });
 	applyTurnFrame(summary, 'run.completed', {});
 	applyTurnFrame(summary, 'run.completed', { session_id: '' });
-	applyTurnFrame(summary, 'run.completed', { session_id: 42 });
+	// Cast on purpose: `StreamEventData` describes what upstream *says* it
+	// sends, and nothing validates that on arrival — which is what the runtime
+	// guard in `applyTurnFrame` is for.
+	applyTurnFrame(summary, 'run.completed', { session_id: 42 as unknown as string });
 	assert.equal(summary.sessionId, 'sess-b');
 });

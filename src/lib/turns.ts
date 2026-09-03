@@ -7,6 +7,8 @@
  * here so they can be tested without a socket.
  */
 
+import type { StreamEventData } from './types';
+
 /** Hard cap on the text we keep in memory per turn. A notification body is
  *  ~180 characters; anything beyond this is only ever thrown away. */
 export const TURN_TEXT_CAP = 4000;
@@ -49,7 +51,7 @@ export const newTurnSummary = (): TurnSummary => ({
 export function applyTurnFrame(
 	summary: TurnSummary,
 	event: string,
-	data: Record<string, unknown>
+	data: StreamEventData
 ): void {
 	switch (event) {
 		case 'assistant.delta':

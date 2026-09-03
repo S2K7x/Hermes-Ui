@@ -23,7 +23,7 @@ import { getSession } from './hermes';
 import { pushToAll } from './push';
 import { cachedTitle } from './db';
 import { inheritSessionMeta } from './agents';
-import { newSSEState, parseSSEChunk } from '$lib/sse';
+import { readTurnStream } from '$lib/sse';
 import {
 	applyTurnFrame,
 	newTurnSummary,
@@ -130,30 +130,17 @@ export function beginTurn(options: BeginTurnOptions): ReadableStream<Uint8Array>
  * moment the client left, which is the bug this whole module exists to fix.
  */
 async function pump(turn: InFlightTurn, options: BeginTurnOptions): Promise<void> {
-	const reader = options.upstream.body!.getReader();
-	const decoder = new TextDecoder();
-	const parser = newSSEState();
-
 	try {
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			forward(turn, value);
-			for (const frame of parseSSEChunk(parser, decoder.decode(value, { stream: true }))) {
-				let data: Record<string, unknown>;
-				try {
-					data = JSON.parse(frame.data);
-				} catch {
-					continue; // a malformed frame must not kill the turn
-				}
-				applyTurnFrame(turn.summary, frame.event, data);
-			}
+		for await (const { bytes, frames } of readTurnStream(options.upstream.body!)) {
+			// Before the parse, so the browser sees the bytes in the order the
+			// wire had them.
+			forward(turn, bytes);
+			for (const frame of frames) applyTurnFrame(turn.summary, frame.event, frame.data);
 		}
 	} catch {
 		// Upstream died or the deadline fired. The transcript is still Hermes'
 		// business; ours is to stop cleanly.
 	} finally {
-		reader.cancel().catch(() => {});
 		options.abort.abort();
 		adoptRotation(turn);
 		const attached = turn.listener !== null;

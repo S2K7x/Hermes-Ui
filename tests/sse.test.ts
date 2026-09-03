@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isTerminalTurnEvent, newSSEState, parseSSEChunk } from '../src/lib/sse.ts';
+import {
+	isTerminalTurnEvent,
+	newSSEState,
+	parseSSEChunk,
+	readTurnStream
+} from '../src/lib/sse.ts';
 import { groupTranscript } from '../src/lib/transcript.ts';
 
 test('reassembles a frame split across chunks', () => {
@@ -121,4 +126,88 @@ test('extracts text and images from multimodal user content', () => {
 	]);
 	assert.equal(turns[0].content, 'décris ça');
 	assert.deepEqual(turns[0].images, ['data:image/png;base64,AAA']);
+});
+
+// ---------------------------------------------------------------------------
+// readTurnStream — the loop the chat store and the server's turn registry share
+// ---------------------------------------------------------------------------
+
+/** An SSE body delivered in `size`-byte chunks, like a real socket would. */
+function bodyOf(text: string, size = 7): ReadableStream<Uint8Array> {
+	const bytes = new TextEncoder().encode(text);
+	let offset = 0;
+	return new ReadableStream<Uint8Array>({
+		pull(controller) {
+			if (offset >= bytes.length) {
+				controller.close();
+				return;
+			}
+			controller.enqueue(bytes.slice(offset, offset + size));
+			offset += size;
+		}
+	});
+}
+
+test('readTurnStream decodes frames split across chunk boundaries', async () => {
+	const frames = [];
+	for await (const chunk of readTurnStream(
+		bodyOf(
+			'event: assistant.delta\ndata: {"delta":"Il est "}\n\n' +
+				'event: assistant.delta\ndata: {"delta":"17:00."}\n\n' +
+				'event: done\ndata: {}\n\n'
+		)
+	)) {
+		frames.push(...chunk.frames);
+	}
+	assert.deepEqual(
+		frames.map((f) => f.event),
+		['assistant.delta', 'assistant.delta', 'done']
+	);
+	assert.equal(frames[0].data.delta, 'Il est ');
+	assert.equal(frames[1].data.delta, '17:00.');
+});
+
+test('readTurnStream yields the raw bytes alongside the frames they completed', async () => {
+	// The server mirrors these bytes to the browser, so they must come out in
+	// wire order and lose nothing — including the chunks that complete no frame.
+	const body = 'event: run.started\ndata: {}\n\nevent: done\ndata: {}\n\n';
+	const decoder = new TextDecoder();
+	let mirrored = '';
+	for await (const chunk of readTurnStream(bodyOf(body, 5))) mirrored += decoder.decode(chunk.bytes);
+	assert.equal(mirrored, body);
+});
+
+test('a malformed frame is skipped, not fatal', async () => {
+	const events = [];
+	for await (const chunk of readTurnStream(
+		bodyOf(
+			'event: assistant.delta\ndata: {not json\n\n' +
+				'event: assistant.delta\ndata: {"delta":"suite"}\n\n'
+		)
+	)) {
+		for (const frame of chunk.frames) events.push(frame);
+	}
+	assert.equal(events.length, 1);
+	assert.equal(events[0].data.delta, 'suite');
+});
+
+test('leaving the loop early releases the reader', async () => {
+	// The chat store returns as soon as it sees `done`; the upstream reader has
+	// to be let go then, not only when the body runs dry.
+	let cancelled = false;
+	const stream = new ReadableStream<Uint8Array>({
+		start(controller) {
+			controller.enqueue(new TextEncoder().encode('event: done\ndata: {}\n\n'));
+		},
+		cancel() {
+			cancelled = true;
+		}
+	});
+
+	for await (const chunk of readTurnStream(stream)) {
+		if (chunk.frames.some((f) => f.event === 'done')) break;
+	}
+	// `reader.cancel()` is fired without being awaited, so let the microtask run.
+	await Promise.resolve();
+	assert.equal(cancelled, true);
 });

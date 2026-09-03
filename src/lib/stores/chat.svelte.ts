@@ -2,7 +2,7 @@ import { api, withRetry } from '$lib/client/api';
 import { readJSON, writeJSON } from '$lib/client/storage';
 import { ApiError, AppErrorCode } from '$lib/errors';
 import { isModelAvailable, providerForModel, shortModelName } from '$lib/models';
-import { isTerminalTurnEvent, newSSEState, parseSSEChunk } from '$lib/sse';
+import { isTerminalTurnEvent, readTurnStream } from '$lib/sse';
 import { renameSession, rotatedSessionId } from '$lib/sessions';
 import { emptyAssistant, groupTranscript, uid, type UiMessage } from '$lib/transcript';
 import { drafts } from './drafts.svelte';
@@ -15,6 +15,7 @@ import type {
 	ModelOptions,
 	SessionRuntime,
 	StatusPayload,
+	StreamEventData,
 	ToolStep
 } from '$lib/types';
 
@@ -718,30 +719,20 @@ class ChatStore {
 
 	/** @returns true if the turn reached a conclusion, false if the stream just stopped. */
 	async #consume(body: ReadableStream<Uint8Array>, assistant: UiMessage): Promise<boolean> {
-		const reader = body.getReader();
-		const decoder = new TextDecoder();
-		const state = newSSEState();
 		let terminated = false;
-
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			for (const frame of parseSSEChunk(state, decoder.decode(value, { stream: true }))) {
-				let data: Record<string, any>;
-				try {
-					data = JSON.parse(frame.data);
-				} catch {
-					continue; // a malformed frame must not kill the stream
-				}
-				this.#applyEvent(frame.event, data, assistant);
+		for await (const { frames } of readTurnStream(body)) {
+			for (const frame of frames) {
+				this.#applyEvent(frame.event, frame.data, assistant);
 				if (isTerminalTurnEvent(frame.event)) terminated = true;
+				// Returning here releases the reader: `readTurnStream` cancels it
+				// in its `finally`, which `for await` runs on an early exit too.
 				if (frame.event === 'done') return true;
 			}
 		}
 		return terminated;
 	}
 
-	#applyEvent(event: string, data: Record<string, any>, assistant: UiMessage) {
+	#applyEvent(event: string, data: StreamEventData, assistant: UiMessage) {
 		switch (event) {
 			case 'assistant.delta':
 				assistant.content += data.delta ?? '';
@@ -802,11 +793,7 @@ class ChatStore {
 				break;
 
 			case 'error': {
-				const err = new ApiError(
-					Number(data.status) || 500,
-					data.message || 'Erreur inconnue',
-					data.code
-				);
+				const err = new ApiError(data.status || 500, data.message || 'Erreur inconnue', data.code);
 				assistant.error = err.message;
 				// A refused turn (429, bad payload) never started, so replaying
 				// it is safe and is what the user wants.

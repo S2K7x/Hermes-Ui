@@ -178,9 +178,44 @@ export type StreamEventName =
 	| 'error'
 	| 'done';
 
-export interface StreamEvent {
-	event: StreamEventName | string;
-	data: Record<string, any>;
+/**
+ * The `data` object of one turn-stream frame.
+ *
+ * Every field is optional because one shape covers all eleven event names, and
+ * none is validated on arrival — same convention as the other shapes in this
+ * file. What the field names are is *not* a guess: they are the ones
+ * `_event_payload` and its callers build in `api_server.py` (0.20.0), except
+ * `status` and `code`, which only ever appear on an `error` frame this app
+ * itself minted through `sseErrorResponse()`.
+ *
+ * This replaces a `Record<string, any>`, under which `data.tool_nmae` and
+ * `data.delta.length` both type-checked.
+ */
+export interface StreamEventData {
+	/** Filled in by default on EVERY frame, so it is the *requested* id — only
+	 *  `assistant.completed` and `run.completed` carry the effective one. */
+	session_id?: string;
+	run_id?: string;
+	seq?: number;
+	/** Epoch seconds. */
+	ts?: number;
+	message_id?: string;
+	/** `assistant.delta`, and `tool.progress` when `tool_name` is `_thinking`. */
+	delta?: string;
+	tool_name?: string;
+	preview?: string | null;
+	args?: unknown;
+	/** `assistant.completed`: the authoritative final text. */
+	content?: string;
+	completed?: boolean;
+	/** `run.completed`. Never read here — the transcript is reloaded instead. */
+	messages?: unknown;
+	usage?: unknown;
+	runtime?: unknown;
+	/** `error`. */
+	message?: string;
+	status?: number;
+	code?: string;
 }
 
 /** A tool invocation as rendered in the agent timeline. */
