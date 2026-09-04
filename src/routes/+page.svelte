@@ -16,6 +16,7 @@
 	import { hasMod, modKey } from '$lib/client/platform';
 	import { usageSummary } from '$lib/sessions';
 	import { agentColor, agentLabel, directReports } from '$lib/agents';
+	import { turnAnnouncement } from '$lib/a11y';
 	import { lazyComponent } from '$lib/client/lazy.svelte';
 
 	let sidebarOpen = $state(false);
@@ -286,6 +287,26 @@
 		}
 	}
 
+	/**
+	 * Id of the assistant turn this tab has actually watched stream.
+	 *
+	 * Gate for the live region below: without it, opening a conversation would
+	 * announce "Réponse terminée." about the last line of a transcript loaded
+	 * from history, which said nothing about anything the user just did. A
+	 * message only becomes announceable once it has been seen streaming here,
+	 * so a reload — which replaces every message with a fresh id — goes quiet
+	 * again.
+	 */
+	let liveTurnId = $state<string | null>(null);
+	$effect(() => {
+		const last = chat.messages.at(-1);
+		if (last?.streaming) liveTurnId = last.id;
+	});
+	let announcement = $derived.by(() => {
+		const last = chat.messages.at(-1);
+		return last && last.id === liveTurnId ? turnAnnouncement(last) : '';
+	});
+
 	let title = $derived(chat.current?.title || 'Hermes');
 	let usage = $derived(usageSummary(chat.current));
 	let activeAgent = $derived(agents.byId(chat.activeAgentId));
@@ -337,6 +358,10 @@
 				<button onclick={() => chat.refreshHealth()}>Réessayer</button>
 			</div>
 		{/if}
+
+		<!-- The turn's progress, for anyone who cannot see the caret blink or the
+		     tool steps appear. Phase only, never the answer's text. -->
+		<p class="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
 
 		<div class="scroll" bind:this={scroller} onscroll={onScroll}>
 			<div class="thread">

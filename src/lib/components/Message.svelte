@@ -22,6 +22,9 @@
 <article class="msg {message.role}">
 	{#if message.role === 'user'}
 		<div class="bubble">
+			<!-- Read out before the text: a transcript of bare paragraphs gives
+			     no clue who is speaking. Visible attribution is the layout. -->
+			<span class="sr-only">Vous :</span>
 			{#if message.images.length}
 				<div class="images">
 					{#each message.images as src, i (i)}
@@ -33,6 +36,7 @@
 		</div>
 	{:else}
 		<div class="assistant">
+			<span class="sr-only">Hermes :</span>
 			<ToolSteps steps={message.steps} reasoning={message.reasoning} streaming={message.streaming} />
 
 			{#if message.content}

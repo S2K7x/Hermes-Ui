@@ -1246,6 +1246,51 @@ Ce qui rend ça sûr, et qu'il ne faut pas défaire :
 catalogue, si les deux listings redeviennent séquentiels, ou si `send()` cesse
 d'attendre `catalogReady()` avant `newSession()`.
 
+### 27. Un tour ne se voit pas seulement, il doit s'entendre
+
+Tout ce qui dit à l'utilisateur qu'il se passe quelque chose pendant un tour —
+le curseur qui clignote, les étapes d'outils qui s'empilent, la note
+« affichage interrompu » — est peint dans un `<div>` ordinaire qu'aucune
+technologie d'assistance ne surveille. Taper Entrée ne produisait donc **rien**
+d'audible : ni confirmation, ni progression, et surtout aucun signal que la
+réponse est arrivée, sur des tours qui durent régulièrement des minutes.
+
+Trois choses, toutes petites, dans le même esprit que le point 22 :
+
+- **Une zone live polie**, rendue par `+page.svelte`, dont le texte vient de
+  `turnAnnouncement()` (`src/lib/a11y.ts`, pure et testée). Elle dit la
+  **phase**, jamais le texte de la réponse : une zone polie alimentée par le
+  flux relirait la réponse entière à chaque redessin, et le texte est de toute
+  façon à une flèche de là dans le transcript. Les phrases : « Hermes
+  réfléchit. », « Outil `<nom>` en cours. » (la plus récente étape `running`,
+  c'est elle qui prend le temps), « Réponse en cours. », « Réponse terminée
+  après N outils. », et les fins non nominales — erreur, détachement,
+  troncature — qui l'emportent sur la phase.
+- **Le gardien s'appelle `liveTurnId`** : un message ne devient annonçable
+  qu'après avoir été vu **en train de streamer dans cet onglet**. Sans ça,
+  ouvrir une conversation ferait annoncer « Réponse terminée. » à propos de la
+  dernière ligne d'un transcript chargé depuis l'historique — une phrase qui ne
+  parle de rien que l'utilisateur vienne de faire. Un `reload()`, qui remplace
+  tous les messages par des ids neufs, redevient donc silencieux lui aussi.
+- **Chaque message dit qui parle** (`<span class="sr-only">Vous :</span>` /
+  `Hermes :`) : à l'oreille, un transcript n'est qu'une suite de paragraphes
+  sans attribution — la bulle et son alignement sont une information purement
+  visuelle. Et les deux boutons en glyphe du composeur (`↑`, `■`) portent
+  enfin un `aria-label` : ils s'annonçaient « flèche vers le haut ». Le
+  `aria-label` de la zone de saisie la nomme aussi de façon stable, plutôt que
+  de laisser son nom basculer sur le placeholder « Hermes travaille… » en plein
+  tour.
+
+`.sr-only` est déclarée **une fois**, dans `src/app.css`, avec le découpage à
+un pixel — `display: none` ou `visibility: hidden` la sortiraient aussi de
+l'arbre d'accessibilité, ce qui est exactement l'inverse du but.
+`tests/a11y.test.ts` vérifie les phrases, le gardien, les libellés et la règle
+CSS.
+
+**Non vérifié** : l'annonce réelle par VoiceOver ou NVDA. Aucun navigateur
+n'était disponible dans le clone où ce changement a été écrit ; ce qui est
+testé, c'est la phrase produite et le fait que le balisage la porte.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -1353,8 +1398,9 @@ src/
 │   │   ├── push.svelte.ts       abonnement Web Push + report de présence
 │   │   ├── theme.svelte.ts      palette active + cache d'avant-rendu
 │   │   └── toast.svelte.ts      notifications dans la page
-│   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus) et
-│   │                  déplacement des flèches dans un menu surgissant
+│   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus),
+│   │                  déplacement des flèches dans un menu surgissant, et
+│   │                  phrase annoncée par la zone live d'un tour
 │   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction
 │   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé

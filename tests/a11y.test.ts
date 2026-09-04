@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { FOCUSABLE_SELECTOR, menuIndex, trapIndex } from '../src/lib/a11y.ts';
+import {
+	FOCUSABLE_SELECTOR,
+	menuIndex,
+	trapIndex,
+	turnAnnouncement,
+	type AnnounceableTurn
+} from '../src/lib/a11y.ts';
 
 /**
  * The focus trap of `Modal.svelte`, without a DOM.
@@ -260,4 +266,120 @@ test('popup rows are thumb-sized on a phone', () => {
 		assert.ok(narrow.length > 0, `${name} has no phone block`);
 		assert.match(narrow, /\.(items button|menu button)[\s\S]{0,120}min-height: 44px/, name);
 	}
+});
+
+/**
+ * The turn's live region.
+ *
+ * The whole waiting experience — caret, tool steps, "affichage interrompu" —
+ * is painted in a plain div that no screen reader watches, so pressing Enter
+ * used to produce nothing audible at all, on turns that run for minutes.
+ * `turnAnnouncement` is the sentence a polite region says instead.
+ */
+const turn = (over: Partial<AnnounceableTurn> = {}): AnnounceableTurn => ({
+	role: 'assistant',
+	content: '',
+	streaming: false,
+	steps: [],
+	...over
+});
+
+test('nothing is announced when there is no assistant turn to talk about', () => {
+	assert.equal(turnAnnouncement(undefined), '');
+	// The user's own bubble is the last message only until the empty
+	// assistant is pushed next to it; either way it is not spoken.
+	assert.equal(turnAnnouncement(turn({ role: 'user', content: 'salut' })), '');
+});
+
+test('a running turn says which phase it is in', () => {
+	assert.equal(turnAnnouncement(turn({ streaming: true })), 'Hermes réfléchit.');
+	assert.equal(turnAnnouncement(turn({ streaming: true, content: 'Voici' })), 'Réponse en cours.');
+});
+
+test('the newest running tool is the one named', () => {
+	const steps: AnnounceableTurn['steps'] = [
+		{ tool_name: 'terminal', status: 'done' },
+		{ tool_name: 'web_search', status: 'running' }
+	];
+	assert.equal(turnAnnouncement(turn({ streaming: true, steps })), 'Outil web_search en cours.');
+	// Once it completes, the phase falls back to the text being written.
+	steps[1].status = 'done';
+	assert.equal(
+		turnAnnouncement(turn({ streaming: true, steps, content: 'a' })),
+		'Réponse en cours.'
+	);
+});
+
+test('the end of a turn is announced, with the work it took', () => {
+	assert.equal(turnAnnouncement(turn({ content: 'fini' })), 'Réponse terminée.');
+	assert.equal(
+		turnAnnouncement(turn({ content: 'fini', steps: [{ tool_name: 'terminal', status: 'done' }] })),
+		'Réponse terminée après 1 outil.'
+	);
+	assert.equal(
+		turnAnnouncement(
+			turn({
+				content: 'fini',
+				steps: [
+					{ tool_name: 'terminal', status: 'done' },
+					{ tool_name: 'read_file', status: 'done' }
+				]
+			})
+		),
+		'Réponse terminée après 2 outils.'
+	);
+	assert.equal(turnAnnouncement(turn({})), 'Tour terminé sans réponse.');
+});
+
+test('a turn that failed or was let go says so instead of "terminée"', () => {
+	assert.equal(
+		turnAnnouncement(turn({ error: 'Hermes est injoignable.' })),
+		'Erreur : Hermes est injoignable.'
+	);
+	assert.match(turnAnnouncement(turn({ detached: 'stopped' })), /^Affichage interrompu\./);
+	assert.match(turnAnnouncement(turn({ detached: 'truncated' })), /incomplète\.$/);
+	// Detaching leaves `streaming` false, but a truncation is noticed while the
+	// flag may still be up: the reason must win over the phase either way.
+	assert.match(turnAnnouncement(turn({ streaming: true, detached: 'truncated' })), /incomplète\.$/);
+});
+
+/**
+ * The region only exists if the page renders it, and it must stay silent about
+ * a transcript loaded from history — announcing "Réponse terminée." about a
+ * conversation the user has just *opened* would be a lie about their own action.
+ */
+test('the page owns a polite live region gated on a turn it watched stream', () => {
+	const page = readFileSync(new URL('../src/routes/+page.svelte', import.meta.url), 'utf8');
+	assert.match(page, /import \{ turnAnnouncement \} from '\$lib\/a11y'/);
+	assert.match(page, /aria-live="polite"/);
+	assert.match(page, /class="sr-only"[^>]*role="status"/);
+	assert.match(page, /liveTurnId/);
+	assert.match(page, /last\.id === liveTurnId/);
+});
+
+/**
+ * Two glyphs and a transcript of unattributed paragraphs. A screen reader read
+ * the send button as "↑" and gave no clue whether a message came from the user
+ * or from Hermes.
+ */
+test('the conversation says who is speaking, and the composer names its controls', () => {
+	const dir = new URL('../src/lib/components/', import.meta.url);
+	const message = readFileSync(new URL('Message.svelte', dir), 'utf8');
+	assert.match(message, /<span class="sr-only">Vous :<\/span>/);
+	assert.match(message, /<span class="sr-only">Hermes :<\/span>/);
+
+	const composer = readFileSync(new URL('Composer.svelte', dir), 'utf8');
+	assert.match(composer, /aria-label="Envoyer le message"/);
+	assert.match(composer, /aria-label="Arrêter l'affichage"/);
+	// The textarea's name must not flip to "Hermes travaille…" mid-turn.
+	assert.match(composer, /aria-label="Message à Hermes"/);
+});
+
+/** Clipped, not hidden: `display: none` would drop it from the a11y tree too. */
+test('sr-only text stays in the accessibility tree', () => {
+	const css = readFileSync(new URL('../src/app.css', import.meta.url), 'utf8');
+	const rule = css.slice(css.indexOf('.sr-only {'), css.indexOf('.sr-only {') + 260);
+	assert.ok(rule.startsWith('.sr-only {'), 'app.css declares .sr-only');
+	assert.match(rule, /clip-path: inset\(50%\)/);
+	assert.doesNotMatch(rule, /display:\s*none|visibility:\s*hidden/);
 });

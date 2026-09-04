@@ -374,6 +374,7 @@
 			onkeydown={onKeydown}
 			onpaste={onPaste}
 			rows="1"
+			aria-label="Message à Hermes"
 			placeholder={chat.streaming ? 'Hermes travaille…' : 'Écrire à Hermes…  (/ pour les skills)'}
 		></textarea>
 
@@ -383,6 +384,7 @@
 			<button
 				class="send stop"
 				onclick={() => chat.stop()}
+				aria-label="Arrêter l'affichage"
 				title="Arrêter l'affichage (l'agent termine en arrière-plan)">■</button
 			>
 		{:else}
@@ -390,6 +392,7 @@
 				class="send"
 				onclick={submit}
 				disabled={!text.trim() && attachments.length === 0}
+				aria-label="Envoyer le message"
 				title="Envoyer">↑</button
 			>
 		{/if}

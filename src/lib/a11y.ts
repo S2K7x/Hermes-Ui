@@ -70,3 +70,57 @@ export function menuIndex(count: number, active: number, key: string): number | 
 			return null;
 	}
 }
+
+/**
+ * The parts of an assistant turn a screen reader needs to hear about.
+ *
+ * Structurally a subset of `UiMessage`, declared here rather than imported so
+ * the tests stay free of the transcript module.
+ */
+export interface AnnounceableTurn {
+	role: 'user' | 'assistant';
+	content: string;
+	streaming: boolean;
+	steps: Array<{ tool_name: string; status: 'running' | 'done' | 'failed' }>;
+	detached?: 'stopped' | 'truncated';
+	error?: string;
+}
+
+/**
+ * What a live region should say about the turn being played.
+ *
+ * Everything a sighted user reads while waiting — the blinking caret, the
+ * running tool step, the "affichage interrompu" note — is painted inside a
+ * plain `<div>` that no assistive technology watches. Pressing Enter therefore
+ * produced *nothing* audible: no confirmation, no progress, and above all no
+ * signal that the answer had landed, on turns that routinely run for minutes.
+ *
+ * Only the phase is spoken, never the answer itself: a polite region fed the
+ * streaming text would read the reply four times over as it grows, and the
+ * text is one arrow key away in the transcript anyway.
+ *
+ * Returns `''` when there is nothing to say — the caller renders that as an
+ * empty region, which announces nothing.
+ */
+export function turnAnnouncement(turn: AnnounceableTurn | undefined): string {
+	if (!turn || turn.role !== 'assistant') return '';
+	if (turn.error) return `Erreur : ${turn.error}`;
+	// Both detached states outlive the stream, so they come before it.
+	if (turn.detached === 'truncated')
+		return "Le flux s'est interrompu : la réponse affichée est incomplète.";
+	if (turn.detached === 'stopped') return "Affichage interrompu. L'agent termine en arrière-plan.";
+
+	if (turn.streaming) {
+		// The newest running step, because that is the one taking the time.
+		for (let i = turn.steps.length - 1; i >= 0; i--) {
+			const step = turn.steps[i];
+			if (step.status === 'running') return `Outil ${step.tool_name} en cours.`;
+		}
+		return turn.content ? 'Réponse en cours.' : 'Hermes réfléchit.';
+	}
+
+	if (!turn.content) return 'Tour terminé sans réponse.';
+	const tools = turn.steps.length;
+	if (tools === 0) return 'Réponse terminée.';
+	return `Réponse terminée après ${tools} outil${tools > 1 ? 's' : ''}.`;
+}
