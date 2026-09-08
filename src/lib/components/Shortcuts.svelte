@@ -15,7 +15,7 @@
 	});
 
 	let rows = $derived([
-		[`${mod} K`, 'Palette : rechercher une conversation ou une action'],
+		[`${mod} K`, 'Palette : un message de ce fil, une conversation, une action'],
 		[`${mod} ⇧ O`, 'Nouvelle discussion'],
 		[`${mod} /`, 'État du système'],
 		['/', 'Focus sur le composeur (puis / ouvre les skills)'],

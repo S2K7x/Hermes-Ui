@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { chat } from '$lib/stores/chat.svelte';
 	import { activityAt, matchesQuery, relativeTime, sessionLabel } from '$lib/sessions';
+	import { findInMessages } from '$lib/search';
 
 	interface Command {
 		id: string;
@@ -13,8 +14,10 @@
 		open: boolean;
 		onclose: () => void;
 		commands: Command[];
+		/** Scroll the thread to one of its messages, and flash it. */
+		onjump?: (messageId: string) => void;
 	}
-	let { open, onclose, commands }: Props = $props();
+	let { open, onclose, commands, onjump }: Props = $props();
 
 	let query = $state('');
 	let index = $state(0);
@@ -22,9 +25,13 @@
 
 	interface Row {
 		key: string;
-		kind: 'command' | 'session';
+		kind: 'command' | 'session' | 'message';
 		label: string;
 		hint?: string;
+		/** Heading printed above this row, when it opens a group. */
+		head?: string;
+		/** A message excerpt, split so the match can be marked. */
+		snippet?: { before: string; match: string; after: string };
 		run: () => void;
 	}
 
@@ -32,6 +39,34 @@
 		commands
 			.filter((c) => !query || c.label.toLowerCase().includes(query.toLowerCase()))
 			.map<Row>((c) => ({ key: `c:${c.id}`, kind: 'command', label: c.label, hint: c.hint, run: c.run }))
+	);
+
+	/**
+	 * Passages of the open conversation.
+	 *
+	 * The transcript is already in the browser, so this costs no round trip —
+	 * and it is the only way to find a passage at all on a phone, where an
+	 * installed PWA has no find-in-page.
+	 *
+	 * Listed last, under the conversations. Almost any query matches somewhere
+	 * in a long thread, so putting these first would push the conversation the
+	 * user was reaching for off the panel — the palette's oldest job.
+	 *
+	 * Gated on `open`, because the row list is read by an effect below: without
+	 * that guard, a palette merely closed on a leftover query would refold the
+	 * whole transcript on every token of the turn streaming behind it.
+	 */
+	let matchedMessages = $derived(
+		open && onjump
+			? findInMessages(chat.messages, query).map<Row>((hit) => ({
+					key: `m:${hit.id}`,
+					kind: 'message',
+					label: `${hit.before}${hit.match}${hit.after}`,
+					hint: `${hit.role === 'user' ? 'Vous' : 'Hermes'}${hit.count > 1 ? ` · ${hit.count}×` : ''}`,
+					snippet: { before: hit.before, match: hit.match, after: hit.after },
+					run: () => onjump?.(hit.id)
+				}))
+			: []
 	);
 
 	let matchedSessions = $derived(
@@ -47,7 +82,19 @@
 			}))
 	);
 
-	let rows = $derived([...matchedCommands, ...matchedSessions]);
+	const HEADS: Record<Row['kind'], string> = {
+		command: 'Actions',
+		message: 'Dans cette conversation',
+		session: 'Conversations'
+	};
+
+	// A heading is carried by the first row of each group, so the rendered list
+	// stays one flat array and the arrow keys keep their arithmetic.
+	let rows = $derived(
+		[...matchedCommands, ...matchedSessions, ...matchedMessages].map((row, i, all) =>
+			i === 0 || all[i - 1].kind !== row.kind ? { ...row, head: HEADS[row.kind] } : row
+		)
+	);
 
 	// Reset on each open, and keep the highlight inside the result list as it
 	// shrinks under typing.
@@ -93,18 +140,27 @@
 			bind:this={input}
 			bind:value={query}
 			onkeydown={onKeydown}
-			placeholder="Rechercher une conversation ou une action…"
+			placeholder="Rechercher un message, une conversation, une action…"
 			aria-label="Recherche"
 		/>
 		<div class="rows">
 			{#each rows as row, i (row.key)}
+				{#if row.head}<p class="group">{row.head}</p>{/if}
 				<button
 					class:sel={i === index}
 					onclick={() => choose(row)}
 					onmouseenter={() => (index = i)}
 				>
-					<span class="kind">{row.kind === 'command' ? '⌘' : '💬'}</span>
-					<span class="label">{row.label}</span>
+					<span class="kind" aria-hidden="true"
+						>{row.kind === 'command' ? '⌘' : row.kind === 'message' ? '⌕' : '💬'}</span
+					>
+					{#if row.snippet}
+						<span class="label"
+							>{row.snippet.before}<mark>{row.snippet.match}</mark>{row.snippet.after}</span
+						>
+					{:else}
+						<span class="label">{row.label}</span>
+					{/if}
 					{#if row.hint}<span class="hint">{row.hint}</span>{/if}
 				</button>
 			{/each}
@@ -164,6 +220,22 @@
 	}
 	.rows button.sel {
 		background: var(--bg-hover);
+	}
+	.group {
+		margin: 8px 0 2px;
+		padding: 0 10px;
+		font-size: 10.5px;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-faint);
+	}
+	.rows > .group:first-child {
+		margin-top: 2px;
+	}
+	mark {
+		background: var(--accent-soft);
+		color: var(--text);
+		border-radius: 3px;
 	}
 	.kind {
 		flex: 0 0 auto;

@@ -5,11 +5,13 @@
 
 	interface Props {
 		message: UiMessage;
+		/** Briefly outlined, after the palette jumped the thread to it. */
+		flash?: boolean;
 		onfork?: () => void;
 		onreload?: () => void;
 		onresend?: () => void;
 	}
-	let { message, onfork, onreload, onresend }: Props = $props();
+	let { message, flash = false, onfork, onreload, onresend }: Props = $props();
 
 	let copied = $state(false);
 	function copy() {
@@ -19,7 +21,9 @@
 	}
 </script>
 
-<article class="msg {message.role}">
+<!-- `data-mid` is how the page finds this turn again when a search result is
+     chosen: message ids come from Hermes and are not safe as DOM ids. -->
+<article class="msg {message.role}" class:flash data-mid={message.id}>
 	{#if message.role === 'user'}
 		<div class="bubble">
 			<!-- Read out before the text: a transcript of bare paragraphs gives
@@ -138,6 +142,29 @@
 		51%,
 		100% {
 			opacity: 0;
+		}
+	}
+
+	/* Where did it say that? — the palette answers with an excerpt, this says
+	   where. Two and a half seconds, then the thread looks untouched again. */
+	.msg.flash .bubble,
+	.msg.flash .assistant {
+		animation: flash 2.4s ease-out;
+	}
+	@keyframes flash {
+		0%,
+		35% {
+			box-shadow: 0 0 0 2px var(--focus);
+		}
+		100% {
+			box-shadow: 0 0 0 2px transparent;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.msg.flash .bubble,
+		.msg.flash .assistant {
+			animation-duration: 0.01s;
+			box-shadow: 0 0 0 2px var(--focus);
 		}
 	}
 

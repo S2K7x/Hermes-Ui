@@ -1291,6 +1291,67 @@ CSS.
 n'était disponible dans le clone où ce changement a été écrit ; ce qui est
 testé, c'est la phrase produite et le fait que le balisage la porte.
 
+### 28. Retrouver un passage : la palette cherche aussi dans le fil ouvert
+
+Le gateway n'a **aucune** route de recherche dans les messages : sa table de
+routage (`api_server.py`, 0.20.0) n'expose sur les sessions que la liste, la
+fiche, le transcript, le fork, le chat et le verrou de modèle — vérifié aussi
+par l'absence totale d'un handler de recherche dans le fichier. Mais il n'en
+faut pas : `openSession()` charge déjà tout le
+transcript (`?order=oldest&limit=500`), donc « où est-ce qu'il m'a donné cette
+commande ? » se répond dans le navigateur, sans un aller-retour.
+
+Et c'est sur téléphone que ça compte : une PWA installée n'a pas de
+« rechercher dans la page ». Sur desktop le Ctrl+F du navigateur trouve le
+texte affiché ; il ne dit pas *combien* de fois, ni ne survit à un changement de
+conversation.
+
+Pas de nouvelle surface pour autant : c'est **la palette existante** (`⌘K`, ou
+le bouton ⌕ de l'entête) qui gagne un troisième groupe de résultats, sous
+« Dans cette conversation ». Un seul champ de recherche, trois natures de
+résultat — actions, conversations, messages du fil — avec des intitulés de
+groupe pour qu'on sache ce qu'on regarde. Choisir un message ferme la palette,
+fait défiler le fil jusqu'à lui et l'entoure deux secondes et demie.
+
+Les messages viennent **en dernier**, et c'est délibéré : dans un long fil,
+presque n'importe quelle requête trouve quelque chose. Les placer en tête
+chasserait de l'écran la conversation qu'on venait ouvrir — le premier métier
+de cette palette.
+
+`findInMessages()` (`src/lib/search.ts`, pure et testée) tient les règles :
+
+- **Une ligne par message, pas par occurrence** : la palette offre un endroit
+  où aller, et c'est un message qu'on sait faire défiler. Le nombre
+  d'occurrences est reporté à droite (« 3× »). Les plus récents d'abord : la
+  vue est en bas du fil, et dans une conversation la dernière mention est
+  presque toujours celle qu'on cherche.
+- **L'extrait est découpé dans le texte d'origine**, pas dans le texte replié :
+  afficher « resume » là où le message dit « résumé » serait le citer faux.
+  D'où le repli caractère par caractère qui garde, pour chaque caractère replié,
+  l'indice de celui qui l'a produit. `normalize()` est la partie chère, donc
+  elle est mémoïsée par caractère et l'ASCII ne l'atteint jamais : **mesuré sur
+  ce Pi 5**, replier un mégaoctet de prose française coûte ~130 ms — et ce
+  travail est mis en cache par message.
+- **Le cache est invalidé par le texte, pas seulement par l'identifiant** : un
+  message en train de streamer garde son id pendant que son contenu grandit.
+  Sans la comparaison de la source, le tour en cours ne serait jamais trouvé.
+- **Le calcul est conditionné à `open`.** La liste de lignes est lue par un
+  effet (le curseur doit rester dans la liste quand elle rétrécit), donc une
+  palette simplement refermée sur une requête laissée là replierait tout le
+  transcript **à chaque token** du tour qui s'écrit derrière.
+- Deux caractères minimum : en dessous, une requête trouve tellement de choses
+  que les conversations seraient chassées de l'écran par le bruit.
+
+**Ce qui n'est délibérément pas fait** : surligner le passage *dans la bulle*.
+Le corps d'un message est du markdown assaini injecté en `{@html}` par un rendu
+débouncé (point 9) ; y réécrire des balises reviendrait à se battre avec le
+prochain redessin. L'extrait dit ce qui a été trouvé, le halo dit où — et le
+halo est en `--focus`, donc lisible sur les quatre préréglages (point 22).
+
+**Non vérifié** : le rendu réel dans un navigateur. Aucun n'était disponible
+dans le clone où ce changement a été écrit ; ce qui est testé, c'est la
+fonction pure (`tests/search.test.ts`) et le fait que le balisage la branche.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -1410,6 +1471,7 @@ src/
 │   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
 │   ├── prompts.ts     prompts enregistrés : titres, bornes, recherche
 │   ├── push.ts        charge utile d'une notification, libellés, capacités
+│   ├── search.ts      recherche accent-insensible dans le fil ouvert, extraits
 │   ├── providers.ts   groupement des clés par provider, statut des comptes,
 │   │                  machine à états du flux OAuth
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage,

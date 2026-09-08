@@ -16,8 +16,14 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Vue « Archivées »** reconstruite à la demande : l'API Hermes exclut les
   conversations archivées de toutes ses listes, l'app les retrouve une par une
   à partir des identifiants qu'elle a déjà vus
-- **Palette de commandes** `⌘K` : recherche insensible aux accents dans toutes
-  les conversations + actions rapides
+- **Palette de commandes** `⌘K` (bouton ⌕ dans l'entête) : recherche
+  insensible aux accents dans toutes les conversations + actions rapides
+- **Recherche dans la conversation ouverte**, dans cette même palette : à
+  partir de deux caractères, elle liste les messages du fil qui contiennent ce
+  qu'on tape, avec un extrait où le passage trouvé est surligné ; le choisir
+  fait défiler le fil jusqu'à ce message et le souligne un instant. C'est la
+  seule façon de retrouver un passage sur téléphone, où une PWA installée n'a
+  pas de « rechercher dans la page »
 - **Timeline des étapes de l'agent** : chaque appel d'outil (terminal, web,
   navigateur, MCP…) affiché en direct, repliable
 - **Panneau d'état** `⌘/` : contrôles de disponibilité Hermes (base, modèle,

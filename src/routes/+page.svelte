@@ -142,7 +142,10 @@
 		if (target) await chat.openSession(target.id);
 	}
 
-	onDestroy(() => chat.dispose());
+	onDestroy(() => {
+		if (flashTimer) clearTimeout(flashTimer);
+		chat.dispose();
+	});
 
 	$effect(() => {
 		if (chat.sessionId) write('hermes-last-session', chat.sessionId);
@@ -161,6 +164,31 @@
 		if (!pinnedToBottom) return;
 		tick().then(() => scroller?.scrollTo({ top: scroller.scrollHeight }));
 	});
+
+	/**
+	 * Scroll to a message the palette found, and mark it for a moment.
+	 *
+	 * The excerpt says what was found; this says where. The flash is what
+	 * replaces highlighting the passage inside the bubble itself, which would
+	 * mean rewriting the sanitised markdown a debounced renderer owns.
+	 */
+	let flashId = $state<string | null>(null);
+	let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function jumpToMessage(id: string) {
+		flashId = id;
+		if (flashTimer) clearTimeout(flashTimer);
+		flashTimer = setTimeout(() => (flashId = null), 2400);
+		// Leaving the bottom by hand: without this, a turn still streaming would
+		// pull the view back down before the smooth scroll has settled.
+		pinnedToBottom = false;
+		await tick();
+		for (const node of scroller?.querySelectorAll('[data-mid]') ?? []) {
+			if (node.getAttribute('data-mid') !== id) continue;
+			node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			return;
+		}
+	}
 
 	function scrollToBottom() {
 		scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
@@ -343,8 +371,10 @@
 				{#if usage}<span class="usage" title="tokens entrée / sortie et coût estimé">{usage}</span>{/if}
 			</div>
 			<div class="head-actions">
-				<button class="icon" onclick={() => (paletteOpen = true)} aria-label="Rechercher (⌘K)"
-					>⌕</button
+				<button
+					class="icon"
+					onclick={() => (paletteOpen = true)}
+					aria-label="Rechercher un message, une conversation, une action (⌘K)">⌕</button
 				>
 				<AgentPicker onmanage={() => (agentsOpen = true)} />
 				<ModelPicker />
@@ -426,6 +456,7 @@
 				{#each chat.messages as message (message.id)}
 					<Message
 						{message}
+						flash={message.id === flashId}
 						onfork={message.role === 'assistant' && chat.sessionId
 							? () => chat.forkSession(chat.sessionId!)
 							: undefined}
@@ -450,7 +481,12 @@
 	</main>
 </div>
 
-<CommandPalette open={paletteOpen} onclose={() => (paletteOpen = false)} {commands} />
+<CommandPalette
+	open={paletteOpen}
+	onclose={() => (paletteOpen = false)}
+	{commands}
+	onjump={jumpToMessage}
+/>
 
 <!-- Each panel appears in the tree only once its chunk has landed; from then on
      it stays, so reopening is as immediate as it was before. -->
