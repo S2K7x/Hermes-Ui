@@ -375,6 +375,72 @@ test('the conversation says who is speaking, and the composer names its controls
 	assert.match(composer, /aria-label="Message à Yadai"/);
 });
 
+/**
+ * The phone header, measured rather than assumed.
+ *
+ * At 390px the header carries a burger, the conversation's title and four
+ * controls. Measured in Chromium at that width: the title element was **zero
+ * pixels wide** — the token counter beside it and controls that would not
+ * shrink had taken every pixel, and `min-width: 0` let the title collapse
+ * silently instead of overflowing where it would have been noticed. The name
+ * of what you are reading is not the thing that gives way.
+ */
+test('the phone header keeps the conversation title', () => {
+	const page = readFileSync(new URL('../src/routes/+page.svelte', import.meta.url), 'utf8');
+	// The counter is a desktop nicety; the same figures are in the status panel.
+	assert.match(page, /\{#if usage && !narrow\}/);
+	const phone = page.slice(page.indexOf('@media (max-width: 820px)'));
+	assert.match(phone, /\.head-actions \{[^}]*flex:\s*0 0 auto/);
+	assert.match(phone, /\.heading \{[^}]*min-width:\s*\d+px/);
+});
+
+/**
+ * An empty composer must be one row tall on a phone.
+ *
+ * The placeholder's parenthetical hint wrapped at 390px, which made the bar
+ * two rows tall before a single character was typed. A placeholder cannot be
+ * changed from CSS, so the width the page already tracks for the drawer is
+ * passed down instead of being measured a second time.
+ */
+test('the composer shortens its placeholder where the bar is narrow', () => {
+	const composer = readFileSync(
+		new URL('../src/lib/components/Composer.svelte', import.meta.url),
+		'utf8'
+	);
+	assert.match(composer, /let \{ narrow = false \}: Props = \$props\(\)/);
+	assert.match(composer, /narrow\s*\?\s*'Écrire à Yadai…'/);
+	const page = readFileSync(new URL('../src/routes/+page.svelte', import.meta.url), 'utf8');
+	assert.match(page, /<Composer bind:this=\{composer\} \{narrow\} \/>/);
+});
+
+/**
+ * 44px is what this app promises a thumb everywhere else (point 20). The
+ * round controls of the composer were measured at 36px, and the two header
+ * pickers at 34px.
+ */
+test('every round control is thumb-sized on a phone', () => {
+	const dir = new URL('../src/lib/components/', import.meta.url);
+	const composer = readFileSync(new URL('Composer.svelte', dir), 'utf8');
+	const phone = composer.slice(composer.indexOf('@media (max-width: 820px)'));
+	assert.match(phone, /\.attach,\s*\n\s*\.send \{[^}]*width:\s*44px/);
+	assert.match(phone, /\.attach,\s*\n\s*\.send \{[^}]*height:\s*44px/);
+
+	for (const name of ['ModelPicker.svelte', 'AgentPicker.svelte']) {
+		const source = readFileSync(new URL(name, dir), 'utf8');
+		const block = source.slice(source.indexOf('@media (max-width: 820px)'));
+		assert.match(block, /\.trigger \{[^}]*min-height:\s*44px/, name);
+	}
+
+	const message = readFileSync(new URL('Message.svelte', dir), 'utf8');
+	const acts = message.slice(message.indexOf('@media (max-width: 820px)'));
+	assert.match(acts, /\.actions button \{[^}]*min-height:\s*44px/);
+
+	// The welcome screen's agent chips, measured at 38px.
+	const page = readFileSync(new URL('../src/routes/+page.svelte', import.meta.url), 'utf8');
+	const pagePhone = page.slice(page.indexOf('@media (max-width: 820px)'));
+	assert.match(pagePhone, /\.agent-chip \{[^}]*min-height:\s*44px/);
+});
+
 /** Clipped, not hidden: `display: none` would drop it from the a11y tree too. */
 test('sr-only text stays in the accessibility tree', () => {
 	const css = readFileSync(new URL('../src/app.css', import.meta.url), 'utf8');

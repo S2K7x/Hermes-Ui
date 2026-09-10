@@ -8,6 +8,18 @@
 	import { uid } from '$lib/transcript';
 	import type { Attachment } from '$lib/types';
 
+	interface Props {
+		/**
+		 * Under 820px. The bar has about 160px left for its field once the
+		 * three round controls are out, so the placeholder's parenthetical
+		 * hint would wrap and make an empty composer two rows tall. The page
+		 * already tracks this width for the drawer; it is passed down rather
+		 * than measured a second time here.
+		 */
+		narrow?: boolean;
+	}
+	let { narrow = false }: Props = $props();
+
 	/**
 	 * The conversation the text below belongs to.
 	 *
@@ -375,7 +387,11 @@
 			onpaste={onPaste}
 			rows="1"
 			aria-label="Message à Yadai"
-			placeholder={chat.streaming ? 'Yadai travaille…' : 'Écrire à Yadai…  (/ pour les skills)'}
+			placeholder={chat.streaming
+				? 'Yadai travaille…'
+				: narrow
+					? 'Écrire à Yadai…'
+					: 'Écrire à Yadai…  (/ pour les skills)'}
 		></textarea>
 
 		{#if chat.streaming}
@@ -675,19 +691,25 @@
 	   onto a second line and makes an empty composer two rows tall. */
 	@media (max-width: 820px) {
 		.composer {
-			padding: 8px 8px 8px 12px;
+			padding: 7px 7px 7px 10px;
 		}
-		.attach {
-			width: 36px;
-			height: 36px;
+		.row {
+			gap: 5px;
+		}
+		/* 44px, like every other touch target in this app — measured at 36px
+		   before, which is below the size a thumb can be asked to hit. The
+		   short placeholder above is what buys the width back. */
+		.attach,
+		.send {
+			width: 44px;
+			height: 44px;
 		}
 		.send {
-			width: 42px;
-			height: 42px;
 			font-size: 17px;
 		}
 		textarea {
 			font-size: 14px;
+			padding: 11px 4px;
 		}
 	}
 	.sk-name {

@@ -368,7 +368,9 @@
 			<button class="burger" onclick={() => (sidebarOpen = true)} aria-label="Discussions">☰</button>
 			<div class="heading">
 				<h1>{title}</h1>
-				{#if usage}<span class="usage" title="tokens entrée / sortie et coût estimé">{usage}</span>{/if}
+				{#if usage && !narrow}<span class="usage" title="tokens entrée / sortie et coût estimé"
+						>{usage}</span
+					>{/if}
 			</div>
 			<div class="head-actions">
 				<button
@@ -486,9 +488,13 @@
 		{/if}
 
 		<div class="composer-wrap">
-			<Composer bind:this={composer} />
+			<Composer bind:this={composer} {narrow} />
 			<p class="disclaimer">
-				Les outils s'exécutent sur le Pi. Vérifiez les commandes sensibles.
+				<!-- Two sentences do not fit on one phone line, and a wrapped
+				     disclaimer steals a row from the thread. The half that is a
+				     warning stays; the half that says where it runs is on the
+				     status panel anyway. -->
+				{#if !narrow}Les outils s'exécutent sur le Pi.{/if} Vérifiez les commandes sensibles.
 				<button class="link" onclick={() => (shortcutsOpen = true)}>Raccourcis</button>
 			</p>
 		</div>
@@ -866,6 +872,18 @@
 			width: 40px;
 			height: 40px;
 		}
+		/* The header carries the burger, the title and four controls on 390px.
+		   The title is the one thing that must not be the loser: without this
+		   it was measured at *zero* pixels wide, squeezed out by the token
+		   counter beside it (now hidden here) and by controls that would not
+		   shrink. */
+		.head-actions {
+			flex: 0 0 auto;
+		}
+		.heading {
+			flex: 1 1 auto;
+			min-width: 60px;
+		}
 		.thread {
 			padding: 10px 12px 8px;
 		}
@@ -887,6 +905,17 @@
 		}
 		.chips button {
 			font-size: 12.5px;
+		}
+		/* Choosing who you are talking to is a tap like any other: measured at
+		   38px before. */
+		.agent-chip {
+			min-height: 44px;
+		}
+		/* Inline in a sentence, so it cannot *be* 44px tall — but its hit area
+		   can, by padding out and pulling the layout back in. */
+		.link {
+			padding: 12px 4px;
+			margin: -12px 0;
 		}
 	}
 </style>

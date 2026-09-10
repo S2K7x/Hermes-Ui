@@ -150,6 +150,16 @@
 			display: inline;
 		}
 	}
+	/* Touch: a header control is as much a target as any other, and these two
+	   were measured at 34px tall on a phone. */
+	@media (max-width: 820px) {
+		.trigger {
+			min-height: 44px;
+		}
+		.items button {
+			min-height: 44px;
+		}
+	}
 	.scrim {
 		position: fixed;
 		inset: 0;

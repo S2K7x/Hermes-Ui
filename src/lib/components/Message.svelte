@@ -232,6 +232,20 @@
 		color: var(--text);
 		background: var(--bg-hover);
 	}
+	/* Touch: these pills are always visible (there is no hover to reveal them),
+	   so they are real targets and have to be thumb-sized. */
+	@media (max-width: 820px) {
+		.actions button {
+			min-height: 44px;
+			padding: 6px 16px;
+		}
+		.assistant {
+			padding: 14px 16px;
+		}
+		.bubble {
+			padding: 12px 16px;
+		}
+	}
 	.thinking {
 		display: flex;
 		gap: 5px;
