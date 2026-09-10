@@ -38,6 +38,14 @@ export interface HermesSession {
 	 * `/api/sessions*` proxy adds it to every row on the way out.
 	 */
 	agent_id?: string;
+	/**
+	 * When this conversation was thrown away, on the bin listing only.
+	 *
+	 * Also not a Hermes field. Upstream the session is untouched — the delete
+	 * has not happened yet and will not for `TRASH_DAYS` — so this exists
+	 * nowhere but our own `session_meta`.
+	 */
+	deleted_at?: number;
 }
 
 export interface HermesMessage {

@@ -6,6 +6,7 @@
 	import { drafts } from '$lib/stores/drafts.svelte';
 	import { agentColor } from '$lib/agents';
 	import { groupSessions, matchesQuery, relativeTime, sessionLabel, activityAt } from '$lib/sessions';
+	import { TRASH_DAYS, trashLabel } from '$lib/trash';
 	import type { HermesSession } from '$lib/types';
 
 	/** First letter of a conversation's name, for the round thumbnail. */
@@ -55,24 +56,36 @@
 	);
 
 	let filter = $state('');
-	let showArchived = $state(false);
+	/** Which of the three lists the column is showing. */
+	let view = $state<'live' | 'archived' | 'trash'>('live');
+	let showArchived = $derived(view === 'archived');
+	let showTrash = $derived(view === 'trash');
 	let renaming = $state<string | null>(null);
 	let renameValue = $state('');
 	let menuFor = $state<string | null>(null);
 	/** The ⋯ the open row menu came from, so Escape can hand the focus back. */
 	let menuTrigger = $state<HTMLElement | null>(null);
 
-	// Archived conversations come from a different list, not a filter: Hermes
-	// excludes them from every listing, so `chat.sessions` never holds one.
-	let visible = $derived(
-		(showArchived ? chat.archivedSessions : chat.sessions).filter((s) => matchesQuery(s, filter))
+	// The three lists are separate collections, not filters over one: Hermes
+	// excludes archived rows from every listing, and the bin is filtered out of
+	// them by our own proxy, so `chat.sessions` never holds either kind.
+	let source = $derived(
+		showTrash ? chat.trashedSessions : showArchived ? chat.archivedSessions : chat.sessions
 	);
-	let groups = $derived(groupSessions(visible));
+	let visible = $derived(source.filter((s) => matchesQuery(s, filter)));
+	// The bin is ordered by when things were thrown away, so grouping it by the
+	// day the conversation was last *used* would sort it by the wrong clock.
+	let groups = $derived(
+		showTrash
+			? [{ key: 'trash', label: 'Dans la corbeille', sessions: visible }]
+			: groupSessions(visible)
+	);
 
-	/** Rebuilding the archive costs one request per candidate — load it on open. */
-	async function toggleArchived() {
-		showArchived = !showArchived;
-		if (showArchived) await chat.refreshArchived();
+	/** Both sub-views cost one request per row — load them on open. */
+	async function showList(next: 'live' | 'archived' | 'trash') {
+		view = next;
+		if (next === 'archived') await chat.refreshArchived();
+		if (next === 'trash') await chat.refreshTrash();
 	}
 
 	async function pick(id: string) {
@@ -98,10 +111,25 @@
 		if (id && renameValue.trim()) await chat.renameSession(id, renameValue.trim());
 	}
 
-	async function confirmDelete(s: HermesSession) {
+	/**
+	 * No confirmation any more: deleting is reversible now, and a modal asking
+	 * "are you sure?" for something undoable is friction that teaches people to
+	 * click through prompts. The toast's "Annuler" and the bin are the answer.
+	 */
+	async function deleteToBin(s: HermesSession) {
 		closeMenu();
-		if (confirm(`Supprimer « ${sessionLabel(s)} » ? Cette action est définitive.`)) {
-			await chat.deleteSession(s.id);
+		await chat.deleteSession(s.id);
+	}
+
+	/** This one really is final, so this one really does ask. */
+	async function confirmPurge(s: HermesSession) {
+		closeMenu();
+		if (
+			confirm(
+				`Supprimer définitivement « ${sessionLabel(s)} » ?\n\nCette fois la conversation et son transcript seront vraiment effacés, sans retour possible.`
+			)
+		) {
+			await chat.purgeSession(s.id);
 		}
 	}
 
@@ -193,7 +221,8 @@
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						class="row"
-						class:active={entry.id === chat.sessionId}
+						class:bin={showTrash}
+						class:active={entry.id === chat.sessionId && !showTrash}
 						onkeydown={(event) => {
 							if (menuFor !== entry.id) return;
 							// Read the panel off the row rather than binding it: only one row
@@ -215,6 +244,35 @@
 									if (e.key === 'Escape') renaming = null;
 								}}
 							/>
+						{:else if showTrash}
+							{@const agent = agents.byId(entry.agent_id)}
+							<!-- Not a button: in the bin a row has two explicit answers,
+							     and "open" is not one of them. Clicking a deleted
+							     conversation to read it would leave the app showing a
+							     thread that no list contains. -->
+							<div class="entry static" title={entry.preview ?? ''}>
+								<span
+									class="ava"
+									class:agented={!!agent}
+									style={agent ? `--agent: ${agentColor(agent)}` : undefined}
+									aria-hidden="true">{agent ? agent.emoji || '●' : initial(sessionLabel(entry))}</span
+								>
+								<span class="txt">
+									<span class="title">{sessionLabel(entry)}</span>
+									<span class="sub">
+										<span class="when">{trashLabel(entry.deleted_at ?? 0)}</span>
+										{#if agent}<span class="agent" style="--agent: {agentColor(agent)}"
+												>· {agent.name}</span
+											>{/if}
+									</span>
+								</span>
+							</div>
+							<div class="bin-acts">
+								<button class="bin-act" onclick={() => chat.restoreSession(entry.id)}>↺ Restaurer</button>
+								<button class="bin-act danger" onclick={() => confirmPurge(entry)}>
+									Supprimer définitivement
+								</button>
+							</div>
 						{:else}
 							{@const agent = agents.byId(entry.agent_id)}
 							{@const draft = drafts.preview(entry.id)}
@@ -277,7 +335,7 @@
 								<button onclick={() => { chat.toggleArchive(entry.id); closeMenu(true); }}>
 									{entry.archived ? 'Désarchiver' : 'Archiver'}
 								</button>
-								<button class="danger" onclick={() => confirmDelete(entry)}>Supprimer</button>
+								<button class="danger" onclick={() => deleteToBin(entry)}>Supprimer</button>
 							</div>
 						{/if}
 					</div>
@@ -288,12 +346,16 @@
 				<p class="empty">
 					{#if showArchived && chat.loadingArchived}
 						Recherche des conversations archivées…
-					{:else if !showArchived && chat.loadingSessions}
+					{:else if showTrash && chat.loadingTrash}
+						Ouverture de la corbeille…
+					{:else if view === 'live' && chat.loadingSessions}
 						Chargement…
 					{:else if filter}
 						Aucun résultat pour « {filter} ».
 					{:else if showArchived}
 						Aucune conversation archivée.
+					{:else if showTrash}
+						La corbeille est vide.
 					{:else}
 						Aucune discussion pour l'instant.
 					{/if}
@@ -303,17 +365,34 @@
 					Seules les conversations archivées les plus récentes sont listées : Yadai ne sait pas
 					les énumérer, elles sont retrouvées une par une.
 				</p>
+			{:else if showTrash}
+				<p class="empty">
+					Une conversation supprimée est gardée {TRASH_DAYS} jours avant d'être effacée pour de
+					bon. Rien n'a encore été supprimé chez Yadai : la restaurer la remet exactement où
+					elle était.
+				</p>
 			{/if}
 		</nav>
 
 		<footer>
-			<button
-				class="archive-toggle"
-				onclick={toggleArchived}
-				title="Les conversations archivées sont masquées des listes ; elles sont retrouvées à la demande."
-			>
-				{showArchived ? '← Discussions' : 'Archivées'}
-			</button>
+			{#if view === 'live'}
+				<button
+					class="archive-toggle"
+					onclick={() => showList('archived')}
+					title="Les conversations archivées sont masquées des listes ; elles sont retrouvées à la demande."
+				>
+					Archivées
+				</button>
+				<button
+					class="archive-toggle"
+					onclick={() => showList('trash')}
+					title="Les conversations supprimées y attendent {TRASH_DAYS} jours avant d'être effacées."
+				>
+					🗑 Corbeille
+				</button>
+			{:else}
+				<button class="archive-toggle" onclick={() => showList('live')}>← Discussions</button>
+			{/if}
 			<button
 				class="archive-toggle"
 				onclick={onopenAgents}
@@ -595,6 +674,44 @@
 		.row.active .more {
 			opacity: 1;
 		}
+	}
+	/* A bin row states its two answers instead of hiding them behind a ⋯: one
+	   of them is irreversible, and that is not a thing to discover by
+	   exploring a menu. */
+	.entry.static {
+		cursor: default;
+	}
+	/* 268px of column cannot hold a title, a deadline and two verbs on one
+	   line — measured: the title fell to "corb…" and the countdown was cut
+	   mid-word. The answers go under the row they belong to instead. */
+	.row.bin {
+		flex-wrap: wrap;
+		margin-bottom: 6px;
+		background: var(--bg-sunken);
+	}
+	.bin-acts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		width: 100%;
+		padding: 0 8px 6px 53px;
+	}
+	.bin-act {
+		flex: 0 0 auto;
+		min-height: 36px;
+		padding: 6px 11px;
+		border-radius: var(--radius-pill);
+		background: var(--bg-raised);
+		font-size: 11.5px;
+		color: var(--text-muted);
+	}
+	.bin-act:hover {
+		background: var(--bg-hover);
+		color: var(--text);
+	}
+	.bin-act.danger:hover {
+		background: var(--danger-soft);
+		color: var(--danger);
 	}
 	.rename {
 		flex: 1;

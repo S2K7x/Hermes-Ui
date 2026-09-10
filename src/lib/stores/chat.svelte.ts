@@ -39,6 +39,10 @@ class ChatStore {
 	loadingArchived = $state(false);
 	/** True when the archive probe hit its cap and may be missing older rows. */
 	archivedTruncated = $state(false);
+	/** Conversations waiting in the bin, newest first. */
+	trashedSessions = $state<HermesSession[]>([]);
+	loadingTrash = $state(false);
+	trashTruncated = $state(false);
 	sessionId = $state<string | null>(null);
 	messages = $state<UiMessage[]>([]);
 	streaming = $state(false);
@@ -293,6 +297,22 @@ class ChatStore {
 		}
 	}
 
+	/** Read the bin. Like the archive, it costs one request per row. */
+	async refreshTrash() {
+		this.loadingTrash = true;
+		try {
+			const res = await api<{ data: HermesSession[]; truncated?: boolean }>(
+				'/api/sessions?trashed=true'
+			);
+			this.trashedSessions = res.data ?? [];
+			this.trashTruncated = res.truncated === true;
+		} catch (err) {
+			toasts.error(err, { label: 'Réessayer', run: () => this.refreshTrash() });
+		} finally {
+			this.loadingTrash = false;
+		}
+	}
+
 	/**
 	 * Pick a model.
 	 *
@@ -495,25 +515,75 @@ class ChatStore {
 		else this.sessions = [row, ...this.sessions];
 	}
 
+	/**
+	 * Move a conversation to the bin.
+	 *
+	 * Nothing is destroyed: the route writes a flag on our own row and leaves
+	 * Hermes alone, so this is reversible for thirty days. Two nets, not one —
+	 * "Annuler" right here for the slip of the finger, and the bin for the
+	 * mistake noticed a week later.
+	 *
+	 * The draft is *kept* rather than cleared, unlike before: throwing the
+	 * conversation away no longer throws its unsent message away with it.
+	 */
 	async deleteSession(id: string) {
 		const snapshot = this.sessions;
-		const draft = drafts.get(id);
-		drafts.clear(id);
 		const archivedSnapshot = this.archivedSessions;
+		const wasOpen = this.sessionId === id;
 		this.sessions = this.sessions.filter((s) => s.id !== id);
 		this.archivedSessions = this.archivedSessions.filter((s) => s.id !== id);
-		if (this.sessionId === id) {
+		if (wasOpen) {
 			this.sessionId = null;
 			this.messages = [];
 		}
 		try {
 			await api(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+			toasts.push('success', 'Conversation dans la corbeille.', {
+				action: { label: 'Annuler', run: () => void this.restoreSession(id) }
+			});
 		} catch (err) {
 			// A 404 means it was already gone — the optimistic removal was right.
 			if (err instanceof ApiError && err.code === AppErrorCode.SessionGone) return;
 			this.sessions = snapshot;
 			this.archivedSessions = archivedSnapshot;
-			if (draft) drafts.set(id, draft);
+			toasts.error(err);
+		}
+	}
+
+	/** Take a conversation back out of the bin and put its row back. */
+	async restoreSession(id: string) {
+		try {
+			const res = await api<{ session: HermesSession }>(
+				`/api/sessions/${encodeURIComponent(id)}/restore`,
+				{ method: 'POST', body: JSON.stringify({}) }
+			);
+			this.trashedSessions = this.trashedSessions.filter((s) => s.id !== id);
+			const session = res.session;
+			if (session?.archived) this.archivedSessions = [session, ...this.archivedSessions];
+			else await this.refreshSessions();
+			toasts.success('Conversation restaurée.');
+		} catch (err) {
+			toasts.error(err, { label: 'Réessayer', run: () => void this.restoreSession(id) });
+		}
+	}
+
+	/**
+	 * Empty one row of the bin for good.
+	 *
+	 * This is the only call in the app that reaches `DELETE` on the gateway
+	 * with `purge=true`, and it is the only one that cannot be taken back —
+	 * hence the confirmation, which the ordinary delete no longer needs.
+	 */
+	async purgeSession(id: string) {
+		const snapshot = this.trashedSessions;
+		this.trashedSessions = this.trashedSessions.filter((s) => s.id !== id);
+		drafts.clear(id);
+		try {
+			await api(`/api/sessions/${encodeURIComponent(id)}?purge=true`, { method: 'DELETE' });
+			toasts.success('Conversation supprimée définitivement.');
+		} catch (err) {
+			if (err instanceof ApiError && err.code === AppErrorCode.SessionGone) return;
+			this.trashedSessions = snapshot;
 			toasts.error(err);
 		}
 	}

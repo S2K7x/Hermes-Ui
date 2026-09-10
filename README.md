@@ -20,6 +20,12 @@ de l'application.
 - **Fil de conversation** avec streaming token par token et curseur de frappe
 - **Sidebar d'historique** groupée par date (Aujourd'hui / Hier / 7 jours / …),
   épinglage, renommage, archivage, suppression, branches, repli sur desktop
+- **Corbeille** : supprimer une conversation ne la détruit plus. Elle attend
+  30 jours, avec le compte à rebours affiché, et se restaure exactement où elle
+  était — rien n'a été effacé chez Hermes entre-temps, c'est ce qui rend la
+  restauration fidèle. Un « Annuler » dans le toast rattrape le geste dans la
+  seconde ; « Supprimer définitivement » est la seule action irréversible, et
+  la seule qui demande confirmation
 - **Vue « Archivées »** reconstruite à la demande : l'API du gateway exclut les
   conversations archivées de toutes ses listes, l'app les retrouve une par une
   à partir des identifiants qu'elle a déjà vus

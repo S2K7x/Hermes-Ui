@@ -1446,6 +1446,71 @@ seules trois ombres et un second ton de dégradé s'y ajoutent, tous dérivés d
 couleurs déjà là. Une nouvelle couleur passe toujours par un token produit par
 `themeVariables()`, jamais par un littéral dans un composant.
 
+### 30. La corbeille : supprimer ne détruit plus, et c'est un choix d'architecture
+
+`DELETE /api/sessions/{id}` supprime **pour de bon** côté Hermes — transcript,
+appels d'outils, lignes FTS5. Il n'y a en amont ni suppression douce, ni
+drapeau à emprunter, ni corbeille. Une corbeille n'est donc honnête que si
+l'app **n'appelle jamais cet endpoint** avant l'échéance. C'est toute la
+conception :
+
+- **Supprimer** écrit `deleted_at` sur notre propre ligne `session_meta` et
+  n'envoie rien en amont. La conversation reste intacte dans `state.db`.
+- **Restaurer** efface ce champ. Il n'y a rien à reconstruire, puisqu'il n'y a
+  rien eu à détruire — c'est exactement ce qu'on achète en n'appelant pas la
+  suppression amont.
+- **Le vrai `DELETE`** n'existe qu'à deux endroits : le balayage à échéance, et
+  `?purge=true` (vider une ligne à la main, et le smoke test qui nettoie son
+  fixture). `tests/trash.test.ts` échoue si l'appel amont ressort de cette
+  branche : ce serait promettre une restauration que l'app ne pourrait pas
+  tenir, sans que rien n'échoue avant que quelqu'un essaie.
+
+**L'alternative rejetée** : supprimer en amont et garder une copie du
+transcript chez nous pour le rejouer à la restauration. Impossible à tenir —
+recréer une session donne un nouvel id, et `POST /v1/runs` aplatit
+`conversation_history` en `str(content)` (point 2) : adieu les `tool_calls`
+structurés et le multimodal. On rendrait un décalque, pas la conversation. Une
+restauration qui ment est pire que pas de restauration.
+
+**Les trente jours ont été vérifiés en amont, pas supposés.** Deux réglages
+pouvaient les contredire (`hermes_state.py`, `config_defaults.py`, 0.20.0) :
+`sessions.auto_archive` archive et ne supprime jamais (« non-destructive
+sibling », défaut `false`), et `sessions.auto_prune` **est** destructif mais
+vaut `false` par défaut, exige 90 jours d'inactivité et ne touche que les
+sessions terminées. Cette machine n'a aucun bloc `sessions:` dans
+`~/.hermes/config.yaml` : les deux défauts s'appliquent. Ne pas allonger le
+délai au-delà de 90 jours sans revérifier ce point.
+
+Le reste, dans le code :
+
+- **Une conversation en corbeille est toujours vivante en amont**, donc elle
+  revient dans chaque `GET /api/sessions` et c'est le proxy qui la retire
+  (`trashedIds()`). C'est le prix d'une suppression qui ne détruit rien. C'est
+  aussi ce qui rend la panne **sûre** : perdre `data/hermes-web.db` fait
+  réapparaître les conversations au lieu de les rendre introuvables — l'inverse
+  du choix qu'aurait été « archiver en amont pour les cacher ».
+- **Limite assumée** : tant qu'elle est en corbeille, la conversation reste
+  visible depuis le CLI et Telegram. Elle n'est pas supprimée, elle est en
+  attente ; le mentir serait pire.
+- **Le balayage n'a pas d'ordonnanceur** : il part d'un rafraîchissement de
+  sidebar, la seule requête qui arrive quand quelqu'un regarde. Bridé à une
+  passe par heure, plafonné à 5 suppressions, et **jamais propagé en erreur** —
+  une ligne balayée un rafraîchissement plus tard ne gêne personne, une sidebar
+  qui échoue si.
+- **`deleted_at` compte à rebours vers le bas** (`trashState`, pure et testée) :
+  29,9 jours restants s'affichent « il reste 29 jours », jamais 30. Un chiffre
+  qui promet de la récupérabilité doit se tromper du côté pessimiste.
+- **La suppression ordinaire ne demande plus confirmation** : elle est
+  réversible, et un `confirm()` sur une action annulable apprend à cliquer sans
+  lire. Le toast porte « Annuler », la corbeille porte le reste. Seul
+  `purgeSession()` demande — celui-là est définitif.
+- **Le brouillon survit à la suppression** : `deleteSession()` ne l'efface plus,
+  seul `purgeSession()` le fait. Jeter une conversation ne doit pas jeter le
+  message qu'on n'a pas envoyé.
+
+Routes : `DELETE /api/sessions/{id}` (corbeille, ou `?purge=true` définitif),
+`POST /api/sessions/{id}/restore`, `GET /api/sessions?trashed=true`.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -1522,6 +1587,7 @@ src/
 │   │   ├── agents.ts    magasin d'agents, lien conversation → agent, héritage
 │   │   │                  de `session_meta` après une compression
 │   │   ├── jobs.ts      lien tâche planifiée → agent, prompt composé
+│   │   ├── trash.ts     balayage à échéance + contenu de la corbeille
 │   │   ├── turns.ts     registre des tours en vol, présence, notification
 │   │   ├── push.ts      envoi Web Push (abonnements, 410 → oubli)
 │   │   ├── push-crypto.ts RFC 8291 + RFC 8292, sans dépendance
@@ -1558,6 +1624,7 @@ src/
 │   │                  déplacement des flèches dans un menu surgissant, et
 │   │                  phrase annoncée par la zone live d'un tour
 │   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction
+│   ├── trash.ts       corbeille : compte à rebours, échéance, lignes à balayer
 │   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
 │   ├── errors.ts      ApiError + codes + `humanizeError`

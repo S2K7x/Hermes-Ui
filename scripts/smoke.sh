@@ -72,7 +72,10 @@ count=$(curl -fsS "${BASE}/api/sessions/${sid}/messages?order=oldest" |
 ok "${count} messages persisted"
 
 step "cleanup"
-curl -fsS -X DELETE "${BASE}/api/sessions/${sid}" >/dev/null && ok "session deleted"
+# `purge=true`, not the plain DELETE: that one only moves the conversation to
+# the recycle bin now, and a test fixture left to expire in thirty days is
+# litter. This is the one caller in the repo that wants the irreversible path.
+curl -fsS -X DELETE "${BASE}/api/sessions/${sid}?purge=true" >/dev/null && ok "session purged"
 rm -f "$out"
 
 printf '\n\033[32mAll checks passed.\033[0m\n'

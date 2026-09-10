@@ -7,7 +7,14 @@ import {
 	listSessions
 } from '$lib/server/hermes';
 import { gate, proxy, readJson } from '$lib/server/respond';
-import { cacheTitle, forgetSession, knownSessionIds, rememberSessions } from '$lib/server/db';
+import {
+	cacheTitle,
+	forgetSession,
+	knownSessionIds,
+	rememberSessions,
+	trashedIds
+} from '$lib/server/db';
+import { listTrashedSessions, sweepTrash } from '$lib/server/trash';
 import {
 	bindSessionAgent,
 	findAgent,
@@ -70,6 +77,8 @@ const ARCHIVE_PROBE_CONCURRENCY = 6;
  */
 async function listArchivedSessions() {
 	const live = await listSessions({ limit: 200 });
+	// `knownSessionIds` already excludes the bin: a conversation waiting to be
+	// destroyed must not turn up in the archive as if it were filed away.
 	const candidates = archivedCandidates(
 		knownSessionIds(500),
 		(live.data ?? []).map((s) => s.id),
@@ -107,6 +116,12 @@ export const GET: RequestHandler = ({ url }) => {
 		return proxy(listArchivedSessions);
 	}
 
+	if (url.searchParams.get('trashed') === 'true') {
+		const limited = gate('sessions:trashed', 1, 5);
+		if (limited) return limited;
+		return proxy(listTrashedSessions);
+	}
+
 	const limited = gate('sessions:read', 8, 20);
 	if (limited) return limited;
 	return proxy(async () => {
@@ -123,7 +138,19 @@ export const GET: RequestHandler = ({ url }) => {
 		// Seeing a conversation here is the only chance to record its id before
 		// archiving hides it from every future listing.
 		rememberSessions((res.data ?? []).map((s) => s.id));
-		return { ...res, data: withAgents(res.data ?? []) };
+
+		// A conversation in the bin is still perfectly alive upstream — nothing
+		// was done to it — so it comes back in every listing and has to be
+		// filtered out here. That is the cost of a delete that destroys nothing.
+		const binned = trashedIds();
+		const data = (res.data ?? []).filter((s) => !binned.has(s.id));
+
+		// This app has no scheduler, and a sidebar refresh is the one request
+		// that happens whenever someone is looking. Throttled, bounded and
+		// never allowed to fail the listing — see `sweepTrash`.
+		void sweepTrash();
+
+		return { ...res, data: withAgents(data) };
 	});
 };
 

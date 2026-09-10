@@ -39,6 +39,23 @@ db.exec(`
 	);
 `);
 
+/**
+ * `deleted_at` is what makes deletion reversible.
+ *
+ * Nothing is sent upstream when a conversation is thrown away: the row simply
+ * stops being listed here, and the real `DELETE /api/sessions/{id}` waits for
+ * the sweep thirty days later. See `src/lib/trash.ts` for why that is the only
+ * honest way to build this on an API whose delete is final.
+ *
+ * It runs before the first `db.prepare` below on purpose: better-sqlite3
+ * compiles a statement as it is prepared, so a query naming this column would
+ * throw at import time on a database created before it existed.
+ */
+const metaColumns = db.prepare('PRAGMA table_info(session_meta)').all() as Array<{ name: string }>;
+if (!metaColumns.some((c) => c.name === 'deleted_at')) {
+	db.exec('ALTER TABLE session_meta ADD COLUMN deleted_at REAL');
+}
+
 const selPref = db.prepare<[string], { value: string }>('SELECT value FROM prefs WHERE key = ?');
 const upsertPref = db.prepare(
 	'INSERT INTO prefs (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
@@ -115,10 +132,42 @@ export function rememberSessions(ids: string[]): void {
 	rememberAll(ids, Date.now() / 1000);
 }
 
-const selKnown = db.prepare('SELECT session_id FROM session_meta ORDER BY updated_at DESC LIMIT ?');
+const selKnown = db.prepare(
+	'SELECT session_id FROM session_meta WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?'
+);
 
 export const knownSessionIds = (limit: number): string[] =>
 	(selKnown.all(limit) as Array<{ session_id: string }>).map((row) => row.session_id);
+
+// ---------------------------------------------------------------------------
+// The recycle bin
+// ---------------------------------------------------------------------------
+
+const markTrashed = db.prepare(
+	`INSERT INTO session_meta (session_id, updated_at, deleted_at) VALUES (?, ?, ?)
+	 ON CONFLICT(session_id) DO UPDATE SET deleted_at = excluded.deleted_at`
+);
+const clearTrashed = db.prepare('UPDATE session_meta SET deleted_at = NULL WHERE session_id = ?');
+const selTrashed = db.prepare(
+	'SELECT session_id, deleted_at FROM session_meta WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC'
+);
+
+/** Move a conversation to the bin. Returns when it was thrown away. */
+export function trashSession(sessionId: string): number {
+	const now = Date.now() / 1000;
+	markTrashed.run(sessionId, now, now);
+	return now;
+}
+
+/** Take it back out. Idempotent: restoring a live conversation is a no-op. */
+export const restoreSession = (sessionId: string) => clearTrashed.run(sessionId);
+
+export const trashedSessions = (): Array<{ session_id: string; deleted_at: number }> =>
+	selTrashed.all() as Array<{ session_id: string; deleted_at: number }>;
+
+/** The ids to keep out of every live listing, as a set for O(1) filtering. */
+export const trashedIds = (): Set<string> =>
+	new Set(trashedSessions().map((row) => row.session_id));
 
 // ---------------------------------------------------------------------------
 // Web Push subscriptions
