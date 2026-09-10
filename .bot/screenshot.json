@@ -1,5 +1,5 @@
 {
 	"path": "/",
-	"js": "(async()=>{const w=m=>new Promise(r=>setTimeout(r,m));await w(1600);const b=[...document.querySelectorAll(\"button\")].find(x=>(x.textContent||\"\").includes(\"Corbeille\"));if(b)b.click();await w(2200);return b?\"ok\":\"no\"})()",
-	"caption": "Supprimer une conversation ne la detruit plus : elle attend 30 jours dans la corbeille, compte a rebours affiche, et se restaure exactement ou elle etait. La cle est de ne jamais appeler le DELETE de Hermes avant l'echeance — il efface le transcript pour de bon, donc une restauration fidele n'est possible qu'en n'ayant rien detruit. Un « Annuler » dans le toast rattrape le geste dans la seconde ; « Supprimer definitivement » est la seule action irreversible, et la seule qui demande confirmation."
+	"js": "(async()=>{const w=m=>new Promise(r=>setTimeout(r,m));await w(1600);const b=[...document.querySelectorAll(\"button\")].find(x=>(x.textContent||\"\").trim().startsWith(\"Réglages\"));if(b)b.click();await w(2000);return b?\"ok\":\"no\"})()",
+	"caption": "Le pied de la sidebar portait sept boutons emoji enroules sur trois rangees inegales. C'est maintenant une seule porte, derriere laquelle tout est range en trois familles : conversations, agent, application. Et plus un seul emoji dans l'interface — une quarantaine de traces sur une grille 24x24, en currentColor, donc a la couleur du controle et de la palette active. Un emoji est une police : chaque plateforme dessine le sien, dans des couleurs sur lesquelles le theme n'a pas la main."
 }
