@@ -20,6 +20,13 @@ de l'application.
 - **Fil de conversation** avec streaming token par token et curseur de frappe
 - **Sidebar d'historique** groupée par date (Aujourd'hui / Hier / 7 jours / …),
   épinglage, renommage, archivage, suppression, branches, repli sur desktop
+- **Réglages en un seul endroit** : le pied de la sidebar ne porte plus une
+  grille de boutons mais une porte, derrière laquelle tout est rangé en trois
+  familles — conversations, agent, application
+- **Icônes dessinées, pas d'emoji** : une quarantaine de tracés sur une grille
+  24×24, en `currentColor`, donc à la couleur du contrôle et de la palette
+  active. Un emoji est une police : chaque plateforme dessine le sien, dans des
+  couleurs sur lesquelles le thème n'a pas la main
 - **Corbeille** : supprimer une conversation ne la détruit plus. Elle attend
   30 jours, avec le compte à rebours affiché, et se restaure exactement où elle
   était — rien n'a été effacé chez Hermes entre-temps, c'est ce qui rend la

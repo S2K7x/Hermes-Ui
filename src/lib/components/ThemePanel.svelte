@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import Modal from './Modal.svelte';
 	import { theme } from '$lib/stores/theme.svelte';
 	import {
@@ -70,13 +71,13 @@
 				class="mode"
 				class:sel={settings.mode === 'dark'}
 				disabled={blocked}
-				onclick={() => theme.update({ mode: 'dark' })}>🌙 Sombre</button
+				onclick={() => theme.update({ mode: 'dark' })}><Icon name="moon" /> Sombre</button
 			>
 			<button
 				class="mode"
 				class:sel={settings.mode === 'light'}
 				disabled={blocked}
-				onclick={() => theme.update({ mode: 'light' })}>☀️ Clair</button
+				onclick={() => theme.update({ mode: 'light' })}><Icon name="sun" /> Clair</button
 			>
 		</div>
 

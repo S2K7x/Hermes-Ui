@@ -1511,6 +1511,62 @@ Le reste, dans le code :
 Routes : `DELETE /api/sessions/{id}` (corbeille, ou `?purge=true` définitif),
 `POST /api/sessions/{id}/restore`, `GET /api/sessions?trashed=true`.
 
+### 31. Une seule porte pour les réglages, et des icônes dessinées
+
+Deux corrections d'un même défaut : l'interface se donnait l'air d'un
+brouillon.
+
+**Le pied de la sidebar était une étagère, pas un menu.** Sept boutons emoji
+enroulés sur trois rangées inégales, dans l'ordre où ils avaient été ajoutés.
+Ils sont maintenant **une porte** — « Réglages » — et `SettingsPanel.svelte`
+les range en trois familles selon ce sur quoi ils agissent : *Conversations*
+(archivées, corbeille), *Agent* (agents, tâches, skills, providers),
+*Application* (apparence, raccourcis, état). Le rail replié suit la même
+règle : un engrenage au lieu de cinq pictogrammes.
+
+- **Le hub est un couloir, pas une destination** : `go()` ferme le panneau
+  *avant* d'ouvrir ce que l'entrée désigne. Deux dialogues empilés, c'est deux
+  pièges de tabulation qui tirent en sens inverse — exactement le problème du
+  tiroir au point 22. `tests/a11y.test.ts` échoue si une entrée court-circuite
+  `go()`.
+- La sidebar n'a donc plus que **deux** sorties (`onopenSettings`,
+  `onopenStatus`) au lieu de six, et expose `showList()` pour que le hub puisse
+  changer la liste de la colonne sans en tenir une copie.
+
+**Les emoji ne sont pas un jeu d'icônes, c'est une police.** Chaque plateforme
+dessine les siens : la même timeline n'avait pas la même tête sur le téléphone
+et sur le bureau, les couleurs échappaient au thème (un 🟢 « en bonne santé »
+n'était pas le `--ok` de la palette), la taille suivait celle du texte et le
+tout se posait sur une ligne de base au lieu d'une grille.
+
+`src/lib/icons.ts` déclare donc une quarantaine de tracés sur une grille
+24×24, rendus par `Icon.svelte` en `currentColor` : une icône prend la couleur
+du contrôle qui la porte et suit les seize palettes du point 19 gratuitement.
+Aucune dépendance — une librairie d'icônes, ce sont des kilo-octets de
+JavaScript sur le chemin de démarrage d'un Pi pour quelques dizaines de
+chemins.
+
+Trois points à ne pas défaire :
+
+- `toolIcon()` rend un **nom d'icône**, plus un glyphe.
+- Les pastilles d'état sont des `<span>` colorés par `--ok` / `--accent` /
+  `--danger`, plus des ronds emoji.
+- **`agentLabel()` garde l'emoji, et c'est voulu.** Cette chaîne est recopiée
+  telle quelle dans chaque prompt système et dans le prompt de chaque tâche
+  planifiée, et une tâche compare son prompt à une recomposition fraîche pour
+  savoir si sa fiche est périmée (point 14). La changer marquerait toutes les
+  tâches à agent comme « à mettre à jour », pour un caractère qu'aucun modèle
+  ne lit différemment. L'interface, elle, affiche `agentInitial()` — une
+  pastille colorée portant l'initiale, comme les lignes de conversation.
+- Le champ Emoji a disparu du formulaire d'agent, mais **la colonne continue
+  d'être écrite** : retirer un champ est une chose, effacer ce que quelqu'un y
+  a tapé en est une autre.
+
+`tests/icons.test.ts` vérifie que chaque `<Icon name="…">` des composants
+existe dans le jeu, que chaque tracé est bien du path data, et **qu'aucun
+composant ne contient plus un seul emoji** — c'est le garde-fou contre la
+rechute.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -1605,9 +1661,9 @@ src/
 │   │   ├── menu.svelte.ts    clavier d'un menu surgissant : Échap, flèches
 │   │   └── lazy.svelte.ts  composant récupéré à la première utilisation
 │   ├── components/    Sidebar, Message, ToolSteps, Composer, ModelPicker,
-│   │                  AgentPicker, Markdown, CommandPalette, Modal (cadre
+│   │                  AgentPicker, Markdown, CommandPalette, Icon, Modal (cadre
 │   │                  commun des panneaux), StatusPanel, SkillsPanel,
-│   │                  ProvidersPanel, JobsPanel, AgentsPanel, PushSettings,
+│   │                  ProvidersPanel, JobsPanel, AgentsPanel, SettingsPanel, PushSettings,
 │   │                  ThemePanel, Shortcuts, Toasts
 │   ├── stores/
 │   │   ├── chat.svelte.ts       tout l'état de conversation (runes Svelte 5)
@@ -1624,6 +1680,7 @@ src/
 │   │                  déplacement des flèches dans un menu surgissant, et
 │   │                  phrase annoncée par la zone live d'un tour
 │   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction
+│   ├── icons.ts       le jeu d'icônes : tracés 24×24, sans dépendance
 │   ├── trash.ts       corbeille : compte à rebours, échéance, lignes à balayer
 │   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé

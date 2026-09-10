@@ -1,10 +1,11 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import { dialogFocus, trapTab } from '$lib/client/dialog.svelte';
 	import { menuKeydown } from '$lib/client/menu.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
 	import { drafts } from '$lib/stores/drafts.svelte';
-	import { agentColor } from '$lib/agents';
+	import { agentColor, agentInitial } from '$lib/agents';
 	import { groupSessions, matchesQuery, relativeTime, sessionLabel, activityAt } from '$lib/sessions';
 	import { TRASH_DAYS, trashLabel } from '$lib/trash';
 	import type { HermesSession } from '$lib/types';
@@ -23,12 +24,9 @@
 		collapsed: boolean;
 		onclose: () => void;
 		ontoggleCollapse: () => void;
+		/** The one door to everything that is not a conversation. */
+		onopenSettings: () => void;
 		onopenStatus: () => void;
-		onopenSkills: () => void;
-		onopenProviders: () => void;
-		onopenJobs: () => void;
-		onopenAgents: () => void;
-		onopenTheme: () => void;
 	}
 	let {
 		open,
@@ -36,12 +34,8 @@
 		collapsed,
 		onclose,
 		ontoggleCollapse,
-		onopenStatus,
-		onopenSkills,
-		onopenProviders,
-		onopenJobs,
-		onopenAgents,
-		onopenTheme
+		onopenSettings,
+		onopenStatus
 	}: Props = $props();
 
 	let panel = $state<HTMLElement | null>(null);
@@ -49,7 +43,7 @@
 	let modal = $derived(drawer && open);
 
 	// Same contract as every settings panel (point 22): focus enters the drawer
-	// when it slides out, and goes back to the ☰ button when it closes.
+	// when it slides out, and goes back to the menu button when it closes.
 	dialogFocus(
 		() => modal,
 		() => panel
@@ -81,8 +75,14 @@
 			: groupSessions(visible)
 	);
 
-	/** Both sub-views cost one request per row — load them on open. */
-	async function showList(next: 'live' | 'archived' | 'trash') {
+	/**
+	 * Switch the column between its three lists.
+	 *
+	 * Exported because the settings panel is where "Archivées" and "Corbeille"
+	 * now live: the panel closes itself and asks the column to change list,
+	 * rather than owning a copy of these views.
+	 */
+	export async function showList(next: 'live' | 'archived' | 'trash') {
 		view = next;
 		if (next === 'archived') await chat.refreshArchived();
 		if (next === 'trash') await chat.refreshTrash();
@@ -180,18 +180,20 @@
 >
 	{#if collapsed}
 		<div class="rail">
-			<button class="rail-btn" onclick={ontoggleCollapse} aria-label="Déplier les discussions"
-				>»</button
+			<button class="rail-btn" onclick={ontoggleCollapse} aria-label="Déplier les discussions">
+				<Icon name="chevronRight" size={19} />
+			</button>
+			<button
+				class="rail-btn accent"
+				onclick={() => chat.newSession()}
+				aria-label="Nouvelle discussion"
 			>
-			<button class="rail-btn accent" onclick={() => chat.newSession()} aria-label="Nouvelle discussion"
-				>＋</button
-			>
+				<Icon name="plus" size={19} />
+			</button>
 			<div class="rail-spacer"></div>
-			<button class="rail-btn" onclick={onopenAgents} aria-label="Équipe d'agents">👥</button>
-			<button class="rail-btn" onclick={onopenJobs} aria-label="Tâches planifiées">⏰</button>
-			<button class="rail-btn" onclick={onopenSkills} aria-label="Skills">📚</button>
-			<button class="rail-btn" onclick={onopenProviders} aria-label="Providers">🔑</button>
-			<button class="rail-btn" onclick={onopenTheme} aria-label="Apparence">◐</button>
+			<button class="rail-btn" onclick={onopenSettings} aria-label="Réglages">
+				<Icon name="settings" size={19} />
+			</button>
 			<button class="rail-btn" onclick={onopenStatus} aria-label="État du système">
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
 				></span>
@@ -200,10 +202,14 @@
 	{:else}
 		<div class="top">
 			<button class="new" onclick={async () => { await chat.newSession(); onclose(); }}>
-				<span>＋</span> Nouvelle discussion
+				<Icon name="plus" size={17} /> Nouvelle discussion
 			</button>
-			<button class="icon-btn collapse" onclick={ontoggleCollapse} aria-label="Replier">«</button>
-			<button class="icon-btn close" onclick={onclose} aria-label="Fermer le menu">✕</button>
+			<button class="icon-btn collapse" onclick={ontoggleCollapse} aria-label="Replier">
+				<Icon name="chevronLeft" />
+			</button>
+			<button class="icon-btn close" onclick={onclose} aria-label="Fermer le menu">
+				<Icon name="close" />
+			</button>
 		</div>
 
 		<input
@@ -255,7 +261,7 @@
 									class="ava"
 									class:agented={!!agent}
 									style={agent ? `--agent: ${agentColor(agent)}` : undefined}
-									aria-hidden="true">{agent ? agent.emoji || '●' : initial(sessionLabel(entry))}</span
+									aria-hidden="true">{agent ? agentInitial(agent) : initial(sessionLabel(entry))}</span
 								>
 								<span class="txt">
 									<span class="title">{sessionLabel(entry)}</span>
@@ -268,7 +274,9 @@
 								</span>
 							</div>
 							<div class="bin-acts">
-								<button class="bin-act" onclick={() => chat.restoreSession(entry.id)}>↺ Restaurer</button>
+								<button class="bin-act" onclick={() => chat.restoreSession(entry.id)}>
+									<Icon name="restore" size={14} /> Restaurer
+								</button>
 								<button class="bin-act danger" onclick={() => confirmPurge(entry)}>
 									Supprimer définitivement
 								</button>
@@ -288,11 +296,13 @@
 									class="ava"
 									class:agented={!!agent}
 									style={agent ? `--agent: ${agentColor(agent)}` : undefined}
-									aria-hidden="true">{agent ? agent.emoji || '●' : initial(sessionLabel(entry))}</span
+									aria-hidden="true">{agent ? agentInitial(agent) : initial(sessionLabel(entry))}</span
 								>
 								<span class="txt">
 									<span class="title">
-										{#if entry.parent_session_id}<span class="branch" title="branche">⑂</span>{/if}
+										{#if entry.parent_session_id}<span class="branch" title="branche"
+												><Icon name="branch" size={13} /></span
+											>{/if}
 										{sessionLabel(entry)}
 									</span>
 									<span class="sub">
@@ -303,7 +313,9 @@
 										<!-- A message typed here and never sent is invisible from
 										     any other conversation; this is the only thing that
 										     says so. -->
-										{#if draft}<span class="draft">· ✎ brouillon</span>{/if}
+										{#if draft}<span class="draft"
+												>· <Icon name="pencil" size={12} /> brouillon</span
+											>{/if}
 									</span>
 								</span>
 							</button>
@@ -319,7 +331,8 @@
 									e.currentTarget.focus();
 									menuTrigger = e.currentTarget;
 									menuFor = menuFor === entry.id ? null : entry.id;
-								}}>⋯</button
+								}}
+								><span class="dots" aria-hidden="true">⋯</span></button
 							>
 						{/if}
 
@@ -376,50 +389,17 @@
 
 		<footer>
 			{#if view === 'live'}
-				<button
-					class="archive-toggle"
-					onclick={() => showList('archived')}
-					title="Les conversations archivées sont masquées des listes ; elles sont retrouvées à la demande."
-				>
-					Archivées
-				</button>
-				<button
-					class="archive-toggle"
-					onclick={() => showList('trash')}
-					title="Les conversations supprimées y attendent {TRASH_DAYS} jours avant d'être effacées."
-				>
-					🗑 Corbeille
+				<!-- Six emoji buttons wrapped over three ragged rows here. They are
+				     one door now; what is behind it is grouped and named in
+				     SettingsPanel.svelte. -->
+				<button class="settings-btn" onclick={onopenSettings}>
+					<Icon name="settings" /> Réglages
 				</button>
 			{:else}
-				<button class="archive-toggle" onclick={() => showList('live')}>← Discussions</button>
+				<button class="settings-btn" onclick={() => showList('live')}>
+					<Icon name="chevronLeft" /> Discussions
+				</button>
 			{/if}
-			<button
-				class="archive-toggle"
-				onclick={onopenAgents}
-				title="Créer et modifier les agents, et leurs équipes"
-			>
-				👥 Agents
-			</button>
-			<button
-				class="archive-toggle"
-				onclick={onopenJobs}
-				title="Rappels et tâches récurrentes exécutées par Yadai"
-			>
-				⏰ Tâches
-			</button>
-			<button class="archive-toggle" onclick={onopenSkills} title="Créer et modifier les skills">
-				📚 Skills
-			</button>
-			<button
-				class="archive-toggle"
-				onclick={onopenProviders}
-				title="Clés API, comptes OAuth et modèle par défaut"
-			>
-				🔑 Providers
-			</button>
-			<button class="archive-toggle" onclick={onopenTheme} title="Palette, accents, clair / sombre">
-				◐ Apparence
-			</button>
 			<button class="status" onclick={onopenStatus} title="État du système">
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
 				></span>
@@ -525,9 +505,6 @@
 	.new:hover {
 		background: var(--accent);
 		box-shadow: var(--shadow-float);
-	}
-	.new span {
-		font-size: 16px;
 	}
 	.icon-btn {
 		display: flex;
@@ -661,6 +638,12 @@
 		padding: 6px 9px;
 		color: var(--text-faint);
 	}
+	/* The one glyph left in the chrome: three dots are a shape, not a picture,
+	   and every icon set draws them as exactly this. */
+	.dots {
+		font-size: 15px;
+		line-height: 1;
+	}
 	/* Renaming, pinning, branching, archiving and deleting all live behind this
 	   ⋯ — and it used to be revealed by hover, which a finger does not have and
 	   a Tab key does not either. It hides only where a pointer can bring it
@@ -758,8 +741,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		/* Four entries no longer fit on one line at the sidebar's width. */
-		flex-wrap: wrap;
 		gap: 4px;
 		margin: 0 10px 10px;
 		padding: 8px 6px;
@@ -767,18 +748,23 @@
 		background: var(--bg-sunken);
 		font-size: 11.5px;
 	}
-	.archive-toggle,
+	.settings-btn,
 	.status {
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		padding: 5px 10px;
+		gap: 7px;
+		min-height: 40px;
+		padding: 6px 12px;
 		border-radius: var(--radius-pill);
-		color: var(--text-faint);
-		font-size: 11.5px;
+		color: var(--text-muted);
+		font-size: 12.5px;
 		white-space: nowrap;
 	}
-	.archive-toggle:hover,
+	.status {
+		font-size: 11.5px;
+		color: var(--text-faint);
+	}
+	.settings-btn:hover,
 	.status:hover {
 		background: var(--bg-hover);
 		color: var(--text);
@@ -857,7 +843,7 @@
 		.search {
 			min-height: 44px;
 		}
-		.archive-toggle,
+		.settings-btn,
 		.status {
 			min-height: 44px;
 		}

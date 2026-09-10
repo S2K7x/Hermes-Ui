@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import { type Snippet } from 'svelte';
 	import { dialogFocus, trapTab } from '$lib/client/dialog.svelte';
 
@@ -24,7 +25,7 @@
 		width: number;
 		/** Take the full available height instead of hugging the content. */
 		fill?: boolean;
-		/** Scrim click and ✕. The panel decides what closing means. */
+		/** Scrim click and the close button. The panel decides what closing means. */
 		onclose: () => void;
 		subtitle?: Snippet;
 		children: Snippet;
@@ -65,7 +66,7 @@
 		<header>
 			<h2>{title}</h2>
 			{#if subtitle}<span class="sub">{@render subtitle()}</span>{/if}
-			<button class="x" onclick={onclose} aria-label="Fermer">✕</button>
+			<button class="x" onclick={onclose} aria-label="Fermer"><Icon name="close" /></button>
 		</header>
 
 		{@render children()}

@@ -1,4 +1,5 @@
 import type { HermesMessage, ToolStep } from './types';
+import type { IconName } from './icons';
 
 /** A turn as the UI renders it: one bubble, plus the agent steps behind it. */
 export interface UiMessage {
@@ -163,23 +164,29 @@ export function groupTranscript(messages: HermesMessage[]): UiMessage[] {
 	return out;
 }
 
-/** Emoji per Hermes tool family — mirrors the CLI's tool_progress display. */
-export function toolIcon(name: string): string {
-	if (name.startsWith('mcp_')) return '🔌';
-	if (name === '_thinking') return '💭';
-	if (name.startsWith('browser')) return '🌐';
+/**
+ * Which drawn icon stands for a Hermes tool family.
+ *
+ * Returns a name from `$lib/icons`, not a glyph: an emoji is drawn by the
+ * platform's own font, so the same timeline looked different on the phone and
+ * on the desktop and took colours no palette had a say over.
+ */
+export function toolIcon(name: string): IconName {
+	if (name.startsWith('mcp_')) return 'plug';
+	if (name === '_thinking') return 'thought';
+	if (name.startsWith('browser')) return 'globe';
 	// `web_search`, but also `session_search` and `x_search`, which would
 	// otherwise fall into the file family below on their `search` substring.
-	if (name.startsWith('web_') || name.endsWith('_search')) return '🔍';
-	if (name === 'terminal' || name === 'process') return '💻';
-	if (name.includes('code')) return '🐍';
-	if (['read', 'write', 'patch', 'search', 'file'].some((f) => name.includes(f))) return '📁';
-	if (name.includes('memory')) return '🧠';
-	if (name.includes('image')) return '🖼️';
-	if (name.includes('todo')) return '✅';
-	if (name.includes('cron')) return '⏰';
-	if (name.includes('delegat')) return '🤝';
-	return '🛠️';
+	if (name.startsWith('web_') || name.endsWith('_search')) return 'search';
+	if (name === 'terminal' || name === 'process') return 'terminal';
+	if (name.includes('code')) return 'code';
+	if (['read', 'write', 'patch', 'search', 'file'].some((f) => name.includes(f))) return 'file';
+	if (name.includes('memory')) return 'layers';
+	if (name.includes('image')) return 'image';
+	if (name.includes('todo')) return 'checkSquare';
+	if (name.includes('cron')) return 'clock';
+	if (name.includes('delegat')) return 'users';
+	return 'wrench';
 }
 
 /** Human label for an MCP tool: mcp_<server>_<tool> -> "server · tool". */

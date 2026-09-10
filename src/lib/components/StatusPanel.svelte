@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import Modal from './Modal.svelte';
 	import PushSettings from './PushSettings.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
@@ -36,10 +37,13 @@
 	let health = $derived(chat.status?.health ?? null);
 	let checks = $derived(Object.entries(health?.readiness?.checks ?? {}));
 
-	function icon(status: string): string {
-		if (status === 'ok') return '🟢';
-		if (status === 'warn' || status === 'degraded') return '🟡';
-		return '🔴';
+	/* A coloured dot, not a coloured emoji: the emoji circles came from the
+	   platform's font, so "healthy" was a different green on the phone than on
+	   the desktop and neither belonged to the palette. */
+	function level(status: string): 'ok' | 'warn' | 'ko' {
+		if (status === 'ok') return 'ok';
+		if (status === 'warn' || status === 'degraded') return 'warn';
+		return 'ko';
 	}
 
 	const LABELS: Record<string, string> = {
@@ -76,12 +80,12 @@
 		{#if chat.status === null}
 			<p class="muted">Chargement…</p>
 		{:else if chat.status.healthError}
-			<p class="err">⚠️ {chat.status.healthError}</p>
+			<p class="err"><Icon name="warning" size={15} /> {chat.status.healthError}</p>
 		{/if}
 
 		{#if health}
 			<div class="hero">
-				<span class="big">{icon(health.readiness?.status ?? health.status)}</span>
+				<span class="dot big {level(health.readiness?.status ?? health.status)}"></span>
 				<div>
 					<div class="strong">Yadai {health.version}</div>
 					<div class="muted">
@@ -95,7 +99,7 @@
 			<ul class="checks">
 				{#each checks as [name, check] (name)}
 					<li>
-						<span>{icon(String(check.status))}</span>
+						<span class="dot {level(String(check.status))}"></span>
 						<span class="name">{LABELS[name] ?? name}</span>
 						<span class="muted small">{detail(name, check)}</span>
 					</li>
@@ -106,7 +110,7 @@
 			<ul class="checks">
 				{#each Object.entries(health.platforms ?? {}) as [name, info] (name)}
 					<li>
-						<span>{info.state === 'connected' ? '🟢' : '🔴'}</span>
+						<span class="dot {info.state === 'connected' ? 'ok' : 'ko'}"></span>
 						<span class="name">{name}</span>
 						<span class="muted small">{info.state ?? '?'}{info.error_code ? ` · ${info.error_code}` : ''}</span>
 					</li>
@@ -117,27 +121,27 @@
 		<h3>Cette interface</h3>
 		<ul class="checks">
 			<li>
-				<span>⚙️</span>
+				<span class="li-icon"><Icon name="settings" size={15} /></span>
 				<span class="name">Tours simultanés</span>
 				<span class="muted small">
 					{chat.status?.turns.active ?? 0} / {chat.status?.turns.limit ?? '—'}
 				</span>
 			</li>
 			<li>
-				<span>🛠️</span>
+				<span class="li-icon"><Icon name="wrench" size={15} /></span>
 				<span class="name">Outils exposés</span>
 				<span class="muted small">
 					{chat.toolCount}{chat.mcpTools.length ? ` · dont ${chat.mcpTools.length} MCP` : ''}
 				</span>
 			</li>
 			<li>
-				<span>📚</span>
+				<span class="li-icon"><Icon name="book" size={15} /></span>
 				<span class="name">Skills</span>
 				<span class="muted small">{chat.skills.length}</span>
 			</li>
 			{#if usageSummary(chat.current)}
 				<li>
-					<span>📊</span>
+					<span class="li-icon"><Icon name="chart" size={15} /></span>
 					<span class="name">Conversation ouverte</span>
 					<span class="muted small">{usageSummary(chat.current)}</span>
 				</li>
@@ -181,6 +185,32 @@
 </Modal>
 
 <style>
+	/* One dot, three states, all three from the palette — see `level()`. */
+	.dot {
+		flex: 0 0 auto;
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--text-faint);
+	}
+	.dot.big {
+		width: 13px;
+		height: 13px;
+	}
+	.dot.ok {
+		background: var(--ok);
+	}
+	.dot.warn {
+		background: var(--accent);
+	}
+	.dot.ko {
+		background: var(--danger);
+	}
+	.li-icon {
+		display: flex;
+		color: var(--text-faint);
+	}
+
 	h3 {
 		margin: 18px 0 6px;
 		font-size: 11px;

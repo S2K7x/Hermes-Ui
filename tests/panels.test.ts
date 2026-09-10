@@ -19,6 +19,7 @@ const PANELS = [
 	'AgentsPanel.svelte',
 	'JobsPanel.svelte',
 	'ProvidersPanel.svelte',
+	'SettingsPanel.svelte',
 	'Shortcuts.svelte',
 	'SkillsPanel.svelte',
 	'StatusPanel.svelte',
@@ -91,7 +92,16 @@ test('every lazily loaded panel is rendered only once its chunk has landed', asy
 	const source = await readFile(PAGE, 'utf8');
 	// A panel referenced without the `current` guard would render `null` as a
 	// component, which is a runtime error rather than a missing dialog.
-	for (const key of ['status', 'jobs', 'agents', 'skills', 'providers', 'theme', 'shortcuts']) {
+	for (const key of [
+		'status',
+		'jobs',
+		'agents',
+		'skills',
+		'providers',
+		'theme',
+		'shortcuts',
+		'settings'
+	]) {
 		assert.ok(
 			source.includes(`{#if panels.${key}.current}`),
 			`panels.${key} must be guarded before it is rendered`

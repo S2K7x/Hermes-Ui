@@ -170,7 +170,9 @@ test('the drawer never traps a Tab pressed outside itself', () => {
 
 test('a settings panel opened from the sidebar closes it', () => {
 	const page = readFileSync(new URL('../src/routes/+page.svelte', import.meta.url), 'utf8');
-	for (const prop of ['onopenStatus', 'onopenSkills', 'onopenProviders', 'onopenJobs', 'onopenAgents', 'onopenTheme']) {
+	// The sidebar has two doors now: the settings hub, and the status line.
+	// Everything else is reached from inside the hub.
+	for (const prop of ['onopenSettings', 'onopenStatus']) {
 		assert.match(
 			page,
 			new RegExp(`${prop}=\\{\\(\\) => openFromSidebar\\(`),
@@ -178,6 +180,25 @@ test('a settings panel opened from the sidebar closes it', () => {
 		);
 	}
 	assert.match(page, /function openFromSidebar\([\s\S]{0,120}sidebarOpen = false/);
+});
+
+/**
+ * The hub is a doorway, not a destination.
+ *
+ * It opens seven other dialogs, and a dialog opened on top of one that is
+ * still trapping Tab is the same two-traps-pulling-apart problem the drawer
+ * had: the focus would be dragged out of the panel the user is actually in.
+ * So the hub closes itself first.
+ */
+test('the settings hub closes before opening what it points at', () => {
+	const hub = readFileSync(
+		new URL('../src/lib/components/SettingsPanel.svelte', import.meta.url),
+		'utf8'
+	);
+	assert.match(hub, /function go\(run: \(\) => void\) \{\s*onclose\(\);\s*run\(\);/);
+	// Every entry goes through it, so none can forget.
+	assert.doesNotMatch(hub, /onclick=\{entry\.run\}/);
+	assert.match(hub, /onclick=\{\(\) => go\(entry\.run\)\}/);
 });
 
 

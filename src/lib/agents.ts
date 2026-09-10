@@ -265,9 +265,24 @@ export function directReports(list: Agent[], agent: Agent): Agent[] {
 	return agent.children.map((id) => byId.get(id)).filter((a): a is Agent => Boolean(a));
 }
 
-/** "🔎 Recherche" — the agent as one short label. */
+/**
+ * "🔎 Recherche" — the agent as one short label, **for the composed prompt**.
+ *
+ * Deliberately still carries the emoji, and deliberately NOT what the
+ * interface shows any more. The UI moved to drawn marks (a coloured disc with
+ * the agent's initial, see `agentInitial`), but this string is copied verbatim
+ * into every system prompt and into the prompt of every scheduled task — and
+ * a task's prompt is compared against a fresh composition to decide whether
+ * its persona has gone stale (point 14). Changing this would mark every
+ * agent-bearing task as needing an update, for a character no model reads
+ * differently. Leave it alone.
+ */
 export const agentLabel = (agent: Pick<Agent, 'emoji' | 'name'>): string =>
 	agent.emoji ? `${agent.emoji} ${agent.name}` : agent.name;
+
+/** The letter a coloured disc shows for an agent, where an emoji used to be. */
+export const agentInitial = (agent: Pick<Agent, 'name'>): string =>
+	agent.name.trim().charAt(0).toUpperCase() || '·';
 
 // ---------------------------------------------------------------------------
 // System prompt composition

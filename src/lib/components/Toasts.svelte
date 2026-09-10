@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import { toasts } from '$lib/stores/toast.svelte';
 	import { flip } from 'svelte/animate';
 	import { fly } from 'svelte/transition';
@@ -13,7 +14,7 @@
 			out:fly={{ y: 8, duration: 120 }}
 		>
 			<span class="icon">
-				{toast.kind === 'error' ? '⚠️' : toast.kind === 'success' ? '✓' : 'ℹ'}
+				<Icon name={toast.kind === 'error' ? 'warning' : toast.kind === 'success' ? 'check' : 'info'} />
 			</span>
 			<span class="msg">{toast.message}</span>
 			{#if toast.action}
@@ -25,7 +26,7 @@
 					}}>{toast.action.label}</button
 				>
 			{/if}
-			<button class="close" aria-label="Fermer" onclick={() => toasts.dismiss(toast.id)}>✕</button>
+			<button class="close" aria-label="Fermer" onclick={() => toasts.dismiss(toast.id)}><Icon name="close" size={14} /></button>
 		</div>
 	{/each}
 </div>

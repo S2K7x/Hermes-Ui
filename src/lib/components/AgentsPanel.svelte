@@ -10,7 +10,7 @@
 		MAX_AGENT_PROMPT,
 		MAX_AGENT_ROLE,
 		agentColor,
-		agentLabel,
+		agentInitial,
 		composeSystemPrompt,
 		duplicateDraft,
 		emptyDraft,
@@ -160,7 +160,7 @@
 					{@const team = teamTree(agents.items, agent.id).slice(1)}
 					<li style="--agent: {agentColor(agent)}">
 						<div class="row">
-							<span class="badge">{agent.emoji || agent.name.slice(0, 1)}</span>
+							<span class="badge">{agentInitial(agent)}</span>
 							<span class="who">
 								<span class="name">{agent.name}</span>
 								{#if agent.role}<span class="job">{agent.role}</span>{/if}
@@ -174,7 +174,7 @@
 								{#each team as node (node.key)}
 									<li style="padding-left: {(node.depth - 1) * 16}px">
 										<span class="branch">└</span>
-										{agentLabel(node.agent)}
+										{node.agent.name}
 										{#if node.agent.role}<span class="job">— {node.agent.role}</span>{/if}
 										{#if node.repeated}<span class="job">(déjà plus haut)</span>{/if}
 									</li>
@@ -191,16 +191,17 @@
 			</ul>
 		{:else}
 			<div class="form">
-				<div class="two">
-					<label class="tiny">
-						Emoji
-						<input bind:value={draft.emoji} placeholder="🔎" maxlength={8} />
-					</label>
-					<label>
-						Nom
-						<input bind:value={draft.name} placeholder="Chercheur" maxlength={MAX_AGENT_NAME} />
-					</label>
-				</div>
+				<!-- The emoji field is gone from the form: an agent is shown as a
+				     coloured disc bearing its initial now, so the value would be
+				     stored and never drawn. The column is deliberately still
+				     written on save (`emoji: draft.emoji` below keeps whatever a
+				     previous version put there) — dropping a field is one thing,
+				     erasing what someone typed into it is another, and the same
+				     string is still copied into the composed prompt. -->
+				<label>
+					Nom
+					<input bind:value={draft.name} placeholder="Chercheur" maxlength={MAX_AGENT_NAME} />
+				</label>
 
 				<div class="swatches" role="group" aria-label="Couleur">
 					{#each AGENT_COLORS as color (color)}
@@ -280,7 +281,7 @@
 											draft.children.length >= MAX_AGENT_CHILDREN}
 										onchange={() => toggleChild(agent.id)}
 									/>
-									<span>{agentLabel(agent)}</span>
+									<span>{agent.name}</span>
 									{#if agent.orchestrator}<span class="job">chef</span>{/if}
 								</label>
 							{/each}
@@ -294,7 +295,7 @@
 								{#each tree as node (node.key)}
 									<li style="padding-left: {node.depth * 16}px">
 										{#if node.depth > 0}<span class="branch">└</span>{/if}
-										{agentLabel(node.agent)}
+										{node.agent.name}
 										{#if node.repeated}<span class="job">(déjà plus haut)</span>{/if}
 									</li>
 								{/each}
@@ -462,17 +463,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-	}
-	.two {
-		display: flex;
-		gap: 10px;
-	}
-	.two label:last-child {
-		flex: 1;
-	}
-	.tiny input {
-		width: 64px;
-		text-align: center;
 	}
 	.form label {
 		display: flex;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import { toolIcon, toolLabel } from '$lib/transcript';
 	import type { ToolStep } from '$lib/types';
 
@@ -41,13 +42,13 @@
 			<div class="body">
 				{#if reasoning}
 					<div class="reasoning">
-						<span class="icon">💭</span>
+						<span class="icon"><Icon name="thought" size={15} /></span>
 						<div class="reasoning-text">{reasoning}</div>
 					</div>
 				{/if}
 				{#each steps as step (step.key)}
 					<div class="step" class:failed={step.status === 'failed'}>
-						<span class="icon">{toolIcon(step.tool_name)}</span>
+						<span class="icon"><Icon name={toolIcon(step.tool_name)} size={15} /></span>
 						<div class="detail">
 							<div class="name">
 								{toolLabel(step.tool_name)}

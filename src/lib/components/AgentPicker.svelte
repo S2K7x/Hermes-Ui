@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { agents } from '$lib/stores/agents.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
-	import { agentColor, agentLabel, directReports } from '$lib/agents';
+	import { agentColor, agentInitial, directReports } from '$lib/agents';
 	import { menuKeydown } from '$lib/client/menu.svelte';
 
 	interface Props {
@@ -53,8 +53,8 @@
 		title={active ? `Agent : ${active.name}` : 'Aucun agent — prompt par défaut de Yadai'}
 	>
 		<span class="dot"></span>
-		<span class="label">{active ? agentLabel(active) : 'Agent'}</span>
-		<span class="mini">{active ? active.emoji || '●' : 'Agent'}</span>
+		<span class="label">{active ? active.name : 'Agent'}</span>
+		<span class="mini">{active ? agentInitial(active) : 'Agent'}</span>
 		<span class="chev" aria-hidden="true">▾</span>
 	</button>
 
@@ -80,7 +80,7 @@
 						style="--agent: {agentColor(agent)}"
 						onclick={() => choose(agent.id)}
 					>
-						<span class="n"><span class="dot"></span>{agentLabel(agent)}</span>
+						<span class="n"><span class="dot"></span>{agent.name}</span>
 						{#if agent.role}<span class="j">{agent.role}</span>{/if}
 					</button>
 				{/each}

@@ -2,7 +2,7 @@
 	import Modal from './Modal.svelte';
 	import { jobsStore, type JobInput } from '$lib/stores/jobs.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
-	import { agentColor, agentLabel, composeSystemPrompt } from '$lib/agents';
+	import { agentColor, composeSystemPrompt } from '$lib/agents';
 	import {
 		JOB_TEMPLATES,
 		MAX_JOB_NAME,
@@ -185,7 +185,7 @@
 								onclick={() => (agentId = agent.id)}
 								style="--agent: {agentColor(agent)}"
 							>
-								<span class="dot"></span>{agentLabel(agent)}
+								<span class="dot"></span>{agent.name}
 							</button>
 						{/each}
 					</div>
@@ -333,7 +333,7 @@
 						</div>
 						{#if agent}
 							<span class="owner" style="--agent: {agentColor(agent)}">
-								<span class="dot"></span>{agentLabel(agent)}
+								<span class="dot"></span>{agent.name}
 							</span>
 						{/if}
 						{#if job.instruction || job.prompt}

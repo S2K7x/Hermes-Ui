@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import { push } from '$lib/stores/push.svelte';
 	import { pushServiceName } from '$lib/push';
 
@@ -65,16 +66,16 @@
 	<ul class="checks">
 		{#each push.devices as device (device.id)}
 			<li>
-				<span>{device.id === push.thisDeviceId ? '📱' : '💤'}</span>
+				<span class="li-icon"><Icon name={device.id === push.thisDeviceId ? 'phone' : 'moon'} size={15} /></span>
 				<span class="name">
 					{device.label}{device.id === push.thisDeviceId ? ' · cet appareil' : ''}
 					<span class="muted small block">
 						{pushServiceName(device.host)} · dernier envoi {when(device.last_ok_at)}
-						{#if device.last_error}· ⚠️ {device.last_error}{/if}
+						{#if device.last_error}· <Icon name="warning" size={12} /> {device.last_error}{/if}
 					</span>
 				</span>
 				<button class="x" onclick={() => push.remove(device.id)} aria-label="Retirer {device.label}"
-					>✕</button
+					><Icon name="close" size={13} /></button
 				>
 			</li>
 		{/each}
@@ -82,6 +83,11 @@
 {/if}
 
 <style>
+	.li-icon {
+		display: flex;
+		color: var(--text-faint);
+	}
+
 	h3 {
 		margin: 18px 0 6px;
 		font-size: 11px;

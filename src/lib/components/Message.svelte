@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import Markdown from './Markdown.svelte';
 	import ToolSteps from './ToolSteps.svelte';
 	import type { UiMessage } from '$lib/transcript';
@@ -52,7 +53,7 @@
 			{/if}
 
 			{#if message.error}
-				<div class="error">⚠️ {message.error}</div>
+				<div class="error"><Icon name="warning" size={15} /> {message.error}</div>
 			{/if}
 
 			{#if message.detached}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from '$lib/components/Icon.svelte';
 	import { onDestroy, onMount, tick } from 'svelte';
 	import AgentPicker from '$lib/components/AgentPicker.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
@@ -15,7 +16,7 @@
 	import { read, readJSON, write, writeJSON } from '$lib/client/storage';
 	import { hasMod, modKey } from '$lib/client/platform';
 	import { usageSummary } from '$lib/sessions';
-	import { agentColor, agentLabel, directReports } from '$lib/agents';
+	import { agentColor, directReports } from '$lib/agents';
 	import { turnAnnouncement } from '$lib/a11y';
 	import { lazyComponent } from '$lib/client/lazy.svelte';
 
@@ -29,7 +30,10 @@
 	let agentsOpen = $state(false);
 	let shortcutsOpen = $state(false);
 	let themeOpen = $state(false);
+	let settingsOpen = $state(false);
 	let narrow = $state(false);
+	/** The sidebar instance, so the settings panel can switch its list. */
+	let sidebar = $state<{ showList: (v: 'live' | 'archived' | 'trash') => void } | null>(null);
 	/** How much of the layout viewport the soft keyboard is covering. */
 	let keyboard = $state(0);
 
@@ -55,6 +59,7 @@
 		skills: lazyComponent(() => import('$lib/components/SkillsPanel.svelte')),
 		providers: lazyComponent(() => import('$lib/components/ProvidersPanel.svelte')),
 		theme: lazyComponent(() => import('$lib/components/ThemePanel.svelte')),
+		settings: lazyComponent(() => import('$lib/components/SettingsPanel.svelte')),
 		shortcuts: lazyComponent(() => import('$lib/components/Shortcuts.svelte'))
 	};
 
@@ -71,6 +76,7 @@
 		if (providersOpen) reveal(panels.providers);
 		if (themeOpen) reveal(panels.theme);
 		if (shortcutsOpen) reveal(panels.shortcuts);
+		if (settingsOpen) reveal(panels.settings);
 	});
 
 	const SUGGESTIONS = [
@@ -345,17 +351,14 @@
 
 <div class="app" style="--keyboard: {keyboard}px">
 	<Sidebar
+		bind:this={sidebar}
 		open={sidebarOpen}
 		drawer={narrow}
 		collapsed={sidebarCollapsed && !narrow}
 		onclose={() => (sidebarOpen = false)}
 		ontoggleCollapse={toggleCollapse}
+		onopenSettings={() => openFromSidebar(() => (settingsOpen = true))}
 		onopenStatus={() => openFromSidebar(() => (statusOpen = true))}
-		onopenSkills={() => openFromSidebar(() => (skillsOpen = true))}
-		onopenProviders={() => openFromSidebar(() => (providersOpen = true))}
-		onopenJobs={() => openFromSidebar(() => (jobsOpen = true))}
-		onopenAgents={() => openFromSidebar(() => (agentsOpen = true))}
-		onopenTheme={() => openFromSidebar(() => (themeOpen = true))}
 	/>
 
 	{#if sidebarOpen}
@@ -365,7 +368,9 @@
 
 	<main>
 		<header>
-			<button class="burger" onclick={() => (sidebarOpen = true)} aria-label="Discussions">☰</button>
+			<button class="burger" onclick={() => (sidebarOpen = true)} aria-label="Discussions">
+				<Icon name="menu" size={20} />
+			</button>
 			<div class="heading">
 				<h1>{title}</h1>
 				{#if usage && !narrow}<span class="usage" title="tokens entrée / sortie et coût estimé"
@@ -376,23 +381,25 @@
 				<button
 					class="icon"
 					onclick={() => (paletteOpen = true)}
-					aria-label="Rechercher un message, une conversation, une action (⌘K)">⌕</button
+					aria-label="Rechercher un message, une conversation, une action (⌘K)"
 				>
+					<Icon name="search" />
+				</button>
 				<AgentPicker onmanage={() => (agentsOpen = true)} />
 				<ModelPicker />
 				<!-- Not on a phone: five controls beside the title left it three
 				     characters wide. Apparence is in the drawer's footer and in
 				     the ⌘K palette, both one tap away; the name of the
 				     conversation you are reading has nowhere else to go. -->
-				<button class="icon theme" onclick={() => (themeOpen = true)} aria-label="Apparence"
-					>◐</button
-				>
+				<button class="icon theme" onclick={() => (themeOpen = true)} aria-label="Apparence">
+					<Icon name="contrast" />
+				</button>
 			</div>
 		</header>
 
 		{#if chat.connected === false}
 			<div class="banner" role="alert">
-				<span>⚠️ Yadai est injoignable — nouvelle tentative en cours.</span>
+				<span><Icon name="warning" size={15} /> Yadai est injoignable — nouvelle tentative en cours.</span>
 				<button onclick={() => chat.refreshHealth()}>Réessayer</button>
 			</div>
 		{/if}
@@ -415,7 +422,7 @@
 						<div class="hero">
 							<span class="orb orb-a"></span>
 							<span class="orb orb-b"></span>
-							<h2>{activeAgent ? agentLabel(activeAgent) : 'Yadai'}</h2>
+							<h2>{activeAgent ? activeAgent.name : 'Yadai'}</h2>
 							<p>
 								{#if activeAgent}
 									{activeAgent.role || 'Agent personnalisé.'}
@@ -446,7 +453,7 @@
 										title={agent.role}
 										onclick={() => chat.setAgent(agent.id)}
 									>
-										<span class="dot"></span>{agentLabel(agent)}
+										<span class="dot"></span>{agent.name}
 									</button>
 								{/each}
 								<button
@@ -490,7 +497,9 @@
 		</div>
 
 		{#if !pinnedToBottom && chat.messages.length > 0}
-			<button class="to-bottom" onclick={scrollToBottom} aria-label="Aller en bas">↓</button>
+			<button class="to-bottom" onclick={scrollToBottom} aria-label="Aller en bas">
+				<Icon name="arrowDown" />
+			</button>
 		{/if}
 
 		<div class="composer-wrap">
@@ -543,6 +552,22 @@
 {#if panels.shortcuts.current}
 	{@const Shortcuts = panels.shortcuts.current}
 	<Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />
+{/if}
+{#if panels.settings.current}
+	{@const SettingsPanel = panels.settings.current}
+	<SettingsPanel
+		open={settingsOpen}
+		onclose={() => (settingsOpen = false)}
+		onopenStatus={() => (statusOpen = true)}
+		onopenSkills={() => (skillsOpen = true)}
+		onopenProviders={() => (providersOpen = true)}
+		onopenJobs={() => (jobsOpen = true)}
+		onopenAgents={() => (agentsOpen = true)}
+		onopenTheme={() => (themeOpen = true)}
+		onopenShortcuts={() => (shortcutsOpen = true)}
+		onshowArchived={() => sidebar?.showList('archived')}
+		onshowTrash={() => sidebar?.showList('trash')}
+	/>
 {/if}
 
 <style>

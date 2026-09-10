@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import { untrack } from 'svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { drafts } from '$lib/stores/drafts.svelte';
@@ -267,7 +268,7 @@
 		<div class="palette prompts">
 			<div class="p-head">
 				<span>Prompts enregistrés</span>
-				<button class="p-x" onclick={() => (promptsOpen = false)} aria-label="Fermer">✕</button>
+				<button class="p-x" onclick={() => (promptsOpen = false)} aria-label="Fermer"><Icon name="close" size={14} /></button>
 			</div>
 
 			{#if text.trim()}
@@ -303,7 +304,7 @@
 							class="p-del"
 							onclick={() => prompts.remove(prompt.id)}
 							disabled={prompts.saving}
-							aria-label="Supprimer ce prompt">✕</button
+							aria-label="Supprimer ce prompt"><Icon name="close" size={12} /></button
 						>
 					</div>
 				{/each}
@@ -347,7 +348,8 @@
 					<img src={att.dataUrl} alt={att.name} />
 					<button
 						aria-label="Retirer"
-						onclick={() => (attachments = attachments.filter((a) => a.id !== att.id))}>✕</button
+						onclick={() => (attachments = attachments.filter((a) => a.id !== att.id))}
+						><Icon name="close" size={11} /></button
 					>
 				</div>
 			{/each}
@@ -356,7 +358,7 @@
 
 	<div class="row">
 		<label class="attach" title="Joindre une image">
-			📎
+			<Icon name="paperclip" size={17} />
 			<input
 				type="file"
 				accept="image/*"
@@ -376,7 +378,7 @@
 			onclick={togglePrompts}
 			title="Prompts enregistrés"
 			aria-label="Prompts enregistrés"
-			aria-expanded={promptsOpen}>🔖</button
+			aria-expanded={promptsOpen}><Icon name="bookmark" size={17} /></button
 		>
 
 		<textarea
@@ -401,7 +403,8 @@
 				class="send stop"
 				onclick={() => chat.stop()}
 				aria-label="Arrêter l'affichage"
-				title="Arrêter l'affichage (l'agent termine en arrière-plan)">■</button
+				title="Arrêter l'affichage (l'agent termine en arrière-plan)"
+				><Icon name="stop" size={15} /></button
 			>
 		{:else}
 			<button
@@ -409,7 +412,7 @@
 				onclick={submit}
 				disabled={!text.trim() && attachments.length === 0}
 				aria-label="Envoyer le message"
-				title="Envoyer">↑</button
+				title="Envoyer"><Icon name="arrowUp" size={19} /></button
 			>
 		{/if}
 	</div>

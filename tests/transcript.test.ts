@@ -244,28 +244,31 @@ test('a transcript ending on a tool row still yields its turn', () => {
 });
 
 test('toolIcon covers the real Hermes tool families', () => {
+	// Names from `$lib/icons`, not glyphs: an emoji is drawn by whatever font
+	// the platform ships, which is why the timeline used to look different on
+	// the phone and on the desktop.
 	const expected: Record<string, string> = {
-		mcp_github_create_issue: '🔌',
-		_thinking: '💭',
-		browser_navigate: '🌐',
-		web_search: '🔍',
-		web_extract: '🔍',
-		x_search: '🔍',
-		session_search: '🔍',
-		terminal: '💻',
-		process: '💻',
-		execute_code: '🐍',
-		read_file: '📁',
-		write_file: '📁',
-		patch: '📁',
-		search_files: '📁',
-		memory: '🧠',
-		image_generate: '🖼️',
-		todo: '✅',
-		cronjob: '⏰',
-		delegate_task: '🤝',
-		clarify: '🛠️',
-		'': '🛠️'
+		mcp_github_create_issue: 'plug',
+		_thinking: 'thought',
+		browser_navigate: 'globe',
+		web_search: 'search',
+		web_extract: 'search',
+		x_search: 'search',
+		session_search: 'search',
+		terminal: 'terminal',
+		process: 'terminal',
+		execute_code: 'code',
+		read_file: 'file',
+		write_file: 'file',
+		patch: 'file',
+		search_files: 'file',
+		memory_store: 'layers',
+		generate_image: 'image',
+		todo: 'checkSquare',
+		cron_add: 'clock',
+		delegate_task: 'users',
+		something_else: 'wrench',
+		'': 'wrench'
 	};
 	for (const [name, icon] of Object.entries(expected)) {
 		assert.equal(toolIcon(name), icon, `${name || '(vide)'} devrait afficher ${icon}`);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { activityAt, matchesQuery, relativeTime, sessionLabel } from '$lib/sessions';
 	import { findInMessages } from '$lib/search';
@@ -151,9 +152,12 @@
 					onclick={() => choose(row)}
 					onmouseenter={() => (index = i)}
 				>
-					<span class="kind" aria-hidden="true"
-						>{row.kind === 'command' ? '⌘' : row.kind === 'message' ? '⌕' : '💬'}</span
-					>
+					<span class="kind" aria-hidden="true">
+						<Icon
+							name={row.kind === 'command' ? 'command' : row.kind === 'message' ? 'search' : 'message'}
+							size={15}
+						/>
+					</span>
 					{#if row.snippet}
 						<span class="label"
 							>{row.snippet.before}<mark>{row.snippet.match}</mark>{row.snippet.after}</span
