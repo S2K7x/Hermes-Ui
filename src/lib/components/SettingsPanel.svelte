@@ -14,6 +14,7 @@
 		onopenAgents: () => void;
 		onopenTheme: () => void;
 		onopenShortcuts: () => void;
+		onopenApprovals: () => void;
 		onshowArchived: () => void;
 		onshowTrash: () => void;
 	}
@@ -27,6 +28,7 @@
 		onopenAgents,
 		onopenTheme,
 		onopenShortcuts,
+		onopenApprovals,
 		onshowArchived,
 		onshowTrash
 	}: Props = $props();
@@ -82,6 +84,12 @@
 				{ icon: 'book', label: 'Skills', hint: 'Éditer les SKILL.md du disque', run: onopenSkills },
 				{
 					icon: 'key',
+					label: 'Approbations',
+					hint: 'Ce que Yadai peut lancer sans demander',
+					run: onopenApprovals
+				},
+				{
+					icon: 'plug',
 					label: 'Providers',
 					hint: 'Clés API, comptes OAuth, modèle par défaut',
 					run: onopenProviders

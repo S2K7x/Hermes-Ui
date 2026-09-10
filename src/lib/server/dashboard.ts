@@ -250,6 +250,29 @@ export const disconnectOauth = (id: string) =>
  * Read-only and carries no credential, which is why it is safe to surface even
  * though the rest of the dashboard proxy guards writes.
  */
+/**
+ * The whole of Hermes' config.yaml, as the dashboard normalises it.
+ *
+ * ~90 root keys, some of them credentials mirrored out of `.env`. It is read
+ * **server-side only** and never forwarded: the approvals route picks the
+ * three fields it needs and nothing else reaches the browser — the same
+ * discipline `groupProviderKeys()` applies to `GET /api/env` (point 13).
+ */
+export const getHermesConfig = () =>
+	dashboardJson<Record<string, unknown>>('/api/config', { retries: 1 });
+
+/**
+ * Write a **partial** config. The dashboard deep-merges it over what is on
+ * disk, so only the keys sent here are touched — but a list is replaced
+ * wholesale rather than merged, which is why the caller must compose it on a
+ * policy it actually read (see `planPolicyUpdate`).
+ */
+export const putHermesConfig = (config: Record<string, unknown>) =>
+	dashboardJson<{ ok: boolean }>('/api/config', {
+		method: 'PUT',
+		body: { config }
+	});
+
 export const getCronDeliveryTargets = () =>
 	dashboardJson<{ targets: { id: string; name?: string; home_target_set?: boolean }[] }>(
 		'/api/cron/delivery-targets',

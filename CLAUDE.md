@@ -1615,6 +1615,58 @@ existe dans le jeu, que chaque tracé est bien du path data, et **qu'aucun
 composant ne contient plus un seul emoji** — c'est le garde-fou contre la
 rechute.
 
+### 32. La politique d'approbation : trois leviers qui ne se comportent pas pareil
+
+Le panneau « Approbations » lit et écrit la politique de Hermes **par le
+dashboard**, jamais en éditant `config.yaml` nous-mêmes — même règle que les
+identifiants de providers (point 13). Et jamais en relayant la config :
+`GET /api/config` répond ~90 clés racine dont des identifiants recopiés
+depuis `.env`. Exactement **trois champs** sortent de
+`src/routes/api/approvals/+server.ts`, extraits côté serveur comme
+`groupProviderKeys()` le fait pour `GET /api/env`.
+
+Les trois leviers, et la mesure qui les distingue (0.20.0) :
+
+| Réglage | Effet | Pourquoi |
+|---|---|---|
+| `approvals.mode` | **immédiat** | lu par `_get_approval_config()` → `load_config_readonly()`, dont le cache est indexé sur `(mtime_ns, taille)` du fichier |
+| `approvals.deny` | **immédiat** | même chemin |
+| `command_allowlist` | **redémarrage du gateway** | `_command_matches_permanent_allowlist()` lit `_permanent_approved`, un set de module rempli une seule fois par `load_permanent_allowlist()` à l'import |
+
+Dire « les changements sont pris en compte immédiatement » serait vrai aux
+deux tiers, c'est-à-dire faux.
+
+Ce qui compte dans le code :
+
+- **`PUT /api/config` fusionne en profondeur, mais une liste est remplacée en
+  entier**, pas fusionnée élément par élément. Composer une politique sur une
+  lecture qui a échoué n'écrirait donc pas « les défauts » : ça **effacerait**
+  les règles de refus de l'utilisateur — celles qui bloquent une commande même
+  sous `--yolo`. D'où `planPolicyUpdate()` et un `baseline` nul tant que le GET
+  n'a pas répondu, exactement comme le thème (point 19) et la bibliothèque de
+  prompts (point 15).
+- **Vérifié contre le dashboard réel** : après un `PUT` ne portant que
+  `approvals.{mode,deny}` et `command_allowlist`, les six autres clés du bloc
+  `approvals` (`timeout`, `cron_mode`, `smart_policy`,
+  `denial_breaker_threshold`, `mcp_reload_confirm`,
+  `destructive_slash_confirm`) et les 89 clés racine étaient intactes.
+- **Mais la sauvegarde réécrit `config.yaml`** : le `save_config` du dashboard
+  ré-sérialise le fichier et **ne conserve pas les commentaires écrits à la
+  main**. Constaté en développant ce panneau — un bloc de commentaires de
+  l'utilisateur a disparu et a dû être restauré depuis une copie. Le panneau le
+  dit maintenant en toutes lettres. Ce n'est pas propre à ce panneau : toute
+  écriture de config par le dashboard a cet effet.
+- **Le mode `manuel` prive cette interface de tout recours** : Hermes n'expose
+  de bouton d'approbation que sur le CLI et les messageries (point 8), donc en
+  manuel chaque commande dangereuse s'arrête ici sans issue. Le panneau
+  l'affiche en avertissement plutôt que de laisser le choix se retourner contre
+  l'utilisateur.
+- **`off` désactive la garde partout**, pas seulement ici — d'où la
+  confirmation. Le plancher de sécurité (`rm -rf /`, `mkfs`, écriture disque
+  brute) reste, lui, hors de portée de ce réglage.
+
+Route : `GET|PUT /api/approvals`.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -1732,7 +1784,7 @@ src/
 │   ├── trash.ts       corbeille : compte à rebours, échéance, lignes à balayer
 │   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
-│   ├── approvals.ts   reconnaître un tour retombé faute d'approbation
+│   ├── approvals.ts   tour retombé faute d'approbation, + politique d'approbation
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── jobs.ts        horaires cron validés/traduits/composés, état et tri
 │   │                  des tâches, fiche d'agent dans le prompt d'une tâche

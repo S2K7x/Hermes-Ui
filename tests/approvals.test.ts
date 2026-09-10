@@ -79,3 +79,116 @@ test('the first pending step of a turn is the one reported', () => {
 	assert.equal(firstPendingApproval([{ result: 'rien' }]), null);
 	assert.equal(firstPendingApproval([]), null);
 });
+
+// ---------------------------------------------------------------------------
+// The policy — what the panel is allowed to write
+// ---------------------------------------------------------------------------
+
+import {
+	APPROVAL_MODES,
+	DEFAULT_POLICY,
+	modeStrandsWebUi,
+	normalizeApprovalPolicy,
+	planPolicyUpdate
+} from '../src/lib/approvals.ts';
+
+/** The live shape, read from this machine's dashboard on `GET /api/config`. */
+const REAL_BLOCK = {
+	mode: 'smart',
+	timeout: 300,
+	cron_mode: 'deny',
+	smart_policy: '',
+	denial_breaker_threshold: 3,
+	deny: [],
+	mcp_reload_confirm: true,
+	destructive_slash_confirm: true
+};
+
+test('the live config block is read into a policy', () => {
+	assert.deepEqual(normalizeApprovalPolicy(REAL_BLOCK, []), {
+		mode: 'smart',
+		deny: [],
+		allowlist: []
+	});
+});
+
+test('an unknown mode falls back rather than being written through', () => {
+	// `mode` reaches `is_approval_bypass_active_for_session` upstream. A value
+	// it does not recognise must never be something this app invented.
+	for (const bad of ['yolo', '', null, 42, undefined, 'OFF']) {
+		assert.equal(normalizeApprovalPolicy({ mode: bad }, []).mode, DEFAULT_POLICY.mode, String(bad));
+	}
+	for (const mode of APPROVAL_MODES) {
+		assert.equal(normalizeApprovalPolicy({ mode }, []).mode, mode);
+	}
+});
+
+test('rules are trimmed, de-duplicated and bounded', () => {
+	const policy = normalizeApprovalPolicy(
+		{ mode: 'manual', deny: ['  git push --force*  ', 'git push --force*', '', '   ', 7] },
+		['docker *', 'docker *', null]
+	);
+	assert.deepEqual(policy.deny, ['git push --force*']);
+	assert.deepEqual(policy.allowlist, ['docker *']);
+});
+
+test('a non-list where a list belongs reads as empty, not as garbage', () => {
+	assert.deepEqual(normalizeApprovalPolicy({ deny: 'git push' }, 'docker'), {
+		mode: 'smart',
+		deny: [],
+		allowlist: []
+	});
+});
+
+/**
+ * The sharp edge of this panel.
+ *
+ * `PUT /api/config` deep-merges, and a deep merge replaces a list wholesale
+ * rather than merging it element by element. Composing on a policy that was
+ * never read would therefore not "fall back to the defaults" — it would erase
+ * every deny rule the user wrote, and deny rules are the ones that hold even
+ * under `--yolo`.
+ */
+test('a policy change is refused when nothing trustworthy was read', () => {
+	assert.deepEqual(planPolicyUpdate(null, { mode: 'off' }), { ok: false, reason: 'unloaded' });
+	assert.deepEqual(planPolicyUpdate(null, {}), { ok: false, reason: 'unloaded' });
+});
+
+test('a policy change composes on the baseline, field by field', () => {
+	const base = {
+		mode: 'smart' as const,
+		deny: ['rm -rf /*'],
+		allowlist: ['docker compose ps']
+	};
+	const result = planPolicyUpdate(base, { mode: 'manual' });
+	assert.ok(result.ok);
+	// The two lists survive a change that did not mention them.
+	assert.deepEqual(result.policy, {
+		mode: 'manual',
+		deny: ['rm -rf /*'],
+		allowlist: ['docker compose ps']
+	});
+
+	// And an explicit empty list is honoured — that is a real intent.
+	const cleared = planPolicyUpdate(base, { deny: [] });
+	assert.ok(cleared.ok);
+	assert.deepEqual(cleared.policy.deny, []);
+	assert.deepEqual(cleared.policy.allowlist, ['docker compose ps']);
+});
+
+test('a composed policy is normalised on the way out', () => {
+	const result = planPolicyUpdate(DEFAULT_POLICY, {
+		mode: 'nope' as never,
+		deny: ['  a  ', 'a']
+	});
+	assert.ok(result.ok);
+	assert.equal(result.policy.mode, 'smart');
+	assert.deepEqual(result.policy.deny, ['a']);
+});
+
+/** Manual mode is the one that leaves this UI unable to answer its own prompts. */
+test('manual mode is flagged as stranding the web UI', () => {
+	assert.equal(modeStrandsWebUi('manual'), true);
+	assert.equal(modeStrandsWebUi('smart'), false);
+	assert.equal(modeStrandsWebUi('off'), false);
+});

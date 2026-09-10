@@ -31,6 +31,7 @@
 	let shortcutsOpen = $state(false);
 	let themeOpen = $state(false);
 	let settingsOpen = $state(false);
+	let approvalsOpen = $state(false);
 	let narrow = $state(false);
 	/** The sidebar instance, so the settings panel can switch its list. */
 	let sidebar = $state<{ showList: (v: 'live' | 'archived' | 'trash') => void } | null>(null);
@@ -60,6 +61,7 @@
 		providers: lazyComponent(() => import('$lib/components/ProvidersPanel.svelte')),
 		theme: lazyComponent(() => import('$lib/components/ThemePanel.svelte')),
 		settings: lazyComponent(() => import('$lib/components/SettingsPanel.svelte')),
+		approvals: lazyComponent(() => import('$lib/components/ApprovalsPanel.svelte')),
 		shortcuts: lazyComponent(() => import('$lib/components/Shortcuts.svelte'))
 	};
 
@@ -77,6 +79,7 @@
 		if (themeOpen) reveal(panels.theme);
 		if (shortcutsOpen) reveal(panels.shortcuts);
 		if (settingsOpen) reveal(panels.settings);
+		if (approvalsOpen) reveal(panels.approvals);
 	});
 
 	const SUGGESTIONS = [
@@ -553,6 +556,10 @@
 	{@const Shortcuts = panels.shortcuts.current}
 	<Shortcuts open={shortcutsOpen} onclose={() => (shortcutsOpen = false)} />
 {/if}
+{#if panels.approvals.current}
+	{@const ApprovalsPanel = panels.approvals.current}
+	<ApprovalsPanel open={approvalsOpen} onclose={() => (approvalsOpen = false)} />
+{/if}
 {#if panels.settings.current}
 	{@const SettingsPanel = panels.settings.current}
 	<SettingsPanel
@@ -565,6 +572,7 @@
 		onopenAgents={() => (agentsOpen = true)}
 		onopenTheme={() => (themeOpen = true)}
 		onopenShortcuts={() => (shortcutsOpen = true)}
+		onopenApprovals={() => (approvalsOpen = true)}
 		onshowArchived={() => sidebar?.showList('archived')}
 		onshowTrash={() => sidebar?.showList('trash')}
 	/>

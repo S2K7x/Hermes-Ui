@@ -17,6 +17,7 @@ const DIR = new URL('../src/lib/components/', import.meta.url);
 /** Components that open as a full settings dialog, and must reuse the shell. */
 const PANELS = [
 	'AgentsPanel.svelte',
+	'ApprovalsPanel.svelte',
 	'JobsPanel.svelte',
 	'ProvidersPanel.svelte',
 	'SettingsPanel.svelte',
@@ -100,7 +101,8 @@ test('every lazily loaded panel is rendered only once its chunk has landed', asy
 		'providers',
 		'theme',
 		'shortcuts',
-		'settings'
+		'settings',
+		'approvals'
 	]) {
 		assert.ok(
 			source.includes(`{#if panels.${key}.current}`),

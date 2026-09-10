@@ -90,3 +90,96 @@ export function firstPendingApproval(
 	}
 	return null;
 }
+
+// ---------------------------------------------------------------------------
+// The approval policy — what CAN be changed from here
+// ---------------------------------------------------------------------------
+
+/**
+ * Three levers exist, and they do not behave the same way, which is the whole
+ * reason this section is careful. Measured against Hermes 0.20.0:
+ *
+ * - **`approvals.mode`** and **`approvals.deny`** are read through
+ *   `_get_approval_config()` → `load_config_readonly()`, whose cache is keyed
+ *   on the config file's `(mtime_ns, size)`. Writing the file invalidates it,
+ *   so both take effect on the **next command** — no restart.
+ * - **`command_allowlist`** does not. `_command_matches_permanent_allowlist()`
+ *   reads `_permanent_approved`, a module-level set filled once by
+ *   `load_permanent_allowlist()` at import. A new entry only counts after
+ *   `systemctl --user restart hermes-gateway`.
+ *
+ * Saying "changes take effect immediately" would be two-thirds true, which is
+ * the worst kind.
+ */
+export const APPROVAL_MODES = ['smart', 'manual', 'off'] as const;
+export type ApprovalMode = (typeof APPROVAL_MODES)[number];
+
+export interface ApprovalPolicy {
+	mode: ApprovalMode;
+	/** fnmatch globs blocked unconditionally — before any bypass. */
+	deny: string[];
+	/** Permanently approved commands or dangerous-pattern keys. */
+	allowlist: string[];
+}
+
+/** Upstream's own default when the key is missing. */
+export const DEFAULT_POLICY: ApprovalPolicy = { mode: 'smart', deny: [], allowlist: [] };
+
+const cleanList = (raw: unknown, max: number): string[] => {
+	if (!Array.isArray(raw)) return [];
+	const out: string[] = [];
+	for (const entry of raw) {
+		if (typeof entry !== 'string') continue;
+		const value = entry.trim();
+		// A blank rule matches nothing upstream but would read as a real rule
+		// here; a duplicate is noise the user did not write twice on purpose.
+		if (!value || out.includes(value)) continue;
+		out.push(value.slice(0, 400));
+		if (out.length >= max) break;
+	}
+	return out;
+};
+
+/** Read a policy out of whatever the dashboard's config happens to contain. */
+export function normalizeApprovalPolicy(approvals: unknown, allowlist: unknown): ApprovalPolicy {
+	const block = (approvals && typeof approvals === 'object' ? approvals : {}) as Record<
+		string,
+		unknown
+	>;
+	const mode = APPROVAL_MODES.find((m) => m === block.mode) ?? DEFAULT_POLICY.mode;
+	return { mode, deny: cleanList(block.deny, 100), allowlist: cleanList(allowlist, 200) };
+}
+
+export type PolicyBaseline = ApprovalPolicy | null;
+
+export type PolicyWriteResult =
+	| { ok: true; policy: ApprovalPolicy }
+	| { ok: false; reason: 'unloaded' };
+
+/**
+ * Compose a change, or refuse when there is nothing trustworthy to build on.
+ *
+ * Same shape and same reason as `planThemeUpdate` (point 19) and the prompt
+ * library (point 15), with a sharper edge: the dashboard's `PUT /api/config`
+ * deep-merges, and a deep merge **replaces a list wholesale** rather than
+ * merging it element by element. So sending `deny: []` because the read failed
+ * would not "fall back to the defaults" — it would erase every deny rule the
+ * user wrote, silently, and those rules are the ones that block a command even
+ * under `--yolo`.
+ */
+export function planPolicyUpdate(
+	base: PolicyBaseline,
+	patch: Partial<ApprovalPolicy>
+): PolicyWriteResult {
+	if (base === null) return { ok: false, reason: 'unloaded' };
+	return {
+		ok: true,
+		policy: normalizeApprovalPolicy(
+			{ mode: patch.mode ?? base.mode, deny: patch.deny ?? base.deny },
+			patch.allowlist ?? base.allowlist
+		)
+	};
+}
+
+/** True when this mode leaves the web UI unable to answer its own prompts. */
+export const modeStrandsWebUi = (mode: ApprovalMode): boolean => mode === 'manual';
