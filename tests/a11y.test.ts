@@ -392,6 +392,12 @@ test('the phone header keeps the conversation title', () => {
 	const phone = page.slice(page.indexOf('@media (max-width: 820px)'));
 	assert.match(phone, /\.head-actions \{[^}]*flex:\s*0 0 auto/);
 	assert.match(phone, /\.heading \{[^}]*min-width:\s*\d+px/);
+	// Five controls beside the title left it three characters wide. Apparence
+	// steps aside because it is also in the drawer's footer and in the palette;
+	// the conversation's name has nowhere else to be shown.
+	assert.match(phone, /\.icon\.theme \{[^}]*display:\s*none/);
+	assert.match(page, /class="icon theme"[\s\S]{0,120}aria-label="Apparence"/);
+	assert.match(page, /id: 'appearance'/);
 });
 
 /**

@@ -380,7 +380,13 @@
 				>
 				<AgentPicker onmanage={() => (agentsOpen = true)} />
 				<ModelPicker />
-				<button class="icon" onclick={() => (themeOpen = true)} aria-label="Apparence">◐</button>
+				<!-- Not on a phone: five controls beside the title left it three
+				     characters wide. Apparence is in the drawer's footer and in
+				     the ⌘K palette, both one tap away; the name of the
+				     conversation you are reading has nowhere else to go. -->
+				<button class="icon theme" onclick={() => (themeOpen = true)} aria-label="Apparence"
+					>◐</button
+				>
 			</div>
 		</header>
 
@@ -860,9 +866,6 @@
 			padding: 12px 14px 8px;
 			padding-top: max(12px, env(safe-area-inset-top));
 		}
-		h1 {
-			font-size: 19px;
-		}
 		.burger {
 			display: block;
 			min-width: 44px;
@@ -883,6 +886,12 @@
 		.heading {
 			flex: 1 1 auto;
 			min-width: 60px;
+		}
+		.icon.theme {
+			display: none;
+		}
+		h1 {
+			font-size: 17px;
 		}
 		.thread {
 			padding: 10px 12px 8px;
