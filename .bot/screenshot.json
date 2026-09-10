@@ -1,5 +1,5 @@
 {
 	"path": "/",
-	"js": "(async()=>{const w=m=>new Promise(r=>setTimeout(r,m));await w(1600);const b=[...document.querySelectorAll(\"button\")].find(x=>(x.textContent||\"\").trim().startsWith(\"Réglages\"));if(b)b.click();await w(2000);return b?\"ok\":\"no\"})()",
-	"caption": "Le pied de la sidebar portait sept boutons emoji enroules sur trois rangees inegales. C'est maintenant une seule porte, derriere laquelle tout est range en trois familles : conversations, agent, application. Et plus un seul emoji dans l'interface — une quarantaine de traces sur une grille 24x24, en currentColor, donc a la couleur du controle et de la palette active. Un emoji est une police : chaque plateforme dessine le sien, dans des couleurs sur lesquelles le theme n'a pas la main."
+	"js": "(async()=>{const w=m=>new Promise(r=>setTimeout(r,m));await w(1500);const b=[...document.querySelectorAll(\"button\")].find(x=>(x.textContent||\"\").trim().startsWith(\"Réglages\"));if(b)b.click();await w(1400);const e=[...document.querySelectorAll(\".entry\")].find(x=>(x.textContent||\"\").includes(\"Approbations\"));if(e)e.click();await w(2200);return e?\"ok\":\"no\"})()",
+	"caption": "Le panneau Approbations : le mode (intelligent / manuel / desactive), les motifs toujours refuses et les commandes toujours autorisees. Trois leviers qui ne se comportent pas pareil — le mode et les refus sont repris a la commande suivante, la liste d'autorisations demande un redemarrage du gateway — et le panneau le dit reglage par reglage plutot que de promettre \"immediat\" aux deux tiers."
 }
