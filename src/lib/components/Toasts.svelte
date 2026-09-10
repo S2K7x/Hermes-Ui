@@ -49,7 +49,7 @@
 		gap: 9px;
 		padding: 10px 12px;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
+		box-shadow: var(--shadow-float);
 		border-radius: var(--radius-card);
 		box-shadow: var(--shadow);
 		font-size: 13.5px;
@@ -74,7 +74,7 @@
 	.action {
 		flex: 0 0 auto;
 		padding: 2px 9px;
-		border: 1px solid var(--border);
+		box-shadow: var(--shadow-float);
 		border-radius: 6px;
 		font-size: 12.5px;
 		color: var(--accent);

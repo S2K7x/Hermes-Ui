@@ -84,17 +84,22 @@
 <style>
 	.msg {
 		display: flex;
-		margin: 0 0 22px;
+		margin: 0 0 12px;
 	}
 	.msg.user {
 		justify-content: flex-end;
 	}
+	/* Both bubbles are cards now: the thread sits on the sunken ground and
+	   nothing is outlined, so a message is told apart from the page by its
+	   fill and its lift. The clipped corner is what still says who is
+	   speaking once both of them are cards. */
 	.bubble {
 		max-width: min(78%, 640px);
-		padding: 11px 17px;
+		padding: 13px 19px;
 		background: var(--user-bubble);
 		color: var(--user-ink);
-		border-radius: var(--radius-bubble) var(--radius-bubble) 6px var(--radius-bubble);
+		border-radius: var(--radius-bubble) var(--radius-bubble) 8px var(--radius-bubble);
+		box-shadow: var(--shadow-card);
 	}
 	.user-text {
 		white-space: pre-wrap;
@@ -112,14 +117,15 @@
 		border-radius: var(--radius-card);
 		object-fit: cover;
 	}
-	/* The assistant answers in a bubble too, so the white cards a reply
-	   contains (code blocks, tables) read as cards rather than as the page. */
+	/* The assistant answers in a card of its own, so the blocks a reply
+	   contains (code, tables) read as insets rather than as the page. */
 	.assistant {
 		width: 100%;
 		min-width: 0;
-		padding: 12px 16px;
-		background: var(--assistant-bubble);
-		border-radius: var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) 6px;
+		padding: 16px 20px;
+		background: var(--bg-raised);
+		border-radius: var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) 8px;
+		box-shadow: var(--shadow-card);
 	}
 	/* Blinking caret after the last rendered character, like Claude's. The
 	   markdown re-render is debounced, so the caret is what tells the user
@@ -154,17 +160,17 @@
 	@keyframes flash {
 		0%,
 		35% {
-			box-shadow: 0 0 0 2px var(--focus);
+			box-shadow: var(--shadow-card), 0 0 0 2px var(--focus);
 		}
 		100% {
-			box-shadow: 0 0 0 2px transparent;
+			box-shadow: var(--shadow-card), 0 0 0 2px transparent;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.msg.flash .bubble,
 		.msg.flash .assistant {
 			animation-duration: 0.01s;
-			box-shadow: 0 0 0 2px var(--focus);
+			box-shadow: var(--shadow-card), 0 0 0 2px var(--focus);
 		}
 	}
 
@@ -173,17 +179,18 @@
 		align-items: center;
 		gap: 10px;
 		flex-wrap: wrap;
-		margin-top: 8px;
-		padding: 9px 14px;
+		margin-top: 10px;
+		padding: 11px 16px;
 		border-radius: var(--radius-card);
-		background: var(--bg-raised);
+		background: var(--bg-sunken);
 		color: var(--text-muted);
 		font-size: 13px;
 	}
 	.detached button {
-		padding: 5px 12px;
-		border: 1px solid var(--border);
+		padding: 7px 14px;
 		border-radius: var(--radius-pill);
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-card);
 		font-size: 12.5px;
 		color: var(--text);
 	}
@@ -191,8 +198,8 @@
 		background: var(--bg-hover);
 	}
 	.error {
-		margin-top: 8px;
-		padding: 9px 14px;
+		margin-top: 10px;
+		padding: 11px 16px;
 		border-radius: var(--radius-card);
 		background: var(--danger-soft);
 		color: var(--danger);
@@ -200,8 +207,8 @@
 	}
 	.actions {
 		display: flex;
-		gap: 4px;
-		margin-top: 8px;
+		gap: 6px;
+		margin-top: 12px;
 		opacity: 0;
 		transition: opacity 0.15s;
 	}
@@ -215,10 +222,10 @@
 		}
 	}
 	.actions button {
-		padding: 4px 12px;
+		padding: 6px 14px;
 		font-size: 12px;
 		color: var(--text-faint);
-		border: 1px solid var(--border-soft);
+		background: var(--bg-sunken);
 		border-radius: var(--radius-pill);
 	}
 	.actions button:hover {

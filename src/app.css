@@ -35,11 +35,14 @@
 	--code-bg: #191614;
 	--user-bubble: #ae5d23;
 	--user-ink: #ffffff;
+	--hero-2: #5d6d42;
 	--assistant-bubble: #2b2723;
 	--rail: #312d2a;
 	--rail-ink: #ffffff;
 	--rail-hover: #4e4a48;
+	--shadow-card: 0 2px 12px rgba(0, 0, 0, 0.34);
 	--shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+	--shadow-float: 0 14px 36px rgba(0, 0, 0, 0.55);
 	--scrim: rgba(0, 0, 0, 0.58);
 }
 
@@ -66,23 +69,33 @@
 	--code-bg: #f5f1ea;
 	--user-bubble: #ab5c25;
 	--user-ink: #ffffff;
+	--hero-2: #5c6c41;
 	--assistant-bubble: #efe9e2;
 	--rail: #2e211b;
 	--rail-ink: #ffffff;
 	--rail-hover: #4b403b;
-	--shadow: 0 8px 28px rgba(60, 45, 35, 0.1);
+	--shadow-card: 0 4px 14px rgba(46, 33, 27, 0.07);
+	--shadow: 0 10px 30px rgba(46, 33, 27, 0.1);
+	--shadow-float: 0 14px 34px rgba(46, 33, 27, 0.16);
 	--scrim: rgba(44, 33, 27, 0.35);
 }
 
-/* Shapes: floating panels, soft cards, pill-shaped actions. */
+/* Shapes: floating panels, soft cards, pill-shaped actions.
+
+   Everything here is one notch rounder and one notch airier than it was. The
+   design this follows separates surfaces by elevation and empty space, never
+   by a line — so a card has to be visibly a card on its own, and at 14px a
+   radius reads as a rounded rectangle rather than as a soft object. */
 :root {
-	--radius-panel: 26px;
+	--radius-panel: 28px;
 	--radius-rail: 30px;
-	--radius-bubble: 20px;
-	--radius-card: 14px;
+	--radius-bubble: 22px;
+	--radius-card: 18px;
 	--radius-pill: 999px;
 	/* The gap that makes panels read as floating rather than as one surface. */
 	--gap-panel: 14px;
+	/* The gap between two cards inside a panel. Same job, one level down. */
+	--gap-card: 8px;
 	--rail-width: 64px;
 }
 
@@ -216,15 +229,16 @@ a {
 	font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
 	font-size: 0.88em;
 	background: var(--code-bg);
-	padding: 0.15em 0.38em;
-	border-radius: 6px;
+	padding: 0.15em 0.42em;
+	border-radius: 7px;
 }
-/* Blocks inside a message are cards in their own right, not flat insets. */
+/* Blocks inside a message are cards in their own right. A card already
+   sitting on a card cannot be outlined without drawing a box in a box, so it
+   is set apart by its fill and its radius instead. */
 .md pre {
 	margin: 0 0 0.9em;
 	padding: 0;
-	background: var(--bg-raised);
-	border: 1px solid var(--border-soft);
+	background: var(--code-bg);
 	border-radius: var(--radius-card);
 	overflow: hidden;
 }
@@ -243,9 +257,9 @@ a {
 	border-collapse: collapse;
 	margin: 0 0 0.9em;
 	font-size: 0.92em;
-	background: var(--bg-raised);
-	border: 1px solid var(--border-soft);
+	background: var(--code-bg);
 	border-radius: var(--radius-card);
+	overflow-x: auto;
 }
 .md th,
 .md td {

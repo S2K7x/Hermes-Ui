@@ -1399,6 +1399,53 @@ halo est en `--focus`, donc lisible sur tous les préréglages (point 22).
 dans le clone où ce changement a été écrit ; ce qui est testé, c'est la
 fonction pure (`tests/search.test.ts`) et le fait que le balisage la branche.
 
+### 29. Le langage visuel : l'élévation remplace le trait
+
+L'app suivait une maquette d'affiches ; elle en suit maintenant la grammaire
+entière. Une seule règle commande tout le reste : **rien n'est entouré d'une
+ligne.** Une carte se distingue de la page parce qu'elle est plus claire
+qu'elle et posée dessus, jamais parce qu'un `1px solid` en dessine le bord.
+
+Ce que ça implique, et qu'il ne faut pas défaire :
+
+- **Le fil est le fond creusé, pas la surface.** `main` est passé en
+  `--bg-sunken` : sans ça une carte en `--bg-raised` n'aurait nulle part d'où
+  se lever. C'est le renversement dont tout le reste découle — une bulle, une
+  ligne de sidebar, un panneau flottant sont tous des surfaces **plus claires**
+  que ce qui les porte.
+- **Trois élévations, pas une.** `--shadow-card` (une carte au repos),
+  `--shadow` (un panneau) et `--shadow-float` (ce qui survole les deux : le
+  composeur, un menu surgissant, le bouton d'envoi). Elles sont **teintées avec
+  la tonalité profonde de la palette** et non en noir neutre, pour qu'une ombre
+  appartienne à son préréglage au lieu de le griser — d'où `rgba()` dans
+  `theme.ts`. `tests/theme.test.ts` échoue si deux des trois niveaux
+  redeviennent identiques : deux ombres égales aplatissent toute la hiérarchie
+  sans que rien ne casse visiblement.
+- **La carte d'accueil est le seul aplat saturé de l'app**, et elle porte du
+  texte blanc sur un **dégradé**. Les deux extrémités doivent donc tenir ce
+  texte, pas seulement celle que l'œil regarde : ce sont `--user-bubble` et
+  `--hero-2`, c'est-à-dire les deux accents passés par `ensureContrast`, la
+  fonction qui les assombrit jusqu'à ce que le blanc passe 4,5:1. Un dégradé
+  composé autrement — vers `--rail`, vers un accent brut — n'a pas cette
+  garantie. Les deux disques décoratifs sont tirés de `--user-ink` en
+  `color-mix`, jamais d'un blanc littéral.
+- **Les listes s'ouvrent par une pastille ronde.** Une ligne de sidebar porte
+  l'emoji de son agent ou, à défaut, sa propre initiale ; une étape d'outil
+  porte son icône dans un cercle. C'est ce qui remplace le liseré accentué de
+  la ligne active — un liseré est un trait.
+- **Les contrôles secondaires sont des chips ronds** (entête, composeur), et
+  **l'action principale est un cercle plein** : le bouton d'envoi, et son
+  pendant « Nouvelle discussion » dans la colonne.
+- Les rayons ont pris un cran (`--radius-card` 14 → 18, `--radius-bubble`
+  20 → 22, `--radius-panel` 26 → 28) et `--gap-card` dit l'écart entre deux
+  cartes d'un même panneau, comme `--gap-panel` le dit entre deux panneaux.
+
+Ce qui n'a **pas** changé : aucune couleur. Les seize préréglages, les deux
+accents choisis et toute la dérivation `color-mix` du point 19 sont intacts —
+seules trois ombres et un second ton de dégradé s'y ajoutent, tous dérivés des
+couleurs déjà là. Une nouvelle couleur passe toujours par un token produit par
+`themeVariables()`, jamais par un littéral dans un composant.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |

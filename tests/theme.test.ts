@@ -11,6 +11,7 @@ import {
 	ensureContrast,
 	ensureVisible,
 	luminance,
+	rgba,
 	mixHex,
 	normalizeHex,
 	normalizeTheme,
@@ -249,6 +250,49 @@ test('white is readable on the user bubble whatever accent is chosen', () => {
 			);
 		}
 	}
+});
+
+/**
+ * The welcome card is the one saturated surface in the app, and it carries
+ * white text across a gradient rather than over a flat fill — so both ends
+ * have to hold that text, not just the one the eye lands on first. Both are
+ * accents put through `ensureContrast`, which is exactly the function that
+ * makes that true; this is the test that says so out loud.
+ */
+test('white is readable at both ends of the welcome gradient', () => {
+	for (const preset of PRESETS) {
+		for (const mode of ['dark', 'light'] as const) {
+			const vars = themeVariables({ preset: preset.id, mode });
+			for (const token of ['--user-bubble', '--hero-2']) {
+				const ratio = contrastRatio(vars[token], vars['--user-ink']);
+				assert.ok(
+					ratio >= 4.4,
+					`${preset.id}/${mode} ${token} = ${vars[token]} is ${ratio.toFixed(2)}:1 on white`
+				);
+			}
+		}
+	}
+});
+
+/**
+ * This design draws no strokes: a card is told apart from the page by being
+ * lifted off it. Three levels, and they must actually differ — two identical
+ * shadows would collapse the whole hierarchy into one plane without anything
+ * failing.
+ */
+test('the three elevations are distinct, in both modes', () => {
+	for (const mode of ['dark', 'light'] as const) {
+		const vars = themeVariables({ mode });
+		const levels = [vars['--shadow-card'], vars['--shadow'], vars['--shadow-float']];
+		for (const level of levels) assert.match(level, /^0 \d+px \d+px rgba\(/, mode);
+		assert.equal(new Set(levels).size, 3, `${mode}: the three levels must differ`);
+	}
+});
+
+test('rgba renders a channel triplet an alpha can be hung on', () => {
+	assert.equal(rgba('#000000', 0.5), 'rgba(0, 0, 0, 0.5)');
+	assert.equal(rgba('#ffffff', 1), 'rgba(255, 255, 255, 1)');
+	assert.equal(rgba('#ee7c2b', 0.34), 'rgba(238, 124, 43, 0.34)');
 });
 
 test('themeColor is the page background, which is what the status bar shows', () => {

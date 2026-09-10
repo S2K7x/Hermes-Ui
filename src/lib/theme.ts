@@ -598,6 +598,12 @@ const linear = (c: number) => {
 	return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
 };
 
+/** `#rrggbb` at an alpha, for a shadow that is a colour rather than a grey. */
+export function rgba(hex: string, alpha: number): string {
+	const [r, g, b] = channels(hex);
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /** WCAG relative luminance, 0 (black) … 1 (white). */
 export function luminance(hex: string): number {
 	const [r, g, b] = channels(hex);
@@ -731,6 +737,10 @@ export function themeVariables(raw: unknown): Record<string, string> {
 	// anchor everything is deepened toward either way.
 	const rail = dark ? mixHex(p.surface, p.text, 0.07) : p.rail;
 	const railInk = readableInk(rail);
+	// What a shadow is made of. A dark page has nothing darker than black to
+	// cast with; a pale one casts in its own deep tone, which is what keeps a
+	// warm palette's shadows warm and a cool one's cool.
+	const cast = dark ? '#000000' : p.rail;
 
 	return {
 		'--bg': p.bg,
@@ -759,12 +769,26 @@ export function themeVariables(raw: unknown): Record<string, string> {
 		// requires — see `ensureContrast`.
 		'--user-bubble': ensureContrast(p.accent, '#ffffff', p.rail),
 		'--user-ink': '#ffffff',
+		// The far end of the welcome card's gradient. It is the *second* accent
+		// put through the same deepening, which is what lets that card run
+		// between two real hues instead of one: white is guaranteed readable at
+		// both ends, because both ends are colours `ensureContrast` has already
+		// walked down until it was.
+		'--hero-2': ensureContrast(p.accent2, '#ffffff', p.rail),
 		'--assistant-bubble': mix(p.surface, p.text, step.bubble),
 		'--rail': rail,
 		'--rail-ink': railInk,
 		'--rail-hover': mix(rail, railInk, 14),
-		'--shadow': dark ? '0 8px 28px rgba(0, 0, 0, 0.45)' : '0 8px 28px rgba(60, 45, 35, 0.1)',
-		'--scrim': dark ? 'rgba(0, 0, 0, 0.58)' : 'rgba(44, 33, 27, 0.35)'
+		// Elevation is what separates a card from the page here: this design
+		// draws no strokes, so the shadow is the edge. Three levels — a resting
+		// card, a panel, and the things that hover over both (the composer, a
+		// popup, the send button) — and all three are cast in the palette's own
+		// deepest tone rather than in neutral black, so a shadow belongs to its
+		// preset instead of greying it.
+		'--shadow-card': dark ? `0 2px 12px ${rgba(cast, 0.34)}` : `0 4px 14px ${rgba(cast, 0.07)}`,
+		'--shadow': dark ? `0 8px 28px ${rgba(cast, 0.45)}` : `0 10px 30px ${rgba(cast, 0.1)}`,
+		'--shadow-float': dark ? `0 14px 36px ${rgba(cast, 0.55)}` : `0 14px 34px ${rgba(cast, 0.16)}`,
+		'--scrim': dark ? rgba(cast, 0.58) : rgba(p.rail, 0.35)
 	};
 }
 

@@ -94,9 +94,8 @@
 		display: flex;
 		flex-direction: column;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
 		border-radius: var(--radius-panel);
-		box-shadow: var(--shadow);
+		box-shadow: var(--shadow-float);
 		overflow: hidden;
 	}
 	/* The card takes the focus when it opens so the dialog is announced; the
@@ -111,13 +110,13 @@
 		display: flex;
 		align-items: baseline;
 		gap: 10px;
-		padding: 12px 16px;
-		border-bottom: 1px solid var(--border-soft);
+		padding: 18px 20px 10px;
 	}
 	h2 {
 		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
+		font-size: 18px;
+		font-weight: 700;
+		letter-spacing: -0.01em;
 	}
 	.sub {
 		flex: 1;
@@ -137,8 +136,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 12px 16px;
-		border-top: 1px solid var(--border-soft);
+		padding: 12px 20px 18px;
 	}
 
 	/* Phone: come up from the bottom edge instead of floating in the middle,
@@ -152,8 +150,24 @@
 			width: 100%;
 			max-height: 92dvh;
 			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-			border-bottom: none;
 			padding-bottom: env(safe-area-inset-bottom);
+		}
+		/* The grabber every bottom sheet wears: it says the surface came up
+		   from the edge, before anyone reads the title. Decorative, so it is
+		   drawn rather than added to the markup and the a11y tree. */
+		.panel::before {
+			content: '';
+			position: absolute;
+			top: 8px;
+			left: 50%;
+			transform: translateX(-50%);
+			width: 38px;
+			height: 4px;
+			border-radius: var(--radius-pill);
+			background: var(--border);
+		}
+		header {
+			padding-top: 22px;
 		}
 		/* Thumb-sized close target where a thumb is what taps it. */
 		.x {

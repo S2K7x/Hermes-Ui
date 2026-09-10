@@ -140,7 +140,7 @@
 		font-size: 11px;
 		color: var(--text-faint);
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
+		box-shadow: var(--shadow-card);
 		border-radius: 5px;
 		opacity: 0;
 		transition: opacity 0.15s;

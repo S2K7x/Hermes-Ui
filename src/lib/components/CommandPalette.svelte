@@ -192,30 +192,30 @@
 		display: flex;
 		flex-direction: column;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
 		border-radius: var(--radius-panel);
-		box-shadow: var(--shadow);
+		box-shadow: var(--shadow-float);
 		overflow: hidden;
 	}
 	input {
-		padding: 14px 16px;
-		background: none;
+		margin: 10px 10px 4px;
+		padding: 13px 16px;
+		background: var(--bg-sunken);
 		border: none;
-		border-bottom: 1px solid var(--border-soft);
+		border-radius: var(--radius-pill);
 		font-size: 15px;
 	}
 	.rows {
 		flex: 1;
 		overflow-y: auto;
-		padding: 6px;
+		padding: 6px 10px 10px;
 	}
 	.rows button {
 		display: flex;
 		align-items: baseline;
 		gap: 10px;
 		width: 100%;
-		padding: 8px 10px;
-		border-radius: 8px;
+		padding: 10px 13px;
+		border-radius: var(--radius-card);
 		text-align: left;
 	}
 	.rows button.sel {
@@ -262,8 +262,7 @@
 		font-size: 13px;
 	}
 	.foot {
-		padding: 7px 14px;
-		border-top: 1px solid var(--border-soft);
+		padding: 4px 18px 14px;
 		font-size: 11px;
 		color: var(--text-faint);
 	}
@@ -273,8 +272,7 @@
 		margin: 0 1px;
 		font-family: inherit;
 		font-size: 10.5px;
-		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: 5px;
 		background: var(--bg-sunken);
 	}
 

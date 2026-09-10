@@ -8,6 +8,9 @@
 	import { groupSessions, matchesQuery, relativeTime, sessionLabel, activityAt } from '$lib/sessions';
 	import type { HermesSession } from '$lib/types';
 
+	/** First letter of a conversation's name, for the round thumbnail. */
+	const initial = (label: string) => label.trim().charAt(0).toUpperCase() || '·';
+
 	interface Props {
 		open: boolean;
 		/**
@@ -220,19 +223,31 @@
 								onclick={() => pick(entry.id)}
 								title={draft ? `Brouillon : ${draft}` : (entry.preview ?? '')}
 							>
-								<span class="title">
-									{#if entry.parent_session_id}<span class="branch" title="branche">⑂</span>{/if}
-									{#if agent}<span
-											class="agent"
-											style="--agent: {agentColor(agent)}"
-											title="Agent : {agent.name}">{agent.emoji || '●'}</span
-										>{/if}
-									{sessionLabel(entry)}
+								<!-- The round thumbnail every row of this design opens with.
+								     A conversation has no picture, so it wears its agent's
+								     emoji or, failing that, its own first letter. -->
+								<span
+									class="ava"
+									class:agented={!!agent}
+									style={agent ? `--agent: ${agentColor(agent)}` : undefined}
+									aria-hidden="true">{agent ? agent.emoji || '●' : initial(sessionLabel(entry))}</span
+								>
+								<span class="txt">
+									<span class="title">
+										{#if entry.parent_session_id}<span class="branch" title="branche">⑂</span>{/if}
+										{sessionLabel(entry)}
+									</span>
+									<span class="sub">
+										<span class="when">{relativeTime(activityAt(entry))}</span>
+										{#if agent}<span class="agent" style="--agent: {agentColor(agent)}"
+												>· {agent.name}</span
+											>{/if}
+										<!-- A message typed here and never sent is invisible from
+										     any other conversation; this is the only thing that
+										     says so. -->
+										{#if draft}<span class="draft">· ✎ brouillon</span>{/if}
+									</span>
 								</span>
-								<!-- A message typed here and never sent is invisible from any
-								     other conversation; this is the only thing that says so. -->
-								{#if draft}<span class="draft" aria-hidden="true">✎</span>{/if}
-								<span class="when">{relativeTime(activityAt(entry))}</span>
 							</button>
 							<button
 								class="more"
@@ -344,8 +359,6 @@
 <style>
 	.agent {
 		color: var(--agent);
-		font-size: 11px;
-		margin-right: 1px;
 	}
 	/* A floating panel of its own, not a strip glued to the thread. When
 	   collapsed it becomes the dark icon rail — the first column of the
@@ -413,28 +426,38 @@
 		gap: 4px;
 		padding: 12px 12px 6px;
 	}
+	/* The primary action of the column, so it is filled rather than outlined —
+	   the same call as the round send button in the composer. */
 	.new {
 		flex: 1;
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 8px;
-		min-height: 44px;
-		padding: 9px 14px;
+		min-height: 46px;
+		padding: 10px 16px;
 		border-radius: var(--radius-pill);
-		border: 1px solid var(--border);
+		background: var(--accent);
+		color: var(--accent-ink);
+		box-shadow: var(--shadow-card);
 		font-size: 14px;
+		font-weight: 600;
 	}
 	.new:hover {
-		background: var(--bg-hover);
+		background: var(--accent);
+		box-shadow: var(--shadow-float);
 	}
 	.new span {
-		color: var(--accent);
 		font-size: 16px;
 	}
 	.icon-btn {
-		padding: 0 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		flex: 0 0 auto;
 		color: var(--text-faint);
-		border-radius: var(--radius-pill);
+		border-radius: 50%;
 	}
 	.icon-btn:hover {
 		background: var(--bg-hover);
@@ -444,60 +467,102 @@
 		display: none;
 	}
 	.search {
-		margin: 4px 12px 8px;
-		padding: 9px 14px;
+		margin: 6px 12px 8px;
+		padding: 11px 16px;
 		background: var(--bg-sunken);
-		border: 1px solid var(--border-soft);
+		border: none;
 		border-radius: var(--radius-pill);
 		font-size: 13px;
-	}
-	.search:focus {
-		border-color: var(--accent);
 	}
 	.list {
 		flex: 1;
 		overflow-y: auto;
-		padding: 0 6px 10px;
+		padding: 0 10px 10px;
 	}
 	.group {
-		padding: 12px 8px 4px;
+		padding: 14px 6px 6px;
 		font-size: 11px;
 		font-weight: 600;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.06em;
 		text-transform: uppercase;
 		color: var(--text-faint);
 	}
+	/* A row is a card: it rises off the column when it is hovered or open,
+	   rather than picking up a stripe. The stripe was a line, and this design
+	   has no lines. */
 	.row {
 		position: relative;
 		display: flex;
 		align-items: center;
+		margin-bottom: 3px;
 		border-radius: var(--radius-card);
-		/* Reserved so the selected row's stripe does not shift the text. */
-		border-left: 3px solid transparent;
 	}
 	.row:hover {
-		background: var(--bg-hover);
+		background: var(--bg-sunken);
 	}
 	.row.active {
 		background: var(--accent-soft);
-		border-left-color: var(--accent);
+		box-shadow: var(--shadow-card);
 	}
 	.entry {
 		flex: 1;
 		min-width: 0;
 		display: flex;
-		align-items: baseline;
-		gap: 8px;
-		padding: 8px 4px 8px 10px;
+		align-items: center;
+		gap: 10px;
+		padding: 9px 4px 9px 9px;
 		text-align: left;
 	}
-	.title {
+	.ava {
+		flex: 0 0 auto;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 34px;
+		border-radius: 50%;
+		background: var(--bg-hover);
+		color: var(--text-muted);
+		font-size: 13px;
+		font-weight: 700;
+		line-height: 1;
+	}
+	.ava.agented {
+		background: color-mix(in oklab, var(--bg-raised) 72%, var(--agent) 28%);
+		font-size: 15px;
+		font-weight: 400;
+	}
+	.row.active .ava {
+		background: var(--accent);
+		color: var(--accent-ink);
+	}
+	.row.active .ava.agented {
+		background: color-mix(in oklab, var(--bg-raised) 60%, var(--agent) 40%);
+	}
+	.txt {
 		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+	.title {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		font-size: 13.5px;
+		font-weight: 600;
+	}
+	.sub {
+		display: flex;
+		gap: 4px;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 11px;
+		color: var(--text-faint);
 	}
 	.branch {
 		color: var(--accent);
@@ -505,18 +570,15 @@
 	}
 	.when {
 		flex: 0 0 auto;
-		font-size: 11px;
-		color: var(--text-faint);
 	}
 	/* Accented rather than faint: an unsent message is the one thing in a row
 	   that is waiting on the user. */
 	.draft {
 		flex: 0 0 auto;
-		font-size: 11px;
-		line-height: 1;
 		color: var(--accent);
 	}
 	.more {
+		align-self: stretch;
 		padding: 6px 9px;
 		color: var(--text-faint);
 	}
@@ -536,11 +598,11 @@
 	}
 	.rename {
 		flex: 1;
-		margin: 4px;
-		padding: 5px 8px;
-		background: var(--bg);
+		margin: 5px;
+		padding: 8px 12px;
+		background: var(--bg-sunken);
 		border: 1px solid var(--accent);
-		border-radius: 6px;
+		border-radius: var(--radius-card);
 		font-size: 13.5px;
 	}
 	.menu {
@@ -551,11 +613,10 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 158px;
-		padding: 6px;
+		padding: 7px;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
 		border-radius: var(--radius-card);
-		box-shadow: var(--shadow);
+		box-shadow: var(--shadow-float);
 	}
 	.menu button {
 		padding: 9px 12px;
@@ -583,8 +644,10 @@
 		/* Four entries no longer fit on one line at the sidebar's width. */
 		flex-wrap: wrap;
 		gap: 4px;
-		padding: 7px 10px;
-		border-top: 1px solid var(--border-soft);
+		margin: 0 10px 10px;
+		padding: 8px 6px;
+		border-radius: var(--radius-card);
+		background: var(--bg-sunken);
 		font-size: 11.5px;
 	}
 	.archive-toggle,

@@ -101,10 +101,11 @@
 		display: flex;
 		align-items: center;
 		gap: 5px;
-		padding: 4px 10px;
+		padding: 7px 13px;
 		font-size: 12.5px;
 		color: var(--text-muted);
-		border: 1px solid var(--border-soft);
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-card);
 		border-radius: var(--radius-pill);
 		max-width: 190px;
 		overflow: hidden;
@@ -129,19 +130,18 @@
 		top: calc(100% + 6px);
 		z-index: 31;
 		width: min(340px, 88vw);
-		padding: 8px;
+		padding: 9px;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-card);
-		box-shadow: var(--shadow);
+		border-radius: var(--radius-panel);
+		box-shadow: var(--shadow-float);
 	}
 	.menu input {
 		width: 100%;
-		padding: 6px 9px;
+		padding: 9px 13px;
 		margin-bottom: 6px;
-		background: var(--bg);
-		border: 1px solid var(--border-soft);
-		border-radius: 10px;
+		background: var(--bg-sunken);
+		border: none;
+		border-radius: var(--radius-pill);
 		font-size: 13px;
 	}
 	.items {
@@ -154,8 +154,8 @@
 		display: flex;
 		justify-content: space-between;
 		gap: 10px;
-		padding: 6px 9px;
-		border-radius: 10px;
+		padding: 9px 12px;
+		border-radius: var(--radius-card);
 		text-align: left;
 		font-size: 13px;
 	}

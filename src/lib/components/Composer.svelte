@@ -400,53 +400,60 @@
 </div>
 
 <style>
+	/* The floating bar. It is the one control that is always on screen, so it
+	   is the one thing allowed to hover over the thread rather than sit in it:
+	   detached from the panel's edge, no stroke, and lifted by the deepest of
+	   the three elevations. */
 	.composer {
 		position: relative;
 		margin: 0 auto;
 		width: 100%;
 		max-width: 780px;
-		padding: 8px;
+		padding: 10px 10px 10px 14px;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-bubble);
-		box-shadow: var(--shadow);
+		border-radius: var(--radius-panel);
+		box-shadow: var(--shadow-float);
 	}
 	.composer.dragging {
-		border-color: var(--accent);
 		background: var(--accent-soft);
+		box-shadow: var(--shadow-float), 0 0 0 2px var(--accent);
 	}
 	/* The textarea has no ring of its own — a box inside a box — so the box
-	   itself is what says the keyboard is writing here. */
+	   itself is what says the keyboard is writing here. With the stroke gone
+	   that is a second shadow rather than a border colour. */
 	.composer:focus-within {
-		border-color: var(--focus);
+		box-shadow: var(--shadow-float), 0 0 0 2px var(--focus);
 	}
 	.row {
 		display: flex;
 		align-items: flex-end;
-		gap: 6px;
+		gap: 8px;
 	}
 	textarea {
 		flex: 1;
-		min-height: 26px;
+		min-height: 32px;
 		max-height: 260px;
-		padding: 6px 4px;
+		padding: 9px 4px;
 		background: none;
 		border: none;
 		outline: none;
 		resize: none;
 		line-height: 1.5;
 	}
+	/* Round chips, like every secondary action in this design: a filled circle
+	   rather than a bare glyph, so the row reads as a row of controls. */
 	.attach {
 		flex: 0 0 auto;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 38px;
-		height: 38px;
+		width: 40px;
+		height: 40px;
 		border-radius: 50%;
+		background: var(--bg-sunken);
 		cursor: pointer;
 		font-size: 16px;
-		opacity: 0.65;
+		opacity: 0.75;
 	}
 	.attach:hover {
 		opacity: 1;
@@ -473,26 +480,42 @@
 		opacity: 1;
 		background: var(--bg-hover);
 	}
-	/* Sending is the positive action of this screen, so it wears the second
-	   accent rather than the first. */
+	/* The one prominent circle of the screen — the design's primary button,
+	   sitting proud of the bar it belongs to. Sending is the positive action
+	   here, so it wears the second accent rather than the first. */
 	.send {
 		flex: 0 0 auto;
-		width: 38px;
-		height: 38px;
+		width: 46px;
+		height: 46px;
 		border-radius: 50%;
 		background: var(--accent-2);
 		color: var(--accent-2-ink);
-		font-size: 16px;
+		box-shadow: var(--shadow-card);
+		font-size: 18px;
 		line-height: 1;
+		transition: transform 0.14s ease;
+	}
+	.send:not(:disabled):hover {
+		transform: translateY(-1px);
 	}
 	.send:disabled {
 		opacity: 0.35;
+		box-shadow: none;
 		cursor: default;
 	}
 	.send.stop {
-		background: var(--bg-hover);
+		background: var(--bg-sunken);
 		color: var(--text-muted);
-		font-size: 11px;
+		box-shadow: none;
+		font-size: 12px;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.send {
+			transition: none;
+		}
+		.send:not(:disabled):hover {
+			transform: none;
+		}
 	}
 	.attachments {
 		display: flex;
@@ -508,7 +531,7 @@
 		height: 58px;
 		object-fit: cover;
 		border-radius: var(--radius-card);
-		border: 1px solid var(--border);
+		box-shadow: var(--shadow-card);
 	}
 	.att button {
 		position: absolute;
@@ -518,8 +541,8 @@
 		height: 19px;
 		font-size: 10px;
 		border-radius: 50%;
-		background: var(--bg);
-		border: 1px solid var(--border);
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-card);
 		color: var(--text-muted);
 	}
 	.notice {
@@ -539,18 +562,17 @@
 		flex-direction: column;
 		max-height: 260px;
 		overflow-y: auto;
-		padding: 6px;
+		padding: 8px;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-card);
-		box-shadow: var(--shadow);
+		border-radius: var(--radius-panel);
+		box-shadow: var(--shadow-float);
 	}
 	.palette button {
 		display: flex;
 		gap: 10px;
 		align-items: baseline;
-		padding: 9px 12px;
-		border-radius: 10px;
+		padding: 10px 13px;
+		border-radius: var(--radius-card);
 		text-align: left;
 	}
 	.palette button.sel,
@@ -590,9 +612,9 @@
 	}
 	.p-filter {
 		margin: 4px 6px 2px;
-		padding: 8px 12px;
+		padding: 9px 14px;
 		background: var(--bg-sunken);
-		border: 1px solid var(--border-soft);
+		border: none;
 		border-radius: var(--radius-pill);
 		font-size: 13px;
 	}
@@ -647,6 +669,26 @@
 		width: 100%;
 		font-size: 13px;
 		color: var(--accent);
+	}
+	/* A phone has ~250px of usable width in this bar once the three round
+	   controls are out; giving them desktop sizes there pushes the placeholder
+	   onto a second line and makes an empty composer two rows tall. */
+	@media (max-width: 820px) {
+		.composer {
+			padding: 8px 8px 8px 12px;
+		}
+		.attach {
+			width: 36px;
+			height: 36px;
+		}
+		.send {
+			width: 42px;
+			height: 42px;
+			font-size: 17px;
+		}
+		textarea {
+			font-size: 14px;
+		}
 	}
 	.sk-name {
 		flex: 0 0 auto;

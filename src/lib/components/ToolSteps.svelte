@@ -69,22 +69,23 @@
 {/if}
 
 <style>
+	/* An inset inside the reply's card, so it is set apart by being sunken
+	   rather than by an outline. */
 	.timeline {
-		margin: 0 0 10px;
-		border: 1px solid var(--border-soft);
+		margin: 0 0 12px;
 		border-radius: var(--radius-card);
 		background: var(--bg-sunken);
 		font-size: 13px;
 	}
 	.timeline.active {
-		border-color: var(--accent-soft);
+		box-shadow: inset 0 0 0 1.5px var(--accent-soft);
 	}
 	.head {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		width: 100%;
-		padding: 7px 11px;
+		padding: 10px 14px;
 		color: var(--text-muted);
 		text-align: left;
 	}
@@ -120,27 +121,37 @@
 		}
 	}
 	.body {
-		padding: 2px 11px 10px;
+		padding: 2px 14px 12px;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 10px;
 	}
 	.step,
 	.reasoning {
 		display: flex;
-		gap: 9px;
+		gap: 10px;
 		align-items: flex-start;
 	}
+	/* The round icon chip every list row of this design opens with. */
 	.icon {
 		flex: 0 0 auto;
-		line-height: 1.5;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		background: var(--bg-raised);
+		font-size: 13px;
+		line-height: 1;
 	}
 	.detail {
 		min-width: 0;
 		flex: 1;
+		padding-top: 3px;
 	}
 	.name {
-		font-weight: 500;
+		font-weight: 600;
 		color: var(--text);
 	}
 	.badge {

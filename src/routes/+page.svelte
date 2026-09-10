@@ -399,16 +399,35 @@
 					<p class="status">Chargement…</p>
 				{:else if chat.messages.length === 0}
 					<div class="welcome">
-						<h2>{activeAgent ? agentLabel(activeAgent) : 'Yadai'}</h2>
-						<p>
-							{#if activeAgent}
-								{activeAgent.role || 'Agent personnalisé.'}
-							{:else}
-								Agent complet — terminal, navigateur, mémoire, skills et serveurs MCP — exécuté sur
-								le Raspberry&nbsp;Pi.
+						<!-- The hero card: the one saturated surface of the app, carrying
+						     who you are about to talk to. Its gradient runs from the user
+						     bubble toward the palette's deepest tone, which is the one
+						     range where white text is guaranteed readable at both ends
+						     (`ensureContrast` already deepened it for exactly that). -->
+						<div class="hero">
+							<span class="orb orb-a"></span>
+							<span class="orb orb-b"></span>
+							<h2>{activeAgent ? agentLabel(activeAgent) : 'Yadai'}</h2>
+							<p>
+								{#if activeAgent}
+									{activeAgent.role || 'Agent personnalisé.'}
+								{:else}
+									Agent complet — terminal, navigateur, mémoire, skills et serveurs MCP —
+									exécuté sur le Raspberry&nbsp;Pi.
+								{/if}
+							</p>
+							{#if chat.toolCount > 0}
+								<p class="hero-meta">
+									{chat.toolCount} outils
+									{#if chat.mcpTools.length}· {chat.mcpTools.length} via MCP{/if}
+									{#if chat.skills.length}· {chat.skills.length} skills{/if}
+								</p>
 							{/if}
-						</p>
+						</div>
 
+						<!-- The sheet rides up over the hero, the way the content card does
+						     on the screen this design follows. -->
+						<div class="sheet">
 						{#if agents.items.length > 0}
 							<div class="who">
 								{#each agents.items as agent (agent.id)}
@@ -438,18 +457,13 @@
 							{/if}
 						{/if}
 
+						<p class="lead">Pour commencer</p>
 						<div class="chips">
 							{#each SUGGESTIONS as suggestion (suggestion)}
 								<button onclick={() => chat.send(suggestion)}>{suggestion}</button>
 							{/each}
 						</div>
-						{#if chat.toolCount > 0}
-							<p class="meta">
-								{chat.toolCount} outils
-								{#if chat.mcpTools.length}· {chat.mcpTools.length} via MCP{/if}
-								{#if chat.skills.length}· {chat.skills.length} skills{/if}
-							</p>
-						{/if}
+						</div>
 					</div>
 				{/if}
 
@@ -532,23 +546,29 @@
 		padding-bottom: max(var(--gap-panel), env(safe-area-inset-bottom));
 		overflow: hidden;
 	}
+	/* The thread's ground is the *sunken* surface, not the raised one. That is
+	   the whole move of this design: cards are told apart from the page by
+	   being lighter and lifted, never by a line drawn around them — so the
+	   page has to be the darker of the two for a card to have anywhere to
+	   rise from. */
 	main {
 		position: relative;
 		flex: 1;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		background: var(--bg-raised);
+		background: var(--bg-sunken);
 		border-radius: var(--radius-panel);
 		box-shadow: var(--shadow);
 		overflow: hidden;
 	}
+	/* No bar and no rule: a big title standing on the page, with the controls
+	   trailing it. The divider was the last stroke in the layout. */
 	header {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 10px 18px;
-		border-bottom: 1px solid var(--border-soft);
+		padding: 16px 22px 10px;
 	}
 	.heading {
 		flex: 1;
@@ -559,8 +579,9 @@
 	}
 	h1 {
 		margin: 0;
-		font-size: 15px;
-		font-weight: 500;
+		font-size: 21px;
+		font-weight: 700;
+		letter-spacing: -0.01em;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -575,15 +596,23 @@
 		align-items: center;
 		gap: 6px;
 	}
+	/* Round chips, the same shape the composer's secondary actions wear. */
 	.icon {
-		padding: 4px 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		background: var(--bg-raised);
 		color: var(--text-muted);
-		border-radius: var(--radius-pill);
+		border-radius: 50%;
+		box-shadow: var(--shadow-card);
 		font-size: 15px;
-		line-height: 1.2;
+		line-height: 1;
 	}
 	.icon:hover {
 		background: var(--bg-hover);
+		color: var(--text);
 	}
 	.burger {
 		display: none;
@@ -596,13 +625,15 @@
 		align-items: center;
 		justify-content: center;
 		gap: 12px;
-		padding: 7px 14px;
+		margin: 4px 16px 0;
+		padding: 10px 16px;
+		border-radius: var(--radius-card);
 		background: var(--danger-soft);
 		color: var(--danger);
 		font-size: 13px;
 	}
 	.banner button {
-		padding: 2px 10px;
+		padding: 5px 13px;
 		border: 1px solid currentColor;
 		border-radius: var(--radius-pill);
 		font-size: 12.5px;
@@ -615,21 +646,20 @@
 	.thread {
 		max-width: 780px;
 		margin: 0 auto;
-		padding: 24px 16px 8px;
+		padding: 14px 16px 8px;
 	}
 	.to-bottom {
 		position: absolute;
 		left: 50%;
-		bottom: calc(104px + var(--keyboard, 0px));
+		bottom: calc(112px + var(--keyboard, 0px));
 		transform: translateX(-50%);
-		width: 36px;
-		height: 36px;
+		width: 40px;
+		height: 40px;
 		border-radius: 50%;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		box-shadow: var(--shadow);
+		box-shadow: var(--shadow-float);
 		color: var(--text-muted);
-		font-size: 14px;
+		font-size: 15px;
 	}
 	.to-bottom:hover {
 		color: var(--text);
@@ -637,8 +667,8 @@
 	/* `--keyboard` is what the visual viewport says the soft keyboard is
 	   covering; see the listener in onMount. It is 0 on the desktop. */
 	.composer-wrap {
-		padding: 6px 16px 12px;
-		padding-bottom: calc(12px + var(--keyboard, 0px));
+		padding: 8px 16px 14px;
+		padding-bottom: calc(14px + var(--keyboard, 0px));
 	}
 	.disclaimer {
 		max-width: 780px;
@@ -661,32 +691,94 @@
 		font-size: 13px;
 	}
 	.welcome {
-		padding: 9vh 0 0;
-		text-align: center;
+		padding: 4vh 0 0;
 		color: var(--text-muted);
 	}
-	.welcome h2 {
-		margin: 0 0 8px;
-		font-size: 26px;
-		color: var(--text);
+	.hero {
+		position: relative;
+		overflow: hidden;
+		padding: 26px 26px 46px;
+		border-radius: var(--radius-panel);
+		/* White is readable at both ends: `--user-bubble` is the accent already
+		   deepened until it passes 4.5:1 against white, and the far end only
+		   deepens it further toward the palette's darkest tone. */
+		background: linear-gradient(142deg, var(--user-bubble) 0%, var(--hero-2) 100%);
+		color: var(--user-ink);
+		box-shadow: var(--shadow);
 	}
-	.welcome > p {
-		max-width: 440px;
-		margin: 0 auto;
+	/* The two soft discs of the reference layout: light on the gradient, drawn
+	   from the ink already known to sit on it rather than from a new colour. */
+	.orb {
+		position: absolute;
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--user-ink) 18%, transparent);
+		pointer-events: none;
+	}
+	.orb-a {
+		top: -78px;
+		right: -46px;
+		width: 200px;
+		height: 200px;
+	}
+	.orb-b {
+		top: 44px;
+		right: 132px;
+		width: 96px;
+		height: 96px;
+		background: color-mix(in srgb, var(--user-ink) 10%, transparent);
+	}
+	.welcome h2 {
+		position: relative;
+		margin: 0 0 8px;
+		font-size: 30px;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		color: var(--user-ink);
+	}
+	.hero > p {
+		position: relative;
+		max-width: 460px;
+		margin: 0;
 		font-size: 14px;
+		opacity: 0.88;
+	}
+	.hero-meta {
+		position: relative;
+		display: inline-block;
+		margin-top: 16px !important;
+		padding: 5px 13px;
+		border-radius: var(--radius-pill);
+		background: color-mix(in srgb, var(--user-ink) 17%, transparent);
+		font-size: 12px !important;
+		opacity: 1 !important;
+	}
+	/* Lifted over the hero, the way the content card overlaps the header on
+	   the screen this follows. */
+	.sheet {
+		position: relative;
+		margin: -30px 10px 0;
+		padding: 18px 20px 20px;
+		background: var(--bg-raised);
+		border-radius: var(--radius-panel);
+		box-shadow: var(--shadow-card);
+	}
+	.lead {
+		margin: 0 0 10px !important;
+		font-size: 11px !important;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--accent);
 	}
 	.chips {
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: center;
-		gap: 8px;
-		margin: 26px auto 0;
-		max-width: 620px;
+		gap: var(--gap-card);
 	}
 	.chips button {
-		padding: 10px 16px;
+		padding: 11px 17px;
 		min-height: 44px;
-		border: 1px solid var(--border-soft);
+		background: var(--bg-sunken);
 		border-radius: var(--radius-pill);
 		font-size: 13px;
 		color: var(--text-muted);
@@ -695,23 +787,21 @@
 	.chips button:hover {
 		background: var(--bg-hover);
 		color: var(--text);
-		border-color: var(--border);
 	}
 	.who {
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: center;
 		gap: 7px;
-		margin: 22px auto 0;
-		max-width: 620px;
+		margin: 0 0 16px;
 	}
 	.agent-chip {
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		padding: 7px 14px;
+		padding: 8px 15px;
 		min-height: 36px;
-		border: 1px solid var(--border-soft);
+		background: var(--bg-sunken);
+		border: 1px solid transparent;
 		border-radius: var(--radius-pill);
 		font-size: 12.5px;
 		color: var(--text-muted);
@@ -726,6 +816,7 @@
 	}
 	.agent-chip.ghost {
 		border-style: dashed;
+		border-color: var(--border);
 	}
 	.agent-chip .dot {
 		width: 7px;
@@ -734,18 +825,12 @@
 		background: var(--agent);
 	}
 	.team {
-		max-width: 520px;
-		margin: 12px auto 0 !important;
+		margin: 0 0 16px !important;
 		font-size: 12px !important;
 		color: var(--text-faint);
 	}
 	.team code {
 		font-size: 11.5px;
-	}
-	.meta {
-		margin-top: 22px !important;
-		font-size: 12px !important;
-		color: var(--text-faint);
 	}
 	.scrim {
 		position: fixed;
@@ -766,8 +851,11 @@
 			box-shadow: none;
 		}
 		header {
-			padding: 10px 12px;
-			padding-top: max(10px, env(safe-area-inset-top));
+			padding: 12px 14px 8px;
+			padding-top: max(12px, env(safe-area-inset-top));
+		}
+		h1 {
+			font-size: 19px;
 		}
 		.burger {
 			display: block;
@@ -775,11 +863,21 @@
 			min-height: 44px;
 		}
 		.icon {
-			min-width: 40px;
-			min-height: 40px;
+			width: 40px;
+			height: 40px;
 		}
 		.thread {
-			padding: 16px 12px 8px;
+			padding: 10px 12px 8px;
+		}
+		.hero {
+			padding: 22px 20px 44px;
+		}
+		.welcome h2 {
+			font-size: 26px;
+		}
+		.sheet {
+			margin: -30px 4px 0;
+			padding: 16px;
 		}
 		.composer-wrap {
 			padding: 6px 10px 10px;

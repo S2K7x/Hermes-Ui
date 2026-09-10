@@ -103,10 +103,11 @@
 		display: flex;
 		align-items: center;
 		gap: 5px;
-		padding: 4px 10px;
+		padding: 7px 13px;
 		font-size: 12.5px;
 		color: var(--text-muted);
-		border: 1px solid var(--border-soft);
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-card);
 		border-radius: var(--radius-pill);
 		max-width: 170px;
 		overflow: hidden;
@@ -140,7 +141,7 @@
 	   shrinks to its emoji so the conversation title keeps some room. */
 	@media (max-width: 700px) {
 		.trigger {
-			padding: 4px 8px;
+			padding: 7px 10px;
 		}
 		.label {
 			display: none;
@@ -160,11 +161,10 @@
 		top: calc(100% + 6px);
 		z-index: 31;
 		width: min(320px, 88vw);
-		padding: 8px;
+		padding: 9px;
 		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-card);
-		box-shadow: var(--shadow);
+		border-radius: var(--radius-panel);
+		box-shadow: var(--shadow-float);
 	}
 	.items {
 		display: flex;
@@ -176,8 +176,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1px;
-		padding: 6px 9px;
-		border-radius: 10px;
+		padding: 9px 12px;
+		border-radius: var(--radius-card);
 		text-align: left;
 		font-size: 13px;
 	}
@@ -219,7 +219,7 @@
 		width: 100%;
 		margin-top: 6px;
 		padding: 6px 9px;
-		border-top: 1px solid var(--border-soft);
+		margin-top: 4px;
 		font-size: 12.5px;
 		color: var(--text-muted);
 		text-align: left;

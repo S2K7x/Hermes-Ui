@@ -75,6 +75,11 @@ de l'application.
 - **Blocs de code colorés**, avec un bouton « copier » au survol. Les grammaires
   (37 langages, 164 Ko) ne sont chargées qu'à la première apparition d'un bloc
   de code, pas au démarrage de l'app
+- **Design** : des cartes qui flottent sur un fond creusé, séparées par leur
+  élévation et jamais par un trait — trois niveaux d'ombre, teintés avec la
+  couleur de la palette active. Carte d'accueil en dégradé, pastilles rondes en
+  tête de chaque ligne de liste, composeur détaché du bas avec un bouton
+  d'envoi circulaire
 - **Apparence** (◐ dans l'entête, ou `⌘K` → « Apparence ») : seize palettes
   nommées, mode clair / sombre, et deux couleurs d'accent choisissables — le
   reste en est dérivé. Douze d'entre elles viennent d'une étude d'affiches,
