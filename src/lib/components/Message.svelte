@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
 	import Markdown from './Markdown.svelte';
+	import { firstPendingApproval } from '$lib/approvals';
 	import ToolSteps from './ToolSteps.svelte';
 	import type { UiMessage } from '$lib/transcript';
 
@@ -13,6 +14,22 @@
 		onresend?: () => void;
 	}
 	let { message, flash = false, onfork, onreload, onresend }: Props = $props();
+
+	/**
+	 * A turn that ended waiting on an approval this UI cannot grant.
+	 *
+	 * Left alone, the agent's own prose points at a "confirmation window" that
+	 * does not exist on this path — see `$lib/approvals` for why there is no
+	 * button to put here, and what does work instead.
+	 */
+	let approval = $derived(firstPendingApproval(message.steps));
+	let approvalCopied = $state(false);
+	function copyCommand() {
+		if (!approval) return;
+		navigator.clipboard.writeText(approval.command);
+		approvalCopied = true;
+		setTimeout(() => (approvalCopied = false), 1400);
+	}
 
 	let copied = $state(false);
 	function copy() {
@@ -50,6 +67,31 @@
 				</div>
 			{:else if message.streaming && message.steps.length === 0}
 				<div class="thinking"><span></span><span></span><span></span></div>
+			{/if}
+
+			{#if approval}
+				<div class="approval">
+					<p class="ap-head">
+						<Icon name="key" size={15} /> Approbation requise — non accordable ici
+					</p>
+					<pre class="ap-cmd">{approval.command}</pre>
+					{#if approval.reason}<p class="ap-why">Motif : {approval.reason}.</p>{/if}
+					<p class="ap-body">
+						Hermes n'expose de bouton d'approbation que sur son autre canal d'exécution, celui qui
+						ne recharge pas l'historique d'une conversation. Cette interface a choisi la mémoire du
+						fil — la commande n'a donc pas été lancée, et il n'y a plus rien à accorder : la demande
+						n'attend pas, elle est déjà retombée.
+					</p>
+					<p class="ap-body">
+						Pour l'exécuter : lancez-la vous-même sur le Pi, ou redemandez-la depuis le CLI
+						<code>hermes</code> ou Telegram, où Yadai sait poser la question.
+					</p>
+					<div class="ap-actions">
+						<button onclick={copyCommand}>
+							{approvalCopied ? 'copiée' : 'copier la commande'}
+						</button>
+					</div>
+				</div>
 			{/if}
 
 			{#if message.error}
@@ -196,6 +238,63 @@
 		color: var(--text);
 	}
 	.detached button:hover {
+		background: var(--bg-hover);
+	}
+	.approval {
+		margin-top: 12px;
+		padding: 13px 16px;
+		border-radius: var(--radius-card);
+		background: var(--bg-sunken);
+		box-shadow: inset 0 0 0 1.5px var(--accent-soft);
+		font-size: 13px;
+		line-height: 1.55;
+	}
+	.ap-head {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		margin: 0 0 9px;
+		font-weight: 600;
+		color: var(--accent);
+	}
+	.ap-cmd {
+		margin: 0 0 9px;
+		padding: 9px 12px;
+		border-radius: var(--radius-card);
+		background: var(--code-bg);
+		font-family: ui-monospace, Menlo, Consolas, monospace;
+		font-size: 12px;
+		white-space: pre-wrap;
+		word-break: break-all;
+	}
+	.ap-why {
+		margin: 0 0 8px;
+		color: var(--text-muted);
+	}
+	.ap-body {
+		margin: 0 0 8px;
+		color: var(--text-muted);
+	}
+	.ap-body:last-of-type {
+		margin-bottom: 10px;
+	}
+	.ap-body code {
+		font-family: ui-monospace, Menlo, Consolas, monospace;
+		font-size: 11.5px;
+		padding: 1px 5px;
+		border-radius: 5px;
+		background: var(--code-bg);
+	}
+	.ap-actions button {
+		min-height: 36px;
+		padding: 6px 14px;
+		border-radius: var(--radius-pill);
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-card);
+		font-size: 12.5px;
+		color: var(--text);
+	}
+	.ap-actions button:hover {
 		background: var(--bg-hover);
 	}
 	.error {

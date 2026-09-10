@@ -178,7 +178,7 @@ parent passe en `end_reason = "branched"` et l'enfant hérite du transcript.
 Après un fork il faut donc rafraîchir **les deux** lignes de la sidebar
 (`chat.forkSession` refait un `refreshSessions()` complet).
 
-### 8. Les approbations de commandes dangereuses ne remontent pas ici
+### 8. Les approbations ne remontent pas ici — et ce qui se passe à la place
 
 `approval.request` n'est émis que sur le flux d'événements de la Runs API. La
 Sessions API ne propage que `tool.started` / `tool.completed` / `tool.failed`
@@ -186,6 +186,54 @@ et `tool.progress`. Une UI d'approbation impliquerait de basculer le chemin
 d'envoi sur `POST /v1/runs` + `GET /v1/runs/{id}/events`, ce qui ferait perdre
 la persistance native du transcript. Choix assumé : pas d'approbation dans
 l'UI web.
+
+**Ce que ça donne concrètement**, re-mesuré contre 0.20.0 après qu'un
+utilisateur soit tombé dessus. `check_all_command_guards`
+(`tools/approval.py`) cherche un callback de notification par session — celui
+qui affiche un vrai bouton Approuver/Refuser sur Telegram, Discord ou le CLI.
+**Le chemin Sessions n'en enregistre aucun** : `register_gateway_notify` n'est
+appelé que par `_handle_create_run`. La garde prend donc sa branche de repli,
+enregistre la demande avec `submit_pending(session_key, …)` et **rend la main
+immédiatement** :
+
+```
+{approved: false, status: "pending_approval", approval_pending: true,
+ command: "…", description: "…",
+ message: "⚠️ <description>. Asking the user for approval.\n\n**Command:**…"}
+```
+
+Rien ne bloque. L'agent lit ça comme résultat d'outil, raconte en général
+qu'il attend une approbation, et le tour se termine normalement. **Quand
+l'utilisateur lit le message, il n'y a plus rien à accorder** : la demande
+n'attend pas, elle est déjà retombée. C'est pour ça qu'un bouton « Approuver »
+serait un mensonge et pas un raccourci.
+
+`POST /v1/runs/{run_id}/approval` (choix `once | session | always | deny`)
+résout via `self._run_approval_sessions[run_id]`, une table que seul
+`POST /v1/runs` remplit : un tour de conversation n'y a pas d'entrée et
+l'endpoint répond 404 `Run has no active approval session`.
+
+**Pourquoi ça n'arrive qu'une fois de temps en temps.** `approvals.mode` vaut
+`smart` par défaut : un modèle auxiliaire juge la commande et approuve la
+plupart. Et son échec n'est pas neutre —
+`except Exception: logger.debug("Smart approvals: LLM call failed, escalating");
+return "escalate"`. Un modèle auxiliaire indisponible transforme donc une
+commande normalement auto-approuvée en demande d'approbation que personne ne
+peut satisfaire ici. La fiabilité de `auxiliary.*` gouverne la fréquence de
+cette impasse bien plus que quoi que ce soit dans cette app.
+
+**Ce que l'UI fait, faute de mieux** : `src/lib/approvals.ts` (pur, testé
+contre une capture réelle de la garde) reconnaît ce résultat d'outil et
+`Message.svelte` affiche un bloc qui nomme l'impasse, montre la commande et
+dit par où passer. La détection s'accroche au marqueur amont
+`Asking the user for approval` : si la phrase change, le bloc disparaît — il
+ne fabrique jamais un contrôle qui ne fait rien.
+
+**La liste d'autorisations permanente** (`command_allowlist` dans
+`config.yaml`, écrivable via `PUT /api/config` du dashboard) ne rattrape pas
+le coup à chaud : `load_permanent_allowlist()` n'est appelé qu'**une fois à
+l'import du module**, donc un ajout ne prend effet qu'au redémarrage du
+gateway.
 
 ### 9. Le rendu markdown est débouncé, et la cadence dépend de la longueur
 
@@ -1684,6 +1732,7 @@ src/
 │   ├── trash.ts       corbeille : compte à rebours, échéance, lignes à balayer
 │   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON
 │   ├── agents.ts      agents : bornes, cycles, arbre d'équipe, prompt composé
+│   ├── approvals.ts   reconnaître un tour retombé faute d'approbation
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── jobs.ts        horaires cron validés/traduits/composés, état et tri
 │   │                  des tâches, fiche d'agent dans le prompt d'une tâche
