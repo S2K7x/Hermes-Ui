@@ -142,12 +142,12 @@
 <svelte:window onkeydown={onKeydown} />
 
 <Modal {open} title="Tâches planifiées" width={620} {onclose}>
-	{#snippet subtitle()}Hermes les exécute seul, même app fermée{/snippet}
+	{#snippet subtitle()}Yadai les exécute seul, même app fermée{/snippet}
 
 	<div class="body">
 		{#if jobsStore.unavailable}
 			<p class="none">
-				Ce Hermes tourne sans son module cron : aucune tâche ne peut être planifiée.
+				Ce Yadai tourne sans son module cron : aucune tâche ne peut être planifiée.
 			</p>
 		{:else if editing !== null}
 			<div class="form">
@@ -176,7 +176,7 @@
 							onclick={() => (agentId = null)}
 							style="--agent: var(--text-faint)"
 						>
-							<span class="dot"></span>Hermes par défaut
+							<span class="dot"></span>Yadai par défaut
 						</button>
 						{#each agents.items as agent (agent.id)}
 							<button
@@ -194,7 +194,7 @@
 							La fiche de cet agent part avec la tâche : elle s'exécutera avec sa personnalité et
 							son équipe.
 						{:else}
-							La tâche tournera avec le prompt système par défaut de Hermes.
+							La tâche tournera avec le prompt système par défaut de Yadai.
 						{/if}
 					</p>
 				</fieldset>
@@ -274,7 +274,7 @@
 				</fieldset>
 
 				<label>
-					Instruction pour Hermes
+					Instruction pour Yadai
 					<textarea
 						bind:value={instruction}
 						rows="5"
@@ -293,7 +293,7 @@
 				{#if composed.clipped}
 					<p class="preview bad">
 						L'instruction est trop longue pour laisser passer la fiche de l'agent en entier :
-						raccourcissez-la, ou choisissez « Hermes par défaut ».
+						raccourcissez-la, ou choisissez « Yadai par défaut ».
 					</p>
 				{/if}
 
@@ -393,7 +393,7 @@
 			{:else if editing !== null}
 				{modeLabel(spec.mode)} · {parsed.kind === null ? 'horaire à compléter' : parsed.display}
 			{:else}
-				Une tâche tourne côté Pi avec tous les outils de Hermes.
+				Une tâche tourne côté Pi avec tous les outils de Yadai.
 			{/if}
 		</span>
 		{#if editing !== null && !jobsStore.unavailable}

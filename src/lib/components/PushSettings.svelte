@@ -33,7 +33,7 @@
 {:else if push.needsInstall}
 	<p class="muted small note">
 		Sur iPhone, les notifications ne fonctionnent qu'une fois l'app ajoutée à l'écran d'accueil :
-		bouton Partager → « Sur l'écran d'accueil », puis rouvrez Hermes depuis l'icône.
+		bouton Partager → « Sur l'écran d'accueil », puis rouvrez Yadai depuis l'icône.
 	</p>
 {:else if push.permission === 'denied'}
 	<p class="muted small note">

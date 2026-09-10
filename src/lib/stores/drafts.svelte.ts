@@ -11,7 +11,7 @@ import {
 	type DraftMap
 } from '$lib/drafts';
 
-const STORAGE_KEY = 'hermes-drafts';
+const STORAGE_KEY = 'yadai-drafts';
 
 /**
  * Trailing write delay.

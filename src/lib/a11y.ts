@@ -116,7 +116,7 @@ export function turnAnnouncement(turn: AnnounceableTurn | undefined): string {
 			const step = turn.steps[i];
 			if (step.status === 'running') return `Outil ${step.tool_name} en cours.`;
 		}
-		return turn.content ? 'Réponse en cours.' : 'Hermes réfléchit.';
+		return turn.content ? 'Réponse en cours.' : 'Yadai réfléchit.';
 	}
 
 	if (!turn.content) return 'Tour terminé sans réponse.';

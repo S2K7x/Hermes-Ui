@@ -83,7 +83,7 @@
 			<div class="hero">
 				<span class="big">{icon(health.readiness?.status ?? health.status)}</span>
 				<div>
-					<div class="strong">Hermes {health.version}</div>
+					<div class="strong">Yadai {health.version}</div>
 					<div class="muted">
 						gateway {health.gateway_state ?? '?'} · PID {health.pid}
 						{#if health.gateway_busy}· occupé{/if}

@@ -326,9 +326,9 @@ export function composeSystemPrompt(list: Agent[], agentId: string): string {
 		...cards,
 		'## Comment déléguer',
 		[
-			"`delegate_task` lance de vrais sous-agents Hermes. Ils démarrent d'une conversation vide et ne voient RIEN de celle-ci : tout ce qui leur est nécessaire doit tenir dans l'appel.",
+			"`delegate_task` lance de vrais sous-agents Yadai. Ils démarrent d'une conversation vide et ne voient RIEN de celle-ci : tout ce qui leur est nécessaire doit tenir dans l'appel.",
 			'',
-			'- `tasks` : la liste des sous-tâches, lancées en parallèle, chacune `{goal, context, role}`. Hermes refuse un appel qui dépasse sa limite de sous-agents simultanés — dans ce cas, réduis le nombre ou fais plusieurs appels.',
+			'- `tasks` : la liste des sous-tâches, lancées en parallèle, chacune `{goal, context, role}`. Yadai refuse un appel qui dépasse sa limite de sous-agents simultanés — dans ce cas, réduis le nombre ou fais plusieurs appels.',
 			"- `goal` : la consigne complète du spécialiste, rédigée comme si tu la lui écrivais.",
 			'- `context` : recopie d\'abord sa fiche ci-dessus — c\'est ce qui lui donne son métier — puis ajoute les éléments concrets (fichiers, contraintes, format attendu).',
 			'- `role` : `"leaf"` pour un spécialiste qui exécute lui-même, `"orchestrator"` seulement pour ceux marqués « dirige lui-même ».',
@@ -336,7 +336,7 @@ export function composeSystemPrompt(list: Agent[], agentId: string): string {
 			'',
 			"Ensuite, c'est à toi de lire les résultats, de les recouper et de rédiger la réponse finale : l'utilisateur ne voit pas le travail des sous-agents, seulement le tien.",
 			'',
-			"Coût : chaque sous-agent est un agent Hermes complet sur un Raspberry Pi 5 à quatre cœurs, partagés avec cette conversation. Délègue quand la tâche est vraiment séparable, et préfère deux sous-tâches bien posées à cinq approximatives."
+			"Coût : chaque sous-agent est un agent Yadai complet sur un Raspberry Pi 5 à quatre cœurs, partagés avec cette conversation. Délègue quand la tâche est vraiment séparable, et préfère deux sous-tâches bien posées à cinq approximatives."
 		].join('\n')
 	);
 
@@ -505,7 +505,7 @@ export function starterAgents(now: number): Agent[] {
 			color: 'azur',
 			role: 'Assistant polyvalent',
 			prompt:
-				"Tu es l'assistant personnel de l'utilisateur, sur son Raspberry Pi. Tu réponds en français, de façon directe et concrète.\n\nTu as un terminal, un navigateur, la mémoire long terme et les skills de Hermes. Sers-t'en plutôt que de deviner : vérifie avant d'affirmer, et dis-le quand tu n'as pas pu vérifier.\n\nVa droit au but. Pas de préambule, pas de résumé de la question. Quand une commande est destructrice, montre-la avant de l'exécuter.",
+				"Tu es l'assistant personnel de l'utilisateur, sur son Raspberry Pi. Tu réponds en français, de façon directe et concrète.\n\nTu as un terminal, un navigateur, la mémoire long terme et les skills de Yadai. Sers-t'en plutôt que de deviner : vérifie avant d'affirmer, et dis-le quand tu n'as pas pu vérifier.\n\nVa droit au but. Pas de préambule, pas de résumé de la question. Quand une commande est destructrice, montre-la avant de l'exécuter.",
 			model: '',
 			orchestrator: false,
 			children: []

@@ -51,7 +51,7 @@ test('turnNotification carries the deep link and a per-session tag', () => {
 
 test('turnNotification falls back when the turn has no text or title', () => {
 	assert.deepEqual(turnNotification({ sessionId: 's1', text: '   ' }), {
-		title: 'Hermes',
+		title: 'Yadai',
 		body: 'Réponse terminée.',
 		url: '/?s=s1',
 		tag: 'session:s1'
@@ -81,7 +81,7 @@ test('encodePushMessage stays inside the payload budget', () => {
 });
 
 test('encodePushMessage leaves a small message untouched', () => {
-	const message = { title: 'Hermes', body: 'court', url: '/', tag: 't' };
+	const message = { title: 'Yadai', body: 'court', url: '/', tag: 't' };
 	assert.deepEqual(JSON.parse(encodePushMessage(message)), message);
 });
 

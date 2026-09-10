@@ -62,7 +62,7 @@
 					key: `m:${hit.id}`,
 					kind: 'message',
 					label: `${hit.before}${hit.match}${hit.after}`,
-					hint: `${hit.role === 'user' ? 'Vous' : 'Hermes'}${hit.count > 1 ? ` · ${hit.count}×` : ''}`,
+					hint: `${hit.role === 'user' ? 'Vous' : 'Yadai'}${hit.count > 1 ? ` · ${hit.count}×` : ''}`,
 					snippet: { before: hit.before, match: hit.match, after: hit.after },
 					run: () => onjump?.(hit.id)
 				}))

@@ -87,7 +87,7 @@ export const PRESETS: ThemePreset[] = [
 	{
 		id: 'ardoise',
 		name: 'Ardoise',
-		hint: "L'ancienne palette de Hermes-Ui",
+		hint: "La palette d'origine de l'app",
 		dark: {
 			bg: '#1c1b19',
 			surface: '#262523',
@@ -169,6 +169,372 @@ export const PRESETS: ThemePreset[] = [
 			rail: '#232a20',
 			danger: '#c0503c',
 			ok: '#5e8f37'
+		}
+	},
+
+	// ---------------------------------------------------------------------
+	// The poster palettes.
+	//
+	// Lifted from a fifteen-poster colour study, sampled pixel by pixel rather
+	// than eyeballed. A poster is two colours — a flat ground and the wordmark
+	// printed on it — which is exactly the pair this app calls `accent` and
+	// `accent2`; whichever of the two reads as a highlight leads, so a poster
+	// with a dark ground (Pinede, Outremer) hands the lead to its wordmark.
+	//
+	// The eight remaining colours are NOT from the posters: a full-bleed
+	// saturated ground is a poster, not a page you read for an hour. They are
+	// neutral anchors tinted toward the poster's own colour, so each preset
+	// carries its hue into the surfaces without ever colouring the text. Every
+	// one of them is checked by `tests/theme.test.ts` — text at 4.5:1 on its
+	// own surface, muted at 3:1, and a focus ring that clears all three
+	// backgrounds whatever accent the user then types in.
+	// ---------------------------------------------------------------------
+	{
+		id: 'corail',
+		name: 'Corail',
+		hint: 'Corail chaud, encre bleu nuit',
+		dark: {
+			bg: '#1d1718',
+			surface: '#2f2627',
+			sunken: '#211b1c',
+			text: '#f0eced',
+			muted: '#a59da2',
+			accent: '#f48773',
+			accent2: '#4a6f9c',
+			rail: '#1f1615',
+			danger: '#e1715c',
+			ok: '#68ae82'
+		},
+		light: {
+			bg: '#e2d1cf',
+			surface: '#fdf7f5',
+			sunken: '#f1e4e1',
+			text: '#372e31',
+			muted: '#7b7176',
+			accent: '#f48773',
+			accent2: '#4a6f9c',
+			rail: '#3f3234',
+			danger: '#cc533f',
+			ok: '#4a8a64'
+		}
+	},
+	{
+		id: 'creme',
+		name: 'Crème',
+		hint: 'Papier crème et sauge',
+		dark: {
+			bg: '#1a1a1a',
+			surface: '#2b2a2a',
+			sunken: '#1e1e1e',
+			text: '#eeeeef',
+			muted: '#a0a3a6',
+			accent: '#9aae76',
+			accent2: '#5b7186',
+			rail: '#1b1b19',
+			danger: '#df745e',
+			ok: '#65b184'
+		},
+		light: {
+			bg: '#dbd9d6',
+			surface: '#fafaf7',
+			sunken: '#eceae6',
+			text: '#333335',
+			muted: '#75777a',
+			accent: '#9aae76',
+			accent2: '#5b7186',
+			rail: '#39393a',
+			danger: '#c95642',
+			ok: '#478d66'
+		}
+	},
+	{
+		id: 'pinede',
+		name: 'Pinède',
+		hint: 'Vert sapin profond, accent ciel',
+		dark: {
+			bg: '#0f1416',
+			surface: '#1a2124',
+			sunken: '#13181a',
+			text: '#e5e9eb',
+			muted: '#8b989f',
+			accent: '#6fb3ea',
+			accent2: '#2e9188',
+			rail: '#0a1213',
+			danger: '#d36f5a',
+			ok: '#5aab80'
+		},
+		light: {
+			bg: '#bccacb',
+			surface: '#f1f5f4',
+			sunken: '#d5dfdd',
+			text: '#20292e',
+			muted: '#5f6b72',
+			accent: '#6fb3ea',
+			accent2: '#2e9188',
+			rail: '#1f2b30',
+			danger: '#be513e',
+			ok: '#3c8762'
+		}
+	},
+	{
+		id: 'lagune',
+		name: 'Lagune',
+		hint: 'Sarcelle et bleu ciel',
+		dark: {
+			bg: '#101617',
+			surface: '#1c2426',
+			sunken: '#141a1b',
+			text: '#e6ebec',
+			muted: '#8e9ba1',
+			accent: '#33a096',
+			accent2: '#6eb2e9',
+			rail: '#0c1415',
+			danger: '#d5705b',
+			ok: '#5bac82'
+		},
+		light: {
+			bg: '#c0cdce',
+			surface: '#f2f6f5',
+			sunken: '#d8e2e0',
+			text: '#222c31',
+			muted: '#616e75',
+			accent: '#33a096',
+			accent2: '#6eb2e9',
+			rail: '#222f33',
+			danger: '#bf523f',
+			ok: '#3d8963'
+		}
+	},
+	{
+		id: 'brume',
+		name: 'Brume',
+		hint: 'Bleu poussière et menthe',
+		dark: {
+			bg: '#15191c',
+			surface: '#23282d',
+			sunken: '#191d20',
+			text: '#eaedf0',
+			muted: '#97a0aa',
+			accent: '#5f9cb8',
+			accent2: '#4fc7a3',
+			rail: '#13191b',
+			danger: '#d97360',
+			ok: '#60af86'
+		},
+		light: {
+			bg: '#cdd5da',
+			surface: '#f6f8f9',
+			sunken: '#e2e8e9',
+			text: '#2a3138',
+			muted: '#6b747e',
+			accent: '#5f9cb8',
+			accent2: '#4fc7a3',
+			rail: '#2d363e',
+			danger: '#c45543',
+			ok: '#428b68'
+		}
+	},
+	{
+		id: 'abricot',
+		name: 'Abricot',
+		hint: 'Abricot doux et corail',
+		dark: {
+			bg: '#1d1c19',
+			surface: '#302c29',
+			sunken: '#211f1d',
+			text: '#f1efee',
+			muted: '#a6a6a5',
+			accent: '#f5b95e',
+			accent2: '#dd7660',
+			rail: '#201d18',
+			danger: '#e2765d',
+			ok: '#69b284'
+		},
+		light: {
+			bg: '#e3ddd4',
+			surface: '#fdfbf6',
+			sunken: '#f3ede4',
+			text: '#383534',
+			muted: '#7c7a79',
+			accent: '#f5b95e',
+			accent2: '#dd7660',
+			rail: '#413c38',
+			danger: '#cc5841',
+			ok: '#4b8e66'
+		}
+	},
+	{
+		id: 'framboise',
+		name: 'Framboise',
+		hint: 'Rose framboise et abricot',
+		dark: {
+			bg: '#1b1519',
+			surface: '#2c2329',
+			sunken: '#1f191d',
+			text: '#efeaee',
+			muted: '#a29aa5',
+			accent: '#db6b8c',
+			accent2: '#f6c072',
+			rail: '#1d1418',
+			danger: '#e0705d',
+			ok: '#66ac84'
+		},
+		light: {
+			bg: '#deccd3',
+			surface: '#fbf6f6',
+			sunken: '#eee1e4',
+			text: '#352b34',
+			muted: '#786e79',
+			accent: '#db6b8c',
+			accent2: '#f6c072',
+			rail: '#3c2e38',
+			danger: '#ca5241',
+			ok: '#488865'
+		}
+	},
+	{
+		id: 'menthe',
+		name: 'Menthe',
+		hint: 'Menthe claire, accent outremer',
+		dark: {
+			bg: '#171d1d',
+			surface: '#262e2e',
+			sunken: '#1b2121',
+			text: '#ecf1f1',
+			muted: '#9ba8ac',
+			accent: '#45c39a',
+			accent2: '#3a5cc4',
+			rail: '#171f1d',
+			danger: '#dc7761',
+			ok: '#62b387'
+		},
+		light: {
+			bg: '#d3e0dd',
+			surface: '#f8fcfa',
+			sunken: '#e6f0ec',
+			text: '#2e383a',
+			muted: '#707d80',
+			accent: '#45c39a',
+			accent2: '#3a5cc4',
+			rail: '#333f41',
+			danger: '#c65945',
+			ok: '#449069'
+		}
+	},
+	{
+		id: 'ambre',
+		name: 'Ambre',
+		hint: 'Ardoise bleu nuit et jaune ambre',
+		dark: {
+			bg: '#111316',
+			surface: '#1d1f24',
+			sunken: '#15171a',
+			text: '#e6e8eb',
+			muted: '#8f969f',
+			accent: '#ecbf3d',
+			accent2: '#7fa8c4',
+			rail: '#0d1013',
+			danger: '#d56d5a',
+			ok: '#5ca980'
+		},
+		light: {
+			bg: '#c2c6cb',
+			surface: '#f3f4f4',
+			sunken: '#dadcde',
+			text: '#23272f',
+			muted: '#636972',
+			accent: '#ecbf3d',
+			accent2: '#7fa8c4',
+			rail: '#242830',
+			danger: '#c04f3e',
+			ok: '#3e8662'
+		}
+	},
+	{
+		id: 'dragee',
+		name: 'Dragée',
+		hint: 'Rose dragée et vert sarcelle',
+		dark: {
+			bg: '#1c191d',
+			surface: '#2e292e',
+			sunken: '#201d21',
+			text: '#f0eef1',
+			muted: '#a4a1ac',
+			accent: '#e58cb2',
+			accent2: '#2f8d7e',
+			rail: '#1f191d',
+			danger: '#e17461',
+			ok: '#68b087'
+		},
+		light: {
+			bg: '#e1d7dd',
+			surface: '#fcf9fa',
+			sunken: '#f1e9eb',
+			text: '#37323a',
+			muted: '#7a7580',
+			accent: '#e58cb2',
+			accent2: '#2f8d7e',
+			rail: '#3f3740',
+			danger: '#cb5645',
+			ok: '#4a8c69'
+		}
+	},
+	{
+		id: 'brique',
+		name: 'Brique',
+		hint: 'Terre cuite brûlée et orange',
+		dark: {
+			bg: '#181313',
+			surface: '#271f20',
+			sunken: '#1c1717',
+			text: '#ece8e9',
+			muted: '#9c969a',
+			accent: '#c55b39',
+			accent2: '#f2a63c',
+			rail: '#18100f',
+			danger: '#dc6d57',
+			ok: '#63a97e'
+		},
+		light: {
+			bg: '#d5c6c3',
+			surface: '#f9f4f1',
+			sunken: '#e8dcd8',
+			text: '#2f272a',
+			muted: '#71696d',
+			accent: '#c55b39',
+			accent2: '#f2a63c',
+			rail: '#34282a',
+			danger: '#c74f3b',
+			ok: '#45865f'
+		}
+	},
+	{
+		id: 'outremer',
+		name: 'Outremer',
+		hint: 'Bleu outremer et ciel',
+		dark: {
+			bg: '#101219',
+			surface: '#1b1e29',
+			sunken: '#14161d',
+			text: '#e6e8ee',
+			muted: '#8d94a5',
+			accent: '#4a6ee0',
+			accent2: '#70b1ed',
+			rail: '#0c0f17',
+			danger: '#d46d5d',
+			ok: '#5ba983'
+		},
+		light: {
+			bg: '#bfc4d3',
+			surface: '#f2f3f6',
+			sunken: '#d8dbe4',
+			text: '#222634',
+			muted: '#616778',
+			accent: '#4a6ee0',
+			accent2: '#70b1ed',
+			rail: '#212737',
+			danger: '#bf4f41',
+			ok: '#3d8565'
 		}
 	}
 ];

@@ -285,7 +285,7 @@
 				</p>
 			{:else if showArchived && chat.archivedTruncated}
 				<p class="empty">
-					Seules les conversations archivées les plus récentes sont listées : Hermes ne sait pas
+					Seules les conversations archivées les plus récentes sont listées : Yadai ne sait pas
 					les énumérer, elles sont retrouvées une par une.
 				</p>
 			{/if}
@@ -309,7 +309,7 @@
 			<button
 				class="archive-toggle"
 				onclick={onopenJobs}
-				title="Rappels et tâches récurrentes exécutées par Hermes"
+				title="Rappels et tâches récurrentes exécutées par Yadai"
 			>
 				⏰ Tâches
 			</button>
@@ -330,7 +330,7 @@
 				<span class="dot" class:ok={chat.connected === true} class:ko={chat.connected === false}
 				></span>
 				{#if chat.connected === true}
-					Hermes {chat.version}
+					Yadai {chat.version}
 				{:else if chat.connected === false}
 					Hors ligne
 				{:else}

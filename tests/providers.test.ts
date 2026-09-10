@@ -194,7 +194,7 @@ test('flowKind maps upstream flows, defaulting unknown ones to external', () => 
 test('accountSummary names where the credentials live once connected', () => {
 	assert.equal(isConnected(CLAUDE_CODE), true);
 	assert.equal(accountSummary(CLAUDE_CODE), 'Identifiants : ~/.claude/.credentials.json');
-	assert.match(accountSummary({ ...CLAUDE_CODE, status: { logged_in: true } }), /gérés par Hermes/);
+	assert.match(accountSummary({ ...CLAUDE_CODE, status: { logged_in: true } }), /gérés par Yadai/);
 });
 
 test('accountSummary describes the login method rather than repeating the pill', () => {

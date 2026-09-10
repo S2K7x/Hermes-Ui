@@ -83,7 +83,7 @@
 		{#if providersStore.available === false}
 			indisponible
 		{:else}
-			clés et comptes de Hermes · un redémarrage du gateway peut être nécessaire
+			clés et comptes de Yadai · un redémarrage du gateway peut être nécessaire
 		{/if}
 	{/snippet}
 
@@ -92,7 +92,7 @@
 			<p>La gestion des providers est indisponible.</p>
 			<p class="muted small">{providersStore.message}</p>
 			<p class="muted small">
-				Le dashboard de Hermes tourne en service utilisateur
+				Le dashboard de Yadai tourne en service utilisateur
 				(<code>systemctl --user status hermes-dashboard</code>) sur
 				<code>127.0.0.1:9119</code>. Son jeton est
 				<code>HERMES_DASHBOARD_SESSION_TOKEN</code> dans
@@ -154,7 +154,7 @@
 												class="danger"
 												disabled={providersStore.saving}
 												onclick={() => {
-													if (confirm(`Supprimer ${entry.key} de la configuration de Hermes ?`))
+													if (confirm(`Supprimer ${entry.key} de la configuration de Yadai ?`))
 														providersStore.deleteKey(entry.key);
 												}}>Supprimer</button
 											>
@@ -207,7 +207,7 @@
 										<p class="muted small">{providersStore.validationHint}</p>
 									{/if}
 									<p class="muted small">
-										La clé est écrite dans <code>~/.hermes/.env</code> par Hermes lui-même, qui
+										La clé est écrite dans <code>~/.hermes/.env</code> par Yadai lui-même, qui
 										met aussi à jour les copies de <code>config.yaml</code>. Elle n'est jamais
 										renvoyée en clair à ce navigateur.
 									</p>
@@ -236,7 +236,7 @@
 							</p>
 							<p class="code">{flow.userCode}</p>
 							<p class="muted small">
-								Cette page interroge Hermes toutes les
+								Cette page interroge Yadai toutes les
 								{Math.round(flow.pollIntervalMs / 1000)} s jusqu'à ce que le fournisseur réponde.
 							</p>
 						{:else if flow.phase === 'awaiting'}
@@ -292,7 +292,7 @@
 
 						{#if flowKind(provider) === 'external'}
 							<p class="muted small">
-								Lancez <code>{provider.cli_command}</code> sur le Pi : Hermes ne peut pas
+								Lancez <code>{provider.cli_command}</code> sur le Pi : Yadai ne peut pas
 								piloter ce flux à sa place.
 							</p>
 						{/if}
@@ -328,7 +328,7 @@
 			{:else}
 				<section class="card">
 					<div class="card-head">
-						<span class="name">Modèle par défaut de Hermes</span>
+						<span class="name">Modèle par défaut de Yadai</span>
 						{#if chat.models}
 							<span class="pill on">{shortModelName(chat.models.model)}</span>
 						{/if}

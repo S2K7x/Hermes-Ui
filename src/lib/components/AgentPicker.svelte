@@ -49,8 +49,8 @@
 		}}
 		aria-haspopup="true"
 		aria-expanded={open}
-		aria-label={active ? `Agent : ${active.name}` : 'Agent : aucun, prompt par défaut de Hermes'}
-		title={active ? `Agent : ${active.name}` : 'Aucun agent — prompt par défaut de Hermes'}
+		aria-label={active ? `Agent : ${active.name}` : 'Agent : aucun, prompt par défaut de Yadai'}
+		title={active ? `Agent : ${active.name}` : 'Aucun agent — prompt par défaut de Yadai'}
 	>
 		<span class="dot"></span>
 		<span class="label">{active ? agentLabel(active) : 'Agent'}</span>
@@ -72,7 +72,7 @@
 			<div class="items">
 				<button class:sel={!chat.activeAgentId} onclick={() => choose('')}>
 					<span class="n">Sans agent</span>
-					<span class="j">prompt par défaut de Hermes</span>
+					<span class="j">prompt par défaut de Yadai</span>
 				</button>
 				{#each agents.items as agent (agent.id)}
 					<button

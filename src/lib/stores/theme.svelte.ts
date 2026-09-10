@@ -39,7 +39,7 @@ import { toasts } from './toast.svelte';
  * what `baseline` and `planThemeUpdate()` exist to prevent.
  */
 
-const CACHE_KEY = 'hermes-theme-cache';
+const CACHE_KEY = 'yadai-theme-cache';
 
 const UNLOADED =
 	"Votre thème n'a pas pu être chargé : le modifier maintenant écraserait la palette enregistrée.";

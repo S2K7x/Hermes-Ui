@@ -247,7 +247,7 @@ export function parseExpiry(value: number | string | null | undefined): number |
 export function accountSummary(provider: OauthProvider): string {
 	if (isConnected(provider)) {
 		const source = provider.status?.source_label?.trim();
-		return source ? `Identifiants : ${source}` : 'Identifiants gérés par Hermes';
+		return source ? `Identifiants : ${source}` : 'Identifiants gérés par Yadai';
 	}
 	switch (flowKind(provider)) {
 		case 'device_code':

@@ -1,8 +1,15 @@
-# Hermes-Ui
+# Yadai
 
 Interface web privée « type Claude.ai » pour [Hermes Agent](https://hermes-agent.nousresearch.com),
 conçue pour tourner sur un Raspberry Pi 5 et remplacer le bot Telegram sans
 rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
+
+**Yadai**, c'est le nom du produit — ce que vous ouvrez, ce que dit l'onglet,
+l'icône sur l'écran d'accueil. **Hermes Agent** reste le nom du moteur qu'il
+pilote : le dépôt à part sur cette machine, le gateway `127.0.0.1:8642`, les
+services `hermes-gateway` / `hermes-dashboard`, `~/.hermes/` et les variables
+`HERMES_*`. Là où ce fichier écrit « Hermes », il parle de ce moteur, et jamais
+de l'application.
 
 <p align="center">
   <em>SvelteKit · SQLite · SSE · PWA · Tailscale Serve</em>
@@ -13,7 +20,7 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Fil de conversation** avec streaming token par token et curseur de frappe
 - **Sidebar d'historique** groupée par date (Aujourd'hui / Hier / 7 jours / …),
   épinglage, renommage, archivage, suppression, branches, repli sur desktop
-- **Vue « Archivées »** reconstruite à la demande : l'API Hermes exclut les
+- **Vue « Archivées »** reconstruite à la demande : l'API du gateway exclut les
   conversations archivées de toutes ses listes, l'app les retrouve une par une
   à partir des identifiants qu'elle a déjà vus
 - **Palette de commandes** `⌘K` (bouton ⌕ dans l'entête) : recherche
@@ -26,7 +33,7 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   pas de « rechercher dans la page »
 - **Timeline des étapes de l'agent** : chaque appel d'outil (terminal, web,
   navigateur, MCP…) affiché en direct, repliable
-- **Panneau d'état** `⌘/` : contrôles de disponibilité Hermes (base, modèle,
+- **Panneau d'état** `⌘/` : contrôles de disponibilité (base, modèle,
   disque, gateway, plateformes), outils/skills exposés, tâches planifiées,
   tours en cours, coût et tokens de la conversation
 - **Palette de skills** : `/` dans le composeur
@@ -37,16 +44,16 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Équipe d'agents** (👥 dans la sidebar, ou `⌘K` → « Équipe d'agents ») :
   des personas ayant chacune son nom, son métier et son prompt système ; une
   conversation appartient à un agent, et un « chef d'équipe » peut confier du
-  travail aux autres via la délégation native de Hermes
+  travail aux autres via la délégation native de Hermes Agent
 - **Éditeur de skills** (📚 dans la sidebar, ou `⌘K` → « Modifier les skills ») :
   liste des `SKILL.md` groupée par catégorie, édition en texte brut,
   création guidée d'un nouveau skill
 - **Panneau Providers** (🔑 dans la sidebar, ou `⌘K` → « Providers ») : ajouter
   ou remplacer une clé d'API avec vérification en ligne, connecter un compte en
   OAuth (code d'appairage + sondage jusqu'à validation), déconnecter, et
-  changer le modèle par défaut de Hermes — sans SSH
+  changer le modèle par défaut — sans SSH
 - **Tâches planifiées** (⏰ dans la sidebar, ou `⌘K` → « Tâches planifiées ») :
-  confier à l'un de vos agents une tâche récurrente que Hermes exécute seul —
+  confier à l'un de vos agents une tâche récurrente que Yadai exécute seul —
   horaire choisi dans des menus plutôt qu'écrit en cron, puis modifiable,
   duplicable, lançable tout de suite, en pause ou supprimée
 - **Notifications push** (panneau d'état → « Notifications ») : quand un tour se
@@ -57,7 +64,7 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
   après un rechargement ou une PWA relancée par iOS. La sidebar marque d'un ✎
   les conversations qui en portent un
 - **Images en entrée** : coller ou déposer, envoyées en base64
-- **Sélecteur de modèle** parmi les fournisseurs configurés dans Hermes,
+- **Sélecteur de modèle** parmi les fournisseurs configurés,
   applicable à la conversation ouverte dès le message suivant
 - **Export markdown** de la conversation
 - **Démarrage rapide** : l'app n'attend plus l'inventaire des modèles pour
@@ -68,9 +75,13 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 - **Blocs de code colorés**, avec un bouton « copier » au survol. Les grammaires
   (37 langages, 164 Ko) ne sont chargées qu'à la première apparition d'un bloc
   de code, pas au démarrage de l'app
-- **Apparence** (◐ dans l'entête, ou `⌘K` → « Apparence ») : quatre palettes
+- **Apparence** (◐ dans l'entête, ou `⌘K` → « Apparence ») : seize palettes
   nommées, mode clair / sombre, et deux couleurs d'accent choisissables — le
-  reste en est dérivé. Le choix est enregistré côté serveur, donc le téléphone
+  reste en est dérivé. Douze d'entre elles viennent d'une étude d'affiches,
+  relevées au pixel : Corail, Crème, Pinède, Lagune, Brume, Abricot,
+  Framboise, Menthe, Ambre, Dragée, Brique, Outremer. Chacune est vérifiée par
+  les tests — texte à 4,5:1 sur sa propre surface, anneau de focus à 3:1 sur
+  les trois fonds. Le choix est enregistré côté serveur, donc le téléphone
   et le bureau sont d'accord
 - **PWA** installable sur téléphone : plein cadre, feuilles qui montent du bas,
   encoche et barre d'accueil respectées, composeur qui reste au-dessus du
@@ -87,11 +98,11 @@ rien perdre : outils, MCP, mémoire, skills, vision, multi-tours.
 
 ### Robustesse
 
-L'app reste utilisable quand Hermes ne l'est pas : bandeau hors-ligne,
+L'app reste utilisable quand le gateway ne l'est pas : bandeau hors-ligne,
 reconnexion automatique avec backoff, et un message qui dit quoi faire plutôt
 que de recopier l'erreur amont. Les échecs transitoires sont retentés — mais
 seulement sur les lectures, jamais sur un tour d'agent. Un plafond local de
-tours simultanés (3 par défaut) protège le Pi avant que celui de Hermes (10)
+tours simultanés (3 par défaut) protège le Pi avant que celui du gateway (10)
 n'entre en jeu. Le détail est dans [CLAUDE.md](CLAUDE.md).
 
 ### Agents : une équipe, et ce qu'elle coûte
@@ -101,7 +112,7 @@ Un agent, c'est un nom, un emoji, un métier en une ligne, un prompt système et
 ouverture : un généraliste, un chef d'équipe et deux spécialistes. Tout est
 modifiable, duplicable et supprimable.
 
-Ce prompt est renvoyé à Hermes **à chaque message**, depuis le serveur. Ce n'est
+Ce prompt est renvoyé au gateway **à chaque message**, depuis le serveur. Ce n'est
 pas un détail d'implémentation : la Sessions API ne relit jamais le
 `system_prompt` enregistré à la création d'une conversation, et changer le
 modèle d'une conversation l'efface même. Sans ce renvoi, la personnalité
@@ -109,13 +120,13 @@ disparaîtrait au deuxième message.
 
 Cocher « peut piloter d'autres agents » compose automatiquement, à partir de la
 fiche des agents choisis, la partie du prompt qui décrit l'équipe et explique
-quand appeler `delegate_task` — l'outil de délégation de Hermes, avec sa
+quand appeler `delegate_task` — l'outil de délégation de Hermes Agent, avec sa
 récursion (`role: "orchestrator"`). Le bouton « Voir le prompt envoyé à chaque
 message » montre exactement le texte produit, et le panneau dessine l'arbre de
 l'équipe. Un agent ne peut pas se piloter lui-même, ni former une boucle : la
 chaîne fautive est affichée au lieu d'être enregistrée.
 
-**Ce que ça coûte.** Chaque sous-agent est un agent Hermes complet — terminal
+**Ce que ça coûte.** Chaque sous-agent est un agent complet — terminal
 compris — lancé sur le même Raspberry Pi 5 à quatre cœurs. Deux ou trois en
 parallèle se sentent passer. Et un sous-agent ne voit rien de la conversation :
 c'est au chef d'équipe de tout lui écrire.
@@ -130,14 +141,14 @@ simultanés sont réglés dans `~/.hermes/config.yaml` (`delegation.*`), pas ici
 
 L'éditeur travaille sur les **fichiers** de `~/.hermes/skills`
 (`<catégorie>/<skill>/SKILL.md`, plus un `DESCRIPTION.md` par catégorie), pas
-sur ce que Hermes a chargé en mémoire. Conséquence à connaître :
+sur ce que le gateway a chargé en mémoire. Conséquence à connaître :
 **un skill créé ou renommé n'est pas forcément pris en compte tout de suite** —
 `systemctl --user restart hermes-gateway` lève le doute.
 
 Périmètre volontairement étroit : seuls `SKILL.md` et `DESCRIPTION.md` sont
 lisibles et modifiables, il n'y a pas de suppression, les fichiers dépassant
 256 Ko sont renvoyés vers la ligne de commande, et les fichiers cachés du
-tri automatique de Hermes (`.bundled_manifest`, `.curator_state`) ne sont ni
+tri automatique de Hermes Agent (`.bundled_manifest`, `.curator_state`) ne sont ni
 listés ni accessibles. Sans le montage `/skills` (voir `docker-compose.yml`),
 le panneau s'affiche désactivé au lieu de casser.
 
@@ -150,7 +161,7 @@ savoir écrire une clé correctement : `~/.hermes/.env` **et** les copies que
 `custom_providers[*]`). Ces copies étant prioritaires, écrire `.env` tout seul
 laisserait l'ancienne clé authentifier après une rotation.
 
-Deux onglets, repris de la séparation du catalogue de Hermes : **Clés API**
+Deux onglets, repris de la séparation du catalogue de Hermes Agent : **Clés API**
 (une variable d'environnement à coller) et **Comptes** (une connexion OAuth).
 Un troisième onglet change le **modèle par défaut** — celui de `config.yaml`,
 qui ne s'applique qu'aux nouvelles discussions ; pour la conversation ouverte,
@@ -164,36 +175,36 @@ commande à lancer plutôt qu'un bouton qui mentirait. Sans
 `HERMES_DASHBOARD_TOKEN`, le panneau s'affiche désactivé et le reste de l'app
 fonctionne normalement.
 
-### Tâches planifiées : ce que Hermes fera sans vous
+### Tâches planifiées : ce que Yadai fera sans vous
 
-C'est le cron de Hermes, pas un minuteur maison : la tâche tourne côté Pi avec
+C'est le cron de Hermes Agent, pas un minuteur maison : la tâche tourne côté Pi avec
 tous ses outils, et continue même app fermée.
 
 **L'horaire se choisit, il ne s'écrit pas.** « Chaque jour », « chaque
 semaine », « chaque mois », « à intervalle » ou « une seule fois » ouvrent les
 champs correspondants (une heure, un jour, un nombre) ; le panneau en fabrique
-l'expression que Hermes attend et traduit en français ce qu'elle veut dire avant
-l'enregistrement — Hermes répond `500` à un horaire illisible, autant ne jamais
+l'expression que le cron attend et traduit en français ce qu'elle veut dire avant
+l'enregistrement — il répond `500` à un horaire illisible, autant ne jamais
 l'envoyer. Le mode « Expression » reste là pour ce que les menus ne couvrent pas
 (`0 9-18 * * 1-5`), et une tâche écrite ainsi se rouvre telle quelle.
 
 **Une tâche appartient à un agent.** Choisissez-le au moment de la planifier :
 sa fiche part avec la tâche, donc elle s'exécute avec sa personnalité et son
 équipe, exactement comme dans une conversation. Sans agent, c'est le prompt par
-défaut de Hermes. Attention : la fiche est recopiée à l'enregistrement, pas
+défaut de Yadai. Attention : la fiche est recopiée à l'enregistrement, pas
 relue à chaque exécution — si vous modifiez l'agent ensuite, la tâche le signale
 et un bouton « Mettre à jour » la remet à niveau.
 
 Deux choses à savoir. **L'instruction doit se suffire à elle-même** : la tâche
 s'exécute dans sa propre conversation, sans le contexte de celle qui est
-ouverte. Et **la livraison se choisit** : « Local » garde la sortie côté Hermes,
+ouverte. Et **la livraison se choisit** : « Local » garde la sortie côté Pi,
 sinon le résultat part sur une plateforme dont le canal d'accueil est configuré
 (Telegram, typiquement) — les autres ne sont pas proposées, parce qu'elles
 résoudraient vers rien.
 
 Une tâche existante se modifie (nom, horaire, agent, instruction, livraison) ou
 se duplique pour en dériver une variante. Seule exception : une tâche « une
-seule fois » déjà passée demande une nouvelle date, parce que Hermes refuse de
+seule fois » déjà passée demande une nouvelle date, parce que le cron refuse de
 reprogrammer un horaire écoulé.
 
 Le panneau se désactive proprement si le gateway tourne sans son module cron.
@@ -201,7 +212,7 @@ Le panneau se désactive proprement si le gateway tourne sans son module cron.
 ### Notifications : ce qu'il faut faire une fois
 
 Sur **iPhone**, le Web Push n'existe que pour une app **installée sur l'écran
-d'accueil** : ouvrez Hermes dans Safari, bouton Partager → « Sur l'écran
+d'accueil** : ouvrez Yadai dans Safari, bouton Partager → « Sur l'écran
 d'accueil », puis rouvrez-la depuis l'icône. Le panneau d'état (`⌘/`) affiche
 alors « Activer sur cet appareil » ; l'autorisation se demande depuis ce bouton,
 jamais toute seule. Le bouton « Envoyer un test » permet de vérifier tout de
@@ -221,7 +232,7 @@ les conversations Telegram, qui ne passent pas par ce flux.
 ### Une limite à connaître
 
 Le bouton carré pendant la génération **arrête l'affichage, pas l'agent**.
-L'API de Hermes n'expose aucun moyen d'interrompre un tour lancé par la
+L'API du gateway n'expose aucun moyen d'interrompre un tour lancé par la
 Sessions API : le tour se termine en arrière-plan et sa réponse apparaît dans
 la conversation (bouton « Recharger »). Le détail et l'alternative écartée sont
 documentés dans [CLAUDE.md](CLAUDE.md#2-un-tour-de-la-sessions-api-ne-peut-pas-être-interrompu).
@@ -375,7 +386,7 @@ Pi**. `API_SERVER_KEY` est un secret équivalent-root :
   par `realpath` et vérifié comme étant à l'intérieur du répertoire monté :
   ni `..`, ni lien symbolique, ni fichier caché n'en sortent
 - `HERMES_DASHBOARD_TOKEN` (dashboard sur `127.0.0.1:9119`) est un second
-  secret du même ordre — il ouvre l'écriture de la configuration de Hermes. Il
+  secret du même ordre — il ouvre l'écriture de la configuration de Hermes Agent. Il
   reste lui aussi côté serveur, et aucune clé d'API n'est renvoyée en clair au
   navigateur ni écrite dans les journaux
 - `VAPID_PRIVATE_KEY` ne quitte pas le serveur non plus, et les adresses
@@ -394,7 +405,7 @@ fréquentes usent rapidement une carte SD.
 Un timer systemd sur le Pi lance Claude Code chaque jour à 05:00. Il travaille
 dans un clone isolé du dépôt sur un thème qui tourne avec les jours de la
 semaine (robustesse, fonctionnalité, performance, simplification,
-accessibilité, tests, intégration Hermes), vérifie son travail avec
+accessibilité, tests, intégration Hermes Agent), vérifie son travail avec
 `npm run check`, `npm test` et `npm run build`, **déploie le résultat sur
 l'application** (fast-forward + rebuild Docker + smoke test, retour arrière
 automatique en cas d'échec), puis pousse sur GitHub et notifie Discord.
@@ -413,7 +424,7 @@ sauvegarde, vérification, déploiement, push, capture et notification Discord.
 Le prompt à coller dans une session Claude Code neuve :
 
 ```
-Tu travailles sur Hermes-Ui, mon interface web pour Hermes Agent, sur ce Raspberry Pi.
+Tu travailles sur Yadai, mon interface web pour Hermes Agent, sur ce Raspberry Pi.
 Lis /opt/stacks/Hermes-Ui/CLAUDE.md puis /opt/stacks/Hermes-Ui/AMELIORER.md,
 et applique AMELIORER.md de bout en bout.
 Ce que je veux : <ta demande, ou « choisis toi-même »>

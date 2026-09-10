@@ -77,7 +77,7 @@ export function turnNotification(input: {
 	text?: string | null;
 	error?: string | null;
 }): PushMessage {
-	const title = truncate(input.sessionTitle?.trim() || 'Hermes', 60);
+	const title = truncate(input.sessionTitle?.trim() || 'Yadai', 60);
 	let body: string;
 	if (input.error) body = truncate(`Le tour a échoué : ${input.error}`, NOTIFICATION_BODY_CHARS);
 	else if (input.text?.trim()) body = answerPreview(input.text);

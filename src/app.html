@@ -9,7 +9,7 @@
 		<meta name="theme-color" content="#141312" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-		<meta name="apple-mobile-web-app-title" content="Hermes" />
+		<meta name="apple-mobile-web-app-title" content="Yadai" />
 		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
 		<link rel="icon" href="%sveltekit.assets%/icon.svg" type="image/svg+xml" />
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/icon-192.png" />
@@ -23,7 +23,9 @@
 		-->
 		<script>
 			try {
-				var cached = JSON.parse(localStorage.getItem('hermes-theme-cache') || 'null');
+				var raw = localStorage.getItem('yadai-theme-cache') ||
+					localStorage.getItem('hermes-theme-cache'); // the key before the rename
+				var cached = JSON.parse(raw || 'null');
 				if (cached && cached.vars) {
 					var root = document.documentElement;
 					if (cached.mode === 'light' || cached.mode === 'dark') root.dataset.theme = cached.mode;

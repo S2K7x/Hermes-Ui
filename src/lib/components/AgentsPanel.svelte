@@ -114,7 +114,7 @@
 	async function confirmRemove(agent: Agent) {
 		const used = chat.sessions.filter((s) => s.agent_id === agent.id).length;
 		const warning = used
-			? `\n\n${used} conversation${used > 1 ? 's' : ''} repasseront au prompt par défaut de Hermes (leur historique est conservé).`
+			? `\n\n${used} conversation${used > 1 ? 's' : ''} repasseront au prompt par défaut de Yadai (leur historique est conservé).`
 			: '';
 		if (!confirm(`Supprimer l'agent « ${agent.name} » ?${warning}`)) return;
 		if (await agents.remove(agent.id)) {
@@ -234,7 +234,7 @@
 					></textarea>
 				</label>
 				<p class="muted small">
-					Renvoyé à Hermes à chaque message de la conversation — {draft.prompt.length} / {MAX_AGENT_PROMPT}
+					Renvoyé à Yadai à chaque message de la conversation — {draft.prompt.length} / {MAX_AGENT_PROMPT}
 					caractères.
 				</p>
 
@@ -242,7 +242,7 @@
 					<label>
 						Modèle préféré
 						<select bind:value={draft.model}>
-							<option value="">Modèle par défaut de Hermes</option>
+							<option value="">Modèle par défaut de Yadai</option>
 							{#each models as model (model)}
 								<option value={model}>{model}</option>
 							{/each}
@@ -260,8 +260,8 @@
 				</label>
 				<p class="muted small">
 					Coché, son prompt reçoit la fiche des agents ci-dessous et la marche à suivre pour les
-					lancer avec l'outil <code>delegate_task</code> de Hermes. Chaque agent lancé est un agent
-					Hermes complet qui tourne sur le même Raspberry&nbsp;Pi&nbsp;5 : à quatre cœurs, deux ou
+					lancer avec l'outil <code>delegate_task</code> de Yadai. Chaque agent lancé est un agent
+					Yadai complet qui tourne sur le même Raspberry&nbsp;Pi&nbsp;5 : à quatre cœurs, deux ou
 					trois en parallèle se sentent passer. Un agent piloté ne voit rien de la conversation —
 					le chef doit tout lui écrire.
 				</p>
@@ -289,7 +289,7 @@
 
 					{#if tree.length > 1}
 						<div class="preview-tree">
-							<span class="muted small">L'équipe telle que Hermes la verra :</span>
+							<span class="muted small">L'équipe telle que Yadai la verra :</span>
 							<ul class="tree">
 								{#each tree as node (node.key)}
 									<li style="padding-left: {node.depth * 16}px">

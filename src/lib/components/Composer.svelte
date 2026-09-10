@@ -91,7 +91,7 @@
 	async function addFiles(files: FileList | File[]) {
 		for (const file of Array.from(files)) {
 			if (!file.type.startsWith('image/')) {
-				flash(`« ${file.name} » ignoré : seules les images sont acceptées par l'API Hermes.`);
+				flash(`« ${file.name} » ignoré : seules les images sont acceptées par l'API de Yadai.`);
 				continue;
 			}
 			if (file.size > MAX_IMAGE_BYTES) {
@@ -374,8 +374,8 @@
 			onkeydown={onKeydown}
 			onpaste={onPaste}
 			rows="1"
-			aria-label="Message à Hermes"
-			placeholder={chat.streaming ? 'Hermes travaille…' : 'Écrire à Hermes…  (/ pour les skills)'}
+			aria-label="Message à Yadai"
+			placeholder={chat.streaming ? 'Yadai travaille…' : 'Écrire à Yadai…  (/ pour les skills)'}
 		></textarea>
 
 		{#if chat.streaming}

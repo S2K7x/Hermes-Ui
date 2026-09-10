@@ -44,8 +44,8 @@
 </script>
 
 <svelte:head>
-	<title>Hermes</title>
-	<meta name="description" content="Interface web privée pour Hermes Agent" />
+	<title>Yadai</title>
+	<meta name="description" content="Interface web privée pour Hermes Agent, sous le nom Yadai" />
 </svelte:head>
 
 {@render children()}

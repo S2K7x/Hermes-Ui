@@ -81,7 +81,7 @@
 	];
 
 	onMount(() => {
-		sidebarCollapsed = readJSON('hermes-sidebar-collapsed', false);
+		sidebarCollapsed = readJSON('yadai-sidebar-collapsed', false);
 
 		const mq = window.matchMedia('(max-width: 820px)');
 		narrow = mq.matches;
@@ -137,7 +137,7 @@
 		await chat.init();
 		// ?s=<id> deep-links a conversation; otherwise resume the last one
 		// that was open, like reopening Claude.ai.
-		const wanted = new URLSearchParams(location.search).get('s') ?? read('hermes-last-session');
+		const wanted = new URLSearchParams(location.search).get('s') ?? read('yadai-last-session');
 		const target = chat.sessions.find((s) => s.id === wanted) ?? chat.sessions[0];
 		if (target) await chat.openSession(target.id);
 	}
@@ -148,7 +148,7 @@
 	});
 
 	$effect(() => {
-		if (chat.sessionId) write('hermes-last-session', chat.sessionId);
+		if (chat.sessionId) write('yadai-last-session', chat.sessionId);
 	});
 
 	function onScroll() {
@@ -215,7 +215,7 @@
 
 	function toggleCollapse() {
 		sidebarCollapsed = !sidebarCollapsed;
-		writeJSON('hermes-sidebar-collapsed', sidebarCollapsed);
+		writeJSON('yadai-sidebar-collapsed', sidebarCollapsed);
 	}
 
 	async function exportMarkdown() {
@@ -335,7 +335,7 @@
 		return last && last.id === liveTurnId ? turnAnnouncement(last) : '';
 	});
 
-	let title = $derived(chat.current?.title || 'Hermes');
+	let title = $derived(chat.current?.title || 'Yadai');
 	let usage = $derived(usageSummary(chat.current));
 	let activeAgent = $derived(agents.byId(chat.activeAgentId));
 	let activeTeam = $derived(activeAgent ? directReports(agents.items, activeAgent) : []);
@@ -384,7 +384,7 @@
 
 		{#if chat.connected === false}
 			<div class="banner" role="alert">
-				<span>⚠️ Hermes est injoignable — nouvelle tentative en cours.</span>
+				<span>⚠️ Yadai est injoignable — nouvelle tentative en cours.</span>
 				<button onclick={() => chat.refreshHealth()}>Réessayer</button>
 			</div>
 		{/if}
@@ -399,7 +399,7 @@
 					<p class="status">Chargement…</p>
 				{:else if chat.messages.length === 0}
 					<div class="welcome">
-						<h2>{activeAgent ? agentLabel(activeAgent) : 'Hermes'}</h2>
+						<h2>{activeAgent ? agentLabel(activeAgent) : 'Yadai'}</h2>
 						<p>
 							{#if activeAgent}
 								{activeAgent.role || 'Agent personnalisé.'}

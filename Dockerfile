@@ -35,6 +35,8 @@ ENV NODE_ENV=production \
 	HOST=0.0.0.0 \
 	PORT=3000 \
 	WEB_DB_PATH=/data/hermes-web.db
+# The filename keeps the old name on purpose: it is the live database, and
+# docker-compose.yml says why.
 
 WORKDIR /app
 

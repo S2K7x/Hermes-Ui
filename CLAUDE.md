@@ -1,8 +1,36 @@
-# CLAUDE.md — Hermes-Ui
+# CLAUDE.md — Yadai
 
 Interface web privée mono-utilisateur pour **Hermes Agent**, façon Claude.ai,
 tournant sur un Raspberry Pi 5. SvelteKit (adapter-node) + SQLite, exposée sur
 le tailnet par Tailscale Serve.
+
+## Deux noms, et la frontière entre eux
+
+**Yadai** est le produit : le titre de l'onglet, le manifeste PWA, l'icône, et
+tout ce qu'une phrase française affichée à l'écran appelle par son nom.
+**Hermes** est le moteur qu'il pilote, et ce nom-là ne se traduit pas — il
+désigne des choses qui existent en dehors de ce dépôt et qu'on ne peut pas
+renommer sans mentir sur ce qu'on adresse :
+
+| Reste `hermes` | Pourquoi |
+|---|---|
+| `HERMES_API_KEY`, `HERMES_DASHBOARD_*`, `HERMES_SESSION_KEY`, `HERMES_*` | lues depuis `.env`, hors dépôt et intouchable |
+| `X-Hermes-Session-Key` / `-Id` / `-Token` | en-têtes du protocole amont |
+| `~/.hermes/`, `/mnt/data/hermes/hermes-agent/` | l'état et les sources de Hermes |
+| `hermes-gateway`, `hermes-dashboard` | unités systemd utilisateur |
+| `data/hermes-web.db` | la base **vivante** : la renommer orpheline prefs, prompts, agents, titres et abonnements push |
+| `/opt/stacks/Hermes-Ui`, `/mnt/data/backups/hermes*` | chemins de déploiement et archives déjà écrites |
+| `HermesSession`, `HermesJob`, `HermesError`, `lib/server/hermes.ts` | types et client de **l'API de Hermes** — les renommer dirait qu'on parle à autre chose |
+
+La règle pratique : **une chaîne lue par un humain dit « Yadai » ; un
+identifiant qui voyage vers Hermes ou vers le disque garde son nom.** Une
+question utile avant de renommer quoi que ce soit : est-ce que quelqu'un doit
+taper ça quelque part ? Si oui, ce n'est pas à nous de le changer.
+
+Les clés `localStorage` ont, elles, suivi le produit (`yadai-*`) : elles
+n'appartiennent qu'au navigateur. `legacyKey()` (`src/lib/client/storage.ts`,
+pure et testée) déplace une ligne `hermes-*` vers son nouveau nom à la première
+lecture, pour qu'un brouillon à moitié tapé survive au changement de nom.
 
 ## Le point essentiel
 
@@ -804,6 +832,24 @@ Points de détail qui comptent :
   des notifications push de cette app (iOS 16.4+) en dispose ; ne pas le
   supposer ailleurs sans vérifier.
 
+**Les douze palettes d'affiche.** Aux quatre préréglages d'origine s'ajoutent
+douze relevés d'une étude d'affiches, **échantillonnés au pixel** et non à
+l'œil : Corail, Crème, Pinède, Lagune, Brume, Abricot, Framboise, Menthe,
+Ambre, Dragée, Brique, Outremer. Une affiche, ce sont deux couleurs — un fond
+plat et le mot imprimé dessus —, c'est-à-dire exactement la paire
+`accent` / `accent2` ; celle des deux qui se lit comme un rehaut mène, donc une
+affiche à fond sombre (Pinède, Outremer) donne la main à son lettrage.
+
+Les huit autres couleurs, elles, **ne viennent pas des affiches** : un aplat
+saturé plein cadre, c'est une affiche, pas une page qu'on lit une heure. Ce
+sont des neutres teintés vers la couleur de l'affiche — la teinte passe dans
+les surfaces sans jamais colorer le texte. Ajouter une palette veut dire écrire
+ces dix littéraux et laisser `tests/theme.test.ts` juger : texte à 4,5:1 sur sa
+propre surface, texte discret à 3:1, et un anneau de focus qui tient 3:1 sur
+les trois fonds **quel que soit** l'accent tapé ensuite. Aucune de ces
+vérifications n'est facultative, et aucune n'a eu besoin d'être assouplie pour
+que les douze passent.
+
 ### 20. iPhone : le clavier ne redimensionne pas le viewport en PWA installée
 
 `interactive-widget=resizes-visual` est **ignoré** en mode standalone. Dans
@@ -949,8 +995,9 @@ Sur le panneau Apparence (10 arrêts), Tab revient au premier après le dernier 
 (WCAG 1.4.11) sur les **trois** fonds où il peut être dessiné — la page, un
 panneau, un champ creusé. Sans ça, l'indigo de « Nocturne » ou n'importe quelle
 couleur sombre saisie dans le champ d'accent donnerait un anneau invisible.
-`tests/theme.test.ts` rejoue les quatre préréglages × deux modes × les accents
-pathologiques.
+`tests/theme.test.ts` rejoue **tous** les préréglages × deux modes × les accents
+pathologiques — c'est ce qui rend l'ajout d'une palette sûr : une palette qui
+ne tiendrait pas le contrat ne passe pas les tests.
 
 **Le tiroir mobile est ce même dialogue.** Sous 820 px la sidebar sort du
 flux et recouvre le fil : elle est donc modale, et `Modal.svelte` et
@@ -1346,7 +1393,7 @@ de cette palette.
 Le corps d'un message est du markdown assaini injecté en `{@html}` par un rendu
 débouncé (point 9) ; y réécrire des balises reviendrait à se battre avec le
 prochain redessin. L'extrait dit ce qui a été trouvé, le halo dit où — et le
-halo est en `--focus`, donc lisible sur les quatre préréglages (point 22).
+halo est en `--focus`, donc lisible sur tous les préréglages (point 22).
 
 **Non vérifié** : le rendu réel dans un navigateur. Aucun n'était disponible
 dans le clone où ce changement a été écrit ; ce qui est testé, c'est la
@@ -1438,7 +1485,8 @@ src/
 │   │   └── respond.ts   UpstreamError → réponse JSON typée, `gate`, `readJson`
 │   ├── client/        helpers navigateur
 │   │   ├── api.ts       fetch typé → ApiError, `withRetry`
-│   │   ├── storage.ts   localStorage qui ne peut pas jeter
+│   │   ├── storage.ts   localStorage qui ne peut pas jeter, + reprise
+│   │   │                  des clés `hermes-*` sous leur nom `yadai-*`
 │   │   ├── platform.ts  ⌘ vs Ctrl
 │   │   ├── dialog.svelte.ts  focus d'un dialogue : entrée, piège de Tab, retour
 │   │   ├── menu.svelte.ts    clavier d'un menu surgissant : Échap, flèches

@@ -1,4 +1,4 @@
-# Améliorer Hermes-Ui à la main
+# Améliorer Yadai à la main
 
 Cette procédure est l'équivalent manuel de la routine nocturne
 (`/opt/stacks/hermes-ui-bot/improve.sh`, tous les jours à 05:00). Elle existe
@@ -31,7 +31,7 @@ installée. **Lecture seule** : ne modifie jamais ce dépôt.
 
 | Chemin | Rôle |
 |---|---|
-| `/opt/stacks/Hermes-Ui` | le dépôt **et** le déploiement en production |
+| `/opt/stacks/Hermes-Ui` | le dépôt **et** le déploiement en production (le répertoire garde son ancien nom : le runner, les sauvegardes et les unités systemd le désignent) |
 | `/opt/stacks/hermes-ui-bot` | la routine nocturne — hors dépôt, n'y touche pas |
 | `/opt/stacks/hermes-ui-bot/bot.env` | secrets, dont l'URL du webhook Discord |
 | `/mnt/data/backups/hermes-ui/` | les sauvegardes horodatées |
@@ -211,7 +211,7 @@ un résumé contenant une apostrophe ou un retour à la ligne corromprait le JSO
 ```bash
 PAYLOAD=$(TITLE="Amélioration déployée" DESC="<ton résumé>" python3 <<'PY'
 import json, os
-print(json.dumps({"username":"Hermes-Ui bot","embeds":[{
+print(json.dumps({"username":"Yadai bot","embeds":[{
     "title": os.environ["TITLE"][:256],
     "description": os.environ["DESC"][:3500],
     "color": 6076508,
@@ -242,7 +242,9 @@ arrière avec le SHA précédent.
 
 ## Ce qui existe déjà — ne le refais pas
 
-Chat en streaming avec timeline des outils · sidebar groupée par date, épinglage,
+Renommage du produit en **Yadai** (le moteur reste Hermes — voir CLAUDE.md,
+« Deux noms ») · seize palettes dont douze relevées d'une étude d'affiches ·
+chat en streaming avec timeline des outils · sidebar groupée par date, épinglage,
 archivage, branches · palette de commandes `⌘K` · panneau d'état · éditeur de
 skills · vue des conversations archivées · panneau providers (clés API + OAuth)
 · tâches planifiées · bibliothèque de prompts · export markdown · PWA mobile.

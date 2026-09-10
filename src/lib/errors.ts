@@ -71,11 +71,11 @@ export function humanizeError(err: unknown): string {
 
 	switch (err.code) {
 		case AppErrorCode.Unreachable:
-			return "Hermes ne répond pas. Le gateway est-il démarré ? (systemctl --user status hermes-gateway)";
+			return "Yadai ne répond pas. Le gateway est-il démarré ? (systemctl --user status hermes-gateway)";
 		case AppErrorCode.Timeout:
-			return 'Hermes a mis trop de temps à répondre.';
+			return 'Yadai a mis trop de temps à répondre.';
 		case AppErrorCode.RateLimited:
-			return "Hermes exécute déjà le maximum de tours simultanés. Réessayez dans un instant.";
+			return "Yadai exécute déjà le maximum de tours simultanés. Réessayez dans un instant.";
 		case AppErrorCode.TooLarge:
 			return 'Message trop volumineux. Réduisez la taille ou le nombre des images.';
 		case AppErrorCode.SessionGone:
@@ -85,12 +85,12 @@ export function humanizeError(err: unknown): string {
 		case 'invalid_title':
 			return err.message; // upstream explains which title collides
 		case 'session_db_unavailable':
-			return "La base de données de Hermes est indisponible (state.db).";
+			return "La base de données de Yadai est indisponible (state.db).";
 		case 'model_lock_persistence_failed':
 			return "Le modèle demandé n'a pas pu être enregistré sur la conversation.";
 		case 'model_lock_unavailable':
 			// Upstream refuses rather than falling back to the global default.
-			return "Hermes ne sait pas router ce modèle. Vérifiez que le fournisseur est configuré (`hermes model`).";
+			return "Yadai ne sait pas router ce modèle. Vérifiez que le fournisseur est configuré (`hermes model`).";
 		case 'missing_model':
 			return 'Aucun modèle sélectionné.';
 		case 'push_unavailable':
@@ -100,7 +100,7 @@ export function humanizeError(err: unknown): string {
 	}
 
 	if (err.status === 401 || err.status === 403) {
-		return "Authentification refusée par Hermes. HERMES_API_KEY correspond-elle à API_SERVER_KEY ?";
+		return "Authentification refusée par Yadai. HERMES_API_KEY correspond-elle à API_SERVER_KEY ?";
 	}
 	return err.message || `Erreur HTTP ${err.status}.`;
 }

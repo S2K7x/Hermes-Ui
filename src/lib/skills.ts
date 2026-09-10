@@ -110,7 +110,7 @@ export function slugifySkillName(input: string): string {
 export function skillTemplate(name: string, description = ''): string {
 	return `---
 name: ${name}
-description: ${description || 'À compléter — dis en une phrase quand Hermes doit charger ce skill.'}
+description: ${description || 'À compléter — dis en une phrase quand Yadai doit charger ce skill.'}
 ---
 
 # ${name}

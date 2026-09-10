@@ -131,8 +131,8 @@ class ChatStore {
 	 * the picker fills in behind.
 	 */
 	async init() {
-		this.nextModel = readJSON('hermes-next-model', '');
-		this.nextAgent = readJSON('hermes-next-agent', '');
+		this.nextModel = readJSON('yadai-next-model', '');
+		this.nextAgent = readJSON('yadai-next-agent', '');
 		// Nothing awaits this until `catalogReady()` might, so it is kept
 		// non-rejecting: a floating rejection would reach the global
 		// `unhandledrejection` net in +layout.svelte.
@@ -310,7 +310,7 @@ class ChatStore {
 		if (!model || model === this.activeModel) return;
 		const previousNext = this.nextModel;
 		this.nextModel = model;
-		writeJSON('hermes-next-model', model);
+		writeJSON('yadai-next-model', model);
 
 		const id = this.sessionId;
 		if (!id || !this.canSwitchModel) return;
@@ -334,7 +334,7 @@ class ChatStore {
 		} catch (err) {
 			this.#patchLocal(id, { model: previousModel });
 			this.nextModel = previousNext;
-			writeJSON('hermes-next-model', previousNext);
+			writeJSON('yadai-next-model', previousNext);
 			toasts.error(err);
 		}
 	}
@@ -351,7 +351,7 @@ class ChatStore {
 		if (agentId === this.activeAgentId) return;
 		const previousNext = this.nextAgent;
 		this.nextAgent = agentId;
-		writeJSON('hermes-next-agent', agentId);
+		writeJSON('yadai-next-agent', agentId);
 
 		const id = this.sessionId;
 		if (!id) return;
@@ -366,7 +366,7 @@ class ChatStore {
 		} catch (err) {
 			this.#patchLocal(id, { agent_id: previous || undefined });
 			this.nextAgent = previousNext;
-			writeJSON('hermes-next-agent', previousNext);
+			writeJSON('yadai-next-agent', previousNext);
 			toasts.error(err);
 		}
 	}

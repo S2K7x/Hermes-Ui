@@ -1,7 +1,7 @@
 {
-	"name": "Hermes",
-	"short_name": "Hermes",
-	"description": "Interface web privée pour Hermes Agent",
+	"name": "Yadai",
+	"short_name": "Yadai",
+	"description": "Yadai — interface web privée pour Hermes Agent",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",

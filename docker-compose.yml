@@ -1,8 +1,8 @@
 services:
-  hermes-web:
+  yadai-web:
     build: .
-    image: hermes-web:local
-    container_name: hermes-web
+    image: yadai-web:local
+    container_name: yadai-web
     restart: unless-stopped
 
     # Host networking, deliberately.
@@ -31,6 +31,9 @@ services:
       # http://…, which never matches the https:// Origin the browser sends
       # through Tailscale Serve.
       ORIGIN: ${HERMES_PUBLIC_ORIGIN}
+      # Still hermes-web.db: this is the live database (prefs, prompts,
+      # agents, titles, push subscriptions). Renaming the file would orphan
+      # every one of those rows for the sake of a filename nobody sees.
       WEB_DB_PATH: /data/hermes-web.db
       BODY_SIZE_LIMIT: 8M # inline images travel as base64 data: URLs
       # Hermes' own dashboard (hermes-dashboard.service, a second loopback

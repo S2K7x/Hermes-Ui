@@ -292,7 +292,7 @@ test('nothing is announced when there is no assistant turn to talk about', () =>
 });
 
 test('a running turn says which phase it is in', () => {
-	assert.equal(turnAnnouncement(turn({ streaming: true })), 'Hermes réfléchit.');
+	assert.equal(turnAnnouncement(turn({ streaming: true })), 'Yadai réfléchit.');
 	assert.equal(turnAnnouncement(turn({ streaming: true, content: 'Voici' })), 'Réponse en cours.');
 });
 
@@ -366,13 +366,13 @@ test('the conversation says who is speaking, and the composer names its controls
 	const dir = new URL('../src/lib/components/', import.meta.url);
 	const message = readFileSync(new URL('Message.svelte', dir), 'utf8');
 	assert.match(message, /<span class="sr-only">Vous :<\/span>/);
-	assert.match(message, /<span class="sr-only">Hermes :<\/span>/);
+	assert.match(message, /<span class="sr-only">Yadai :<\/span>/);
 
 	const composer = readFileSync(new URL('Composer.svelte', dir), 'utf8');
 	assert.match(composer, /aria-label="Envoyer le message"/);
 	assert.match(composer, /aria-label="Arrêter l'affichage"/);
 	// The textarea's name must not flip to "Hermes travaille…" mid-turn.
-	assert.match(composer, /aria-label="Message à Hermes"/);
+	assert.match(composer, /aria-label="Message à Yadai"/);
 });
 
 /** Clipped, not hidden: `display: none` would drop it from the a11y tree too. */

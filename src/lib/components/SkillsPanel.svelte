@@ -191,7 +191,7 @@
 							<input bind:value={newName} placeholder="ma-veille-tech" />
 						</label>
 						<label>
-							Description (une phrase : quand Hermes doit s'en servir)
+							Description (une phrase : quand Yadai doit s'en servir)
 							<input bind:value={newDescription} placeholder="Optionnel" />
 						</label>
 						<p class="muted small">

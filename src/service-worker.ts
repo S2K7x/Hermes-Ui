@@ -11,7 +11,7 @@ import { base64UrlToBytes } from '$lib/push';
  * and survives a dropped tailnet, not to work offline.
  */
 
-const CACHE = `hermes-shell-${version}`;
+const CACHE = `yadai-shell-${version}`;
 const SHELL = [...build, ...files];
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
@@ -42,10 +42,10 @@ sw.addEventListener('activate', (event) => {
  * in `showNotification`, even when the payload is missing or unparseable.
  */
 sw.addEventListener('push', (event) => {
-	let title = 'Hermes';
+	let title = 'Yadai';
 	let body = 'Le tour est terminé.';
 	let url = '/';
-	let tag = 'hermes';
+	let tag = 'yadai';
 	try {
 		const data = event.data?.json() as Partial<{
 			title: string;

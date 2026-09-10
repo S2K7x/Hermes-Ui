@@ -404,7 +404,7 @@ export function humanCron(expr: string): string {
  */
 export const JOB_PROMPT_HEADER = [
 	'## Ta tâche planifiée',
-	"Le planificateur de Hermes déclenche cette tâche tout seul : il n'y a ni conversation précédente, ni personne pour répondre à une question pendant l'exécution. Va au bout, et rends un résultat qui se comprend seul.",
+	"Le planificateur de Yadai déclenche cette tâche tout seul : il n'y a ni conversation précédente, ni personne pour répondre à une question pendant l'exécution. Va au bout, et rends un résultat qui se comprend seul.",
 	'',
 	'Voici la tâche :'
 ].join('\n');
@@ -669,7 +669,7 @@ export function targetLabel(target: DeliveryTarget): string {
 /** French one-liner for what a delivery choice actually does. */
 export function deliveryHint(id: string): string {
 	if (id === 'local') {
-		return "Rien n'est envoyé : Hermes exécute la tâche et garde la sortie de son côté.";
+		return "Rien n'est envoyé : Yadai exécute la tâche et garde la sortie de son côté.";
 	}
-	return `Le résultat sera envoyé sur ${id}, sur le canal configuré pour Hermes.`;
+	return `Le résultat sera envoyé sur ${id}, sur le canal configuré pour Yadai.`;
 }
