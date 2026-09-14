@@ -364,6 +364,9 @@ Les invariants, tous dans `src/lib/skills.ts` (pur, testé) et
 - `SKILLS_DIR` absent ou illisible → `available: false` sur
   `GET /api/skills/files`, et le panneau s'affiche désactivé. C'est le cas
   normal en `npm run dev` hors Docker : ne pas le traiter comme une erreur.
+  L'inverse compte autant : un 429, une erreur disque ou une connexion perdue
+  ne sont **pas** `available: false` et ne doivent jamais atteindre cet
+  écran-là — voir le point 4 du contrat d'erreurs.
 
 Routes : `GET|POST /api/skills/files` (liste / création) et
 `GET|PUT /api/skills/files/content` (lecture / écriture). Elles n'utilisent pas
@@ -1779,6 +1782,8 @@ src/
 │   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus),
 │   │                  déplacement des flèches dans un menu surgissant, et
 │   │                  phrase annoncée par la zone live d'un tour
+│   ├── availability.ts  l'état d'un panneau optionnel : pas encore lu, prêt,
+│   │                  désactivé, illisible — et quand relire
 │   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction
 │   ├── icons.ts       le jeu d'icônes : tracés 24×24, sans dépendance
 │   ├── trash.ts       corbeille : compte à rebours, échéance, lignes à balayer
@@ -1855,6 +1860,44 @@ lancent Chromium.
 actionnable. « Too many concurrent runs (max 10) » ne dit rien à l'utilisateur ;
 « Hermes exécute déjà le maximum de tours simultanés » si. Ajouter un cas ici
 plutôt que d'afficher le texte amont brut.
+
+**4. `lib/availability.ts`** — « je n'ai pas pu lire » n'est pas
+« c'est désactivé ». Trois panneaux se tiennent devant quelque chose de
+facultatif — l'éditeur de skills et son bind mount (point 11), les providers et
+leur jeton de dashboard (point 13), les tâches et le module cron (point 14) —
+et chacun a donc un écran « c'est éteint, voici pourquoi ». Le texte de ces
+écrans **est un remède** : « ajoutez le volume `/skills` et relancez
+`docker compose up -d` ». Les trois y faisaient tomber n'importe quel échec de
+lecture.
+
+**Mesuré sur ce Pi**, contre l'application qui tourne : `GET /api/skills/files`
+répond `429 rate_limit_exceeded` au-delà de douze appels rapprochés (le
+garde-fou de `gate()`) et `500` sur une erreur de système de fichiers
+(`EACCES: permission denied, scandir`) ; et le navigateur forge le sien —
+`Connexion perdue.` — dès qu'un téléphone quitte le tailnet. Les trois
+affichaient le paragraphe sur `docker-compose.yml`, avec aplomb, à propos d'un
+répertoire monté tout du long. Pire, l'état **collait** : le `$effect`
+d'ouverture ne relisait que tant que la disponibilité était inconnue, donc une
+coupure d'une seconde désactivait l'éditeur jusqu'au rechargement de la page.
+
+`panelState()` rend donc `unread | ready | disabled | failed`, où `failed`
+**l'emporte sur `disabled`** (une lecture qu'on n'a pas pu faire ne dit rien de
+la configuration), et `shouldLoadPanel()` relit à l'ouverture suivante dans ce
+seul cas. Le panneau montre le vrai message, un bouton « Réessayer », et une
+phrase qui dit que le montage est peut-être parfaitement sain.
+
+Deux détails à ne pas défaire :
+
+- **La lecture de l'état est `untrack()`ée dans le `$effect`.** `failed` est un
+  état qui *demande* à être rechargé : un effet qui se réexécuterait à chaque
+  mutation du store appellerait `refresh()`, verrait l'échec arriver, et
+  rappellerait — en boucle serrée sur l'endpoint qui vient de tomber. `open`
+  doit rester la seule dépendance.
+- Dans `JobsPanel`, le bloc d'échec se pose **au-dessus** de la liste et non à
+  sa place : un rafraîchissement raté après une action ne doit pas faire
+  disparaître les tâches de l'écran. Et « Aucune tâche planifiée » n'est plus
+  écrit sur une liste jamais reçue — c'est le panneau où le croire veut dire
+  planifier deux fois la même tâche.
 
 Points de détail qui comptent :
 

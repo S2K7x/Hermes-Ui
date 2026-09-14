@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import Modal from './Modal.svelte';
+	import { shouldLoadPanel } from '$lib/availability';
 	import { jobsStore, type JobInput } from '$lib/stores/jobs.svelte';
 	import { agents } from '$lib/stores/agents.svelte';
 	import { agentColor, composeSystemPrompt } from '$lib/agents';
@@ -43,10 +45,16 @@
 
 	// Loaded on first open only — a Pi has better things to do than poll a job
 	// list nobody is looking at. The roster comes along because a task now
-	// carries an agent, and its card is composed here to show its cost.
+	// carries an agent, and its card is composed here to show its cost. A
+	// *failed* read is the one case worth retrying on a later opening, which is
+	// what `shouldLoadPanel` adds over the old "jobs === null" guard.
+	// The state reads are untracked so this fires once per opening and not once
+	// per store mutation: `failed` is now a state that *asks* to reload, so an
+	// effect that re-ran on it would retry in a tight loop against the very
+	// thing that just failed. `open` is the only dependency.
 	$effect(() => {
 		if (!open) return;
-		if (jobsStore.jobs === null) jobsStore.refresh();
+		if (untrack(() => shouldLoadPanel(jobsStore.state, jobsStore.loading))) jobsStore.refresh();
 		agents.ensureLoaded();
 	});
 
@@ -145,7 +153,7 @@
 	{#snippet subtitle()}Yadai les exécute seul, même app fermée{/snippet}
 
 	<div class="body">
-		{#if jobsStore.unavailable}
+		{#if jobsStore.state === 'disabled'}
 			<p class="none">
 				Ce Yadai tourne sans son module cron : aucune tâche ne peut être planifiée.
 			</p>
@@ -310,11 +318,23 @@
 				<p class="muted small">{deliveryHint(deliver)}</p>
 			</div>
 		{:else}
+			<!-- Above the list, not instead of it: a refresh that fails after an
+			     action must not make the tasks vanish from the screen. -->
+			{#if jobsStore.state === 'failed'}
+				<div class="read-failed">
+					<p>La liste des tâches n'a pas pu être lue.</p>
+					<p class="muted small">{jobsStore.loadError}</p>
+					<button onclick={() => jobsStore.refresh(true)} disabled={jobsStore.loading}>
+						{jobsStore.loading ? 'Lecture…' : 'Réessayer'}
+					</button>
+				</div>
+			{/if}
+
 			<button class="new" onclick={() => startCreate()}>＋ Nouvelle tâche</button>
 
 			{#if jobsStore.jobs === null && jobsStore.loading}
 				<p class="none">Chargement…</p>
-			{:else if jobsStore.sorted.length === 0}
+			{:else if jobsStore.jobs !== null && jobsStore.sorted.length === 0}
 				<p class="none">
 					Aucune tâche planifiée. Un rappel dans deux heures ou un résumé chaque matin, confié à
 					l'agent de votre choix, c'est ici.
@@ -388,7 +408,7 @@
 		     footer is the one part of the sheet that stays visible, and on a
 		     phone the submit button was below a five-row textarea. -->
 		<span class="foot-note">
-			{#if jobsStore.unavailable}
+			{#if jobsStore.state === 'disabled'}
 				&nbsp;
 			{:else if editing !== null}
 				{modeLabel(spec.mode)} · {parsed.kind === null ? 'horaire à compléter' : parsed.display}
@@ -396,7 +416,7 @@
 				Une tâche tourne côté Pi avec tous les outils de Yadai.
 			{/if}
 		</span>
-		{#if editing !== null && !jobsStore.unavailable}
+		{#if editing !== null && jobsStore.state !== 'disabled'}
 			<button class="refresh" onclick={() => (editing = null)}>Annuler</button>
 			<button class="refresh primary" disabled={!canSubmit} onclick={submit}>
 				{jobsStore.creating ? 'Enregistrement…' : editing ? 'Enregistrer' : 'Planifier'}
@@ -684,5 +704,28 @@
 		text-align: center;
 		color: var(--text-faint);
 		font-size: 13px;
+	}
+	.read-failed {
+		margin-bottom: var(--gap-card);
+		padding: 12px 14px;
+		border-radius: var(--radius-card);
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-card);
+		text-align: center;
+	}
+	.read-failed p {
+		margin: 0 0 6px;
+		font-size: 13px;
+	}
+	.read-failed button {
+		min-height: 34px;
+		padding: 6px 14px;
+		border-radius: 999px;
+		background: var(--bg-sunken);
+		font-size: 13px;
+	}
+	.read-failed button:disabled {
+		opacity: 0.45;
+		cursor: default;
 	}
 </style>

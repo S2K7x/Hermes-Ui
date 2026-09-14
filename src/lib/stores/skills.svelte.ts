@@ -1,4 +1,6 @@
 import { api } from '$lib/client/api';
+import { humanizeError } from '$lib/errors';
+import { panelState, type PanelState } from '$lib/availability';
 import { toasts } from './toast.svelte';
 import {
 	SKILL_FILE,
@@ -29,6 +31,16 @@ interface ContentResponse extends SkillFileEntry {
 class SkillsStore {
 	/** null until the first load: "unknown", not "unavailable". */
 	available = $state<boolean | null>(null);
+	/**
+	 * Why the last listing failed, or null once one succeeds.
+	 *
+	 * Kept apart from `available` on purpose. A 429 from the rate gate, an
+	 * `EACCES` on the tree or a dropped connection used to land on
+	 * `available = false`, which is the screen that blames the bind mount and
+	 * tells the user to edit docker-compose.yml — about a directory that was
+	 * mounted the whole time, and with no way back short of reloading the page.
+	 */
+	loadError = $state<string | null>(null);
 	entries = $state<SkillFileEntry[]>([]);
 	categories = $state<string[]>([]);
 	loading = $state(false);
@@ -43,6 +55,15 @@ class SkillsStore {
 	/** Set after a successful write, to remind about the gateway restart. */
 	savedOnce = $state(false);
 
+	/** What the panel should show: unread, ready, off, or unreadable. */
+	get state(): PanelState {
+		return panelState({
+			ready: this.available === true,
+			disabled: this.available === false,
+			error: this.loadError
+		});
+	}
+
 	get dirty(): boolean {
 		return this.selected !== null && this.content !== this.saved;
 	}
@@ -51,16 +72,28 @@ class SkillsStore {
 		return this.selected ? skillLabel(this.selected) : '';
 	}
 
-	async refresh() {
+	/**
+	 * Re-read the listing.
+	 *
+	 * `background` is for the top-up after a create: the file is written and
+	 * open in the editor, so a failed listing must not replace it with an error
+	 * screen. It gets a toast instead — the right weight for "the tree on the
+	 * left may be one row stale".
+	 */
+	async refresh(background = false) {
 		this.loading = true;
 		try {
 			const res = await api<ListResponse>('/api/skills/files', { timeoutMs: 15_000 });
 			this.available = res.available;
 			this.entries = res.entries ?? [];
 			this.categories = res.categories ?? [];
+			this.loadError = null;
 		} catch (err) {
-			this.available = false;
-			toasts.error(err);
+			// No toast otherwise: this read runs with the panel on screen, and
+			// the panel now says so itself — with the reason and a retry, which
+			// a toast that fades after four seconds could not.
+			if (background) toasts.error(err);
+			else this.loadError = humanizeError(err);
 		} finally {
 			this.loading = false;
 		}
@@ -131,7 +164,7 @@ class SkillsStore {
 			await this.open({ category: entry.category, skill: entry.skill, file: SKILL_FILE });
 			toasts.success(`Skill « ${name} » créé.`);
 			// The listing may also have gained a DESCRIPTION.md for a new category.
-			this.refresh();
+			this.refresh(true);
 			return true;
 		} catch (err) {
 			toasts.error(err);

@@ -2,6 +2,7 @@ import { api } from '$lib/client/api';
 import { toasts } from './toast.svelte';
 import { chat } from './chat.svelte';
 import { humanizeError } from '$lib/errors';
+import { panelState, type PanelState } from '$lib/availability';
 import {
 	advanceOauthFlow,
 	beginOauthFlow,
@@ -44,6 +45,15 @@ class ProvidersStore {
 	available = $state<boolean | null>(null);
 	/** Why the panel is off, when it is. Comes from the server, already in French. */
 	message = $state('');
+	/**
+	 * Why the last read failed, or null once one succeeds.
+	 *
+	 * Separate from `message`: one is the dashboard explaining that it has no
+	 * token, the other is this app failing to ask. Folding the second into
+	 * `available = false` printed the "copy HERMES_DASHBOARD_SESSION_TOKEN"
+	 * remedy at a user whose only problem was a dropped connection.
+	 */
+	loadError = $state<string | null>(null);
 	keys = $state<ProviderKeyGroup[]>([]);
 	accounts = $state<OauthProvider[]>([]);
 	loading = $state(false);
@@ -70,6 +80,15 @@ class ProvidersStore {
 
 	#pollTimer: ReturnType<typeof setTimeout> | null = null;
 
+	/** What the panel should show: unread, ready, off, or unreadable. */
+	get state(): PanelState {
+		return panelState({
+			ready: this.available === true,
+			disabled: this.available === false,
+			error: this.loadError
+		});
+	}
+
 	get validationHint(): string {
 		return validationMessage(this.validation);
 	}
@@ -82,9 +101,9 @@ class ProvidersStore {
 			this.message = res.message ?? '';
 			this.keys = res.keys ?? [];
 			this.accounts = res.accounts ?? [];
+			this.loadError = null;
 		} catch (err) {
-			this.available = false;
-			this.message = humanizeError(err);
+			this.loadError = humanizeError(err);
 		} finally {
 			this.loading = false;
 		}

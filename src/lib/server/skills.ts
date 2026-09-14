@@ -367,6 +367,14 @@ export function refFromParams(params: URLSearchParams): SkillRef {
 	};
 }
 
-/** `proxy()` from respond.ts, with this upstream's name on the fallback. */
+/**
+ * `proxy()` from respond.ts, with this upstream's name on the fallback.
+ *
+ * The fallback code is deliberately neutral: it catches whatever the
+ * filesystem throws that this module did not dress itself, and that happens on
+ * reads too. Measured on this Pi — an unreadable skills root answers
+ * `GET /api/skills/files` with `EACCES: permission denied, scandir`, which the
+ * old `skill_write_failed` labelled as a write that never happened.
+ */
 export const skillsJson = <T>(fn: () => Promise<T>): Promise<Response> =>
-	proxy(fn, { status: 500, code: 'skill_write_failed' });
+	proxy(fn, { status: 500, code: 'skills_fs_error' });

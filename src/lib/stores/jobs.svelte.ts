@@ -1,4 +1,6 @@
 import { api } from '$lib/client/api';
+import { humanizeError } from '$lib/errors';
+import { panelState, type PanelState } from '$lib/availability';
 import { toasts } from './toast.svelte';
 import { scheduleExpression, sortJobs, usableTargets, type DeliveryTarget } from '$lib/jobs';
 import type { HermesJob } from '$lib/types';
@@ -39,9 +41,27 @@ class JobsStore {
 	loading = $state(false);
 	/** Set when the gateway has no cron module (HTTP 501). */
 	unavailable = $state(false);
+	/**
+	 * Why the last listing failed, or null once one succeeds.
+	 *
+	 * Without it, a failed read left `jobs` at null and the panel printed
+	 * "Aucune tâche planifiée" — a flat statement about a list it had never
+	 * managed to fetch, in the one panel where believing it means scheduling
+	 * the same task twice.
+	 */
+	loadError = $state<string | null>(null);
 	/** Id of the job an action is running on, so only its buttons spin. */
 	busyId = $state<string | null>(null);
 	creating = $state(false);
+
+	/** What the panel should show: unread, ready, off, or unreadable. */
+	get state(): PanelState {
+		return panelState({
+			ready: this.jobs !== null,
+			disabled: this.unavailable,
+			error: this.loadError
+		});
+	}
 
 	get sorted(): HermesJob[] {
 		return sortJobs(this.jobs ?? []);
@@ -58,14 +78,21 @@ class JobsStore {
 			this.jobs = res.jobs ?? [];
 			this.targets = res.targets ?? [];
 			this.unavailable = false;
+			this.loadError = null;
 		} catch (err) {
 			// 501 is Hermes saying it was built without the cron module — a
 			// configuration fact to explain, not a failure to retry.
 			if ((err as { status?: number })?.status === 501) {
 				this.unavailable = true;
 				this.jobs = [];
-			} else if (!quiet) {
-				toasts.error(err);
+				this.loadError = null;
+			} else {
+				// Anything else leaves the list unknown. Saying so beats both an
+				// empty list and a toast that fades: the panel shows the reason
+				// and a retry, and `quiet` only decides whether a *mutation* also
+				// shouts about a refresh it could not make.
+				this.loadError = humanizeError(err);
+				if (!quiet) toasts.error(err);
 			}
 		} finally {
 			this.loading = false;

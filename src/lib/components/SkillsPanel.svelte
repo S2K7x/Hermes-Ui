@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import Modal from './Modal.svelte';
+	import { shouldLoadPanel } from '$lib/availability';
 	import { skillsStore } from '$lib/stores/skills.svelte';
 	import { relativeTime } from '$lib/sessions';
 	import {
@@ -27,10 +29,19 @@
 	let newDescription = $state('');
 	let submitting = $state(false);
 
-	// Load once per opening: the listing stats ~80 files, which is not
-	// something to repeat on a Pi while the panel merely sits there.
+	// Load once: the listing stats ~80 files, which is not something to repeat
+	// on a Pi while the panel merely sits there. A *failed* read is the one
+	// case worth retrying, so closing and reopening heals a blip — see
+	// `shouldLoadPanel`.
+	// The state reads are untracked so this fires once per opening and not once
+	// per store mutation: `failed` is now a state that *asks* to reload, so an
+	// effect that re-ran on it would retry in a tight loop against the very
+	// thing that just failed. `open` is the only dependency.
 	$effect(() => {
-		if (open && skillsStore.available === null) skillsStore.refresh();
+		if (!open) return;
+		if (untrack(() => shouldLoadPanel(skillsStore.state, skillsStore.loading))) {
+			skillsStore.refresh();
+		}
 	});
 
 	let groups = $derived(groupSkillFiles(skillsStore.entries, query));
@@ -99,14 +110,28 @@
 
 <Modal {open} title="Skills" width={1080} fill onclose={tryClose}>
 	{#snippet subtitle()}
-		{#if skillsStore.available === false}
+		{#if skillsStore.state === 'failed'}
+			liste illisible
+		{:else if skillsStore.state === 'disabled'}
 			indisponible
 		{:else}
 			fichiers sur le Pi · un redémarrage du gateway peut être nécessaire
 		{/if}
 	{/snippet}
 
-	{#if skillsStore.available === false}
+	{#if skillsStore.state === 'failed'}
+		<div class="unavailable">
+			<p>La liste des skills n'a pas pu être lue.</p>
+			<p class="muted small">{skillsStore.loadError}</p>
+			<p class="muted small">
+				Le répertoire est peut-être monté et parfaitement sain : cet écran dit seulement que
+				la requête a échoué.
+			</p>
+			<button onclick={() => skillsStore.refresh()} disabled={skillsStore.loading}>
+				{skillsStore.loading ? 'Lecture…' : 'Réessayer'}
+			</button>
+		</div>
+	{:else if skillsStore.state === 'disabled'}
 		<div class="unavailable">
 			<p>L'édition des skills est désactivée.</p>
 			<p class="muted small">
@@ -271,6 +296,18 @@
 	.unavailable p {
 		margin: 0 auto 8px;
 		max-width: 460px;
+	}
+	.unavailable button {
+		margin-top: 8px;
+		padding: 7px 15px;
+		min-height: 34px;
+		border-radius: 999px;
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-card);
+		font-size: 13px;
+	}
+	.unavailable button:hover:not(:disabled) {
+		background: var(--bg-hover);
 	}
 	.split {
 		flex: 1;

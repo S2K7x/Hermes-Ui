@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import Modal from './Modal.svelte';
+	import { shouldLoadPanel } from '$lib/availability';
 	import { providersStore } from '$lib/stores/providers.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import {
@@ -23,11 +25,19 @@
 	let tab = $state<Tab>('keys');
 	let query = $state('');
 
-	// Load once per opening. Listing providers costs two dashboard calls, one of
-	// which walks the credential store — not something to repeat on a Pi while
-	// the panel just sits there.
+	// Load once. Listing providers costs two dashboard calls, one of which walks
+	// the credential store — not something to repeat on a Pi while the panel
+	// just sits there. A *failed* read is the one case worth retrying, so
+	// closing and reopening heals a blip — see `shouldLoadPanel`.
+	// The state reads are untracked so this fires once per opening and not once
+	// per store mutation: `failed` is now a state that *asks* to reload, so an
+	// effect that re-ran on it would retry in a tight loop against the very
+	// thing that just failed. `open` is the only dependency.
 	$effect(() => {
-		if (open && providersStore.available === null) providersStore.refresh();
+		if (!open) return;
+		if (untrack(() => shouldLoadPanel(providersStore.state, providersStore.loading))) {
+			providersStore.refresh();
+		}
 	});
 
 	let groups = $derived(filterProviderGroups(providersStore.keys, query));
@@ -80,14 +90,28 @@
 
 <Modal {open} title="Providers" width={760} fill onclose={close}>
 	{#snippet subtitle()}
-		{#if providersStore.available === false}
+		{#if providersStore.state === 'failed'}
+			liste illisible
+		{:else if providersStore.state === 'disabled'}
 			indisponible
 		{:else}
 			clés et comptes de Yadai · un redémarrage du gateway peut être nécessaire
 		{/if}
 	{/snippet}
 
-	{#if providersStore.available === false}
+	{#if providersStore.state === 'failed'}
+		<div class="unavailable">
+			<p>Les providers n'ont pas pu être lus.</p>
+			<p class="muted small">{providersStore.loadError}</p>
+			<p class="muted small">
+				Le dashboard est peut-être configuré et en parfait état : cet écran dit seulement que
+				la requête a échoué.
+			</p>
+			<button onclick={() => providersStore.refresh()} disabled={providersStore.loading}>
+				{providersStore.loading ? 'Lecture…' : 'Réessayer'}
+			</button>
+		</div>
+	{:else if providersStore.state === 'disabled'}
 		<div class="unavailable">
 			<p>La gestion des providers est indisponible.</p>
 			<p class="muted small">{providersStore.message}</p>
