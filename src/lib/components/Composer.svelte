@@ -6,6 +6,13 @@
 	import { prompts } from '$lib/stores/prompts.svelte';
 	import { toasts } from '$lib/stores/toast.svelte';
 	import { matchPrompts } from '$lib/prompts';
+	import { formatBytes } from '$lib/skills';
+	import {
+		MAX_TEXT_FILE_BYTES,
+		displayName,
+		inlineTextFile,
+		refusalMessage
+	} from '$lib/attach';
 	import { uid } from '$lib/transcript';
 	import type { Attachment } from '$lib/types';
 
@@ -96,15 +103,17 @@
 	let totalBytes = $derived(attachments.reduce((sum, a) => sum + a.size, 0));
 
 	/**
-	 * Only images can be attached. The Hermes API rejects uploaded files,
+	 * Only images can be *attached*. The Hermes API rejects uploaded files,
 	 * file_id references and non-image data: URLs with
-	 * 400 unsupported_content_type, so anything else is refused here with an
-	 * explanation rather than failing mid-turn.
+	 * 400 unsupported_content_type, so anything else that is text is inlined
+	 * into the message instead — the prompt is the one channel that has always
+	 * accepted it. Anything that is neither is refused with an explanation
+	 * rather than failing mid-turn.
 	 */
 	async function addFiles(files: FileList | File[]) {
 		for (const file of Array.from(files)) {
 			if (!file.type.startsWith('image/')) {
-				flash(`« ${file.name} » ignoré : seules les images sont acceptées par l'API de Yadai.`);
+				await inlineFile(file);
 				continue;
 			}
 			if (file.size > MAX_IMAGE_BYTES) {
@@ -129,6 +138,37 @@
 				size: file.size
 			});
 		}
+	}
+
+	/**
+	 * Read a non-image file and append it to the message as a fenced block.
+	 *
+	 * The byte gate comes first, before anything is decoded: a dropped video is
+	 * refused on its size rather than after a hundred megabytes have gone
+	 * through a UTF-8 decoder. What comes back from `File.text()` is then
+	 * judged on its content, not on its extension — that is what lets a
+	 * `Dockerfile` or a `.env.example` in without a list to maintain.
+	 */
+	async function inlineFile(file: File) {
+		const name = displayName(file.name);
+		if (file.size > MAX_TEXT_FILE_BYTES) {
+			flash(`« ${name} » ignoré : ${formatBytes(file.size)}, au-delà des 512 Ko lisibles d'un coup.`);
+			return;
+		}
+		let content: string;
+		try {
+			content = await file.text();
+		} catch {
+			flash(`« ${name} » n'a pas pu être lu.`);
+			return;
+		}
+		const result = inlineTextFile(file.name, content);
+		if (!result.ok) {
+			flash(refusalMessage(file.name, result.reason, content.length));
+			return;
+		}
+		insert(result.block);
+		flash(`« ${name} » inséré dans le message (${formatBytes(file.size)}).`);
 	}
 
 	function onPaste(event: ClipboardEvent) {
@@ -357,13 +397,15 @@
 	{/if}
 
 	<div class="row">
-		<label class="attach" title="Joindre une image">
+		<label class="attach" title="Joindre une image ou un fichier texte">
 			<Icon name="paperclip" size={17} />
+			<!-- No `accept`: images are attached, anything textual is inlined into
+			     the message, and on iOS a narrow filter is what hides the Files
+			     app behind the photo library. -->
 			<input
 				type="file"
-				accept="image/*"
 				multiple
-				aria-label="Joindre une image"
+				aria-label="Joindre une image ou un fichier texte"
 				onchange={(e) => {
 					const input = e.currentTarget;
 					if (input.files) addFiles(input.files);

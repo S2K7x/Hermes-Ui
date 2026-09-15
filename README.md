@@ -77,6 +77,12 @@ de l'application.
   après un rechargement ou une PWA relancée par iOS. La sidebar marque d'un ✎
   les conversations qui en portent un
 - **Images en entrée** : coller ou déposer, envoyées en base64
+- **Fichiers texte en entrée** : déposer, coller ou choisir un `.log`, un
+  `.yaml`, un `Dockerfile` ou n'importe quel fichier texte l'insère dans le
+  message en bloc de code, avec son nom et le bon langage. L'API de Hermes
+  Agent n'accepte que les images en pièce jointe — le prompt, lui, a toujours
+  accepté ça, et c'est exactement ce qu'on faisait à la main. Un binaire est
+  refusé sur son contenu, et rien n'est jamais tronqué en silence
 - **Sélecteur de modèle** parmi les fournisseurs configurés,
   applicable à la conversation ouverte dès le message suivant
 - **Export markdown** de la conversation

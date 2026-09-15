@@ -156,12 +156,40 @@ pour toutes dans `HERMES_SESSION_KEY` (`agent:main:webui:dm:user`) et injecté
 par `hermes.ts` sur chaque appel. S'il suivait `session_id`, la mémoire se
 fragmenterait à chaque « nouvelle discussion ». Ne pas le rendre dynamique.
 
-### 5. Pas d'upload de fichiers — images seulement
+### 5. Pas d'upload de fichiers — images en pièce jointe, texte dans le prompt
 
 L'API accepte `image_url` en URL `http(s)` ou `data:image/...;base64`. Tout le
 reste (`file`, `input_file`, `file_id`, `data:` non-image) est rejeté en
 `400 unsupported_content_type`. `Composer.svelte` filtre côté client et
 affiche pourquoi, plutôt que de laisser le tour échouer.
+
+**Mais un fichier texte n'a pas besoin d'être une pièce jointe** : le prompt
+est un canal que l'API a toujours accepté. Tout ce qui n'est pas une image et
+qui se lit comme du texte est donc **inséré dans le message** en bloc de code,
+avec son nom au-dessus — ce que l'utilisateur faisait à la main en ouvrant le
+fichier ailleurs. Rien de nouveau n'est demandé à Hermes : ce qui part est le
+même prompt qu'avant.
+
+Les règles sont dans `src/lib/attach.ts` (pur, testé) :
+
+- **Le tri se fait sur le contenu, pas sur l'extension.** `File.text()` décode
+  en UTF-8 ce qu'on lui donne, donc un JPEG revient en chaîne — pleine de NUL
+  et de U+FFFD. `looksBinary()` juge le texte décodé (2 % de contrôles ou de
+  caractères de remplacement sur les 4 premiers ko), ce qui laisse passer
+  `Dockerfile`, `Makefile` et `.env.example` sans liste à tenir à jour.
+- **Deux plafonds, et un refus plutôt qu'une troncature.** 512 Ko sur les
+  octets, avant tout décodage (une vidéo déposée est refusée sur sa taille, pas
+  après cent mégaoctets passés dans un décodeur), puis 60 000 caractères sur le
+  texte. Un bloc arrivé à moitié serait répondu à moitié sans que rien ne le
+  dise — même raisonnement que `MAX_DRAFT_CHARS` au point 25.
+- **La clôture est plus longue que ce qu'elle enferme** : `fenceFor()` compte
+  les backticks en tête de ligne du fichier, donc un `.md` qui cite ``` ne
+  referme pas le bloc par le milieu.
+- Le tag de langage ne sort que de la liste que `highlight.js/lib/common`
+  enregistre vraiment (point 9) : une extension inconnue ne donne **aucun**
+  tag, jamais une supposition.
+- L'`<input type="file">` n'a plus d'`accept` : sur iOS un filtre étroit est ce
+  qui cache l'app Fichiers derrière la photothèque.
 
 ### 6. `PATCH /api/sessions/{id}` n'accepte que 4 champs
 
@@ -1779,6 +1807,8 @@ src/
 │   │   ├── push.svelte.ts       abonnement Web Push + report de présence
 │   │   ├── theme.svelte.ts      palette active + cache d'avant-rendu
 │   │   └── toast.svelte.ts      notifications dans la page
+│   ├── attach.ts      fichier texte déposé : tri binaire/texte, bornes, bloc
+│   │                  de code inséré dans le message
 │   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus),
 │   │                  déplacement des flèches dans un menu surgissant, et
 │   │                  phrase annoncée par la zone live d'un tour
