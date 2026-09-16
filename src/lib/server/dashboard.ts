@@ -1,6 +1,7 @@
 import { HERMES_DASHBOARD_TOKEN, HERMES_DASHBOARD_URL, REQUEST_TIMEOUT_MS } from './config';
 import { proxy } from './respond';
 import { UpstreamError, retrying } from './upstream';
+import { invalidateModelOptions } from './catalog';
 import { decodeJson } from '$lib/json';
 import type {
 	EnvVarMap,
@@ -76,7 +77,21 @@ function dashboardJson<T>(path: string, opts: CallOptions = {}): Promise<T> {
 	if (!dashboardConfigured()) {
 		return Promise.reject(new DashboardError(503, DISABLED_MESSAGE, DashboardErrorCode.Disabled));
 	}
-	return retrying(() => once<T>(path, opts), { attempts: (opts.retries ?? 0) + 1 });
+	const result = retrying(() => once<T>(path, opts), { attempts: (opts.retries ?? 0) + 1 });
+	// Everything this app writes through the dashboard can change what the
+	// gateway is able to route: a credential stored or removed, an account
+	// connected or logged out, the global default model moved. The model
+	// catalogue is cached for five minutes (`server/catalog.ts`), and a
+	// conversation created in that window would be pinned to the old default —
+	// so a successful write drops it. Over-invalidating costs one extra
+	// upstream call; under-invalidating costs a wrong model on a session row.
+	if ((opts.method ?? 'GET') !== 'GET') {
+		return result.then((value) => {
+			invalidateModelOptions();
+			return value;
+		});
+	}
+	return result;
 }
 
 async function once<T>(path: string, opts: CallOptions): Promise<T> {
@@ -212,7 +227,13 @@ export const pollOauth = (id: string, sessionId: string) =>
 	dashboardJson<OauthPollResponse>(
 		`/api/providers/oauth/${encodeURIComponent(id)}/poll/${encodeURIComponent(sessionId)}`,
 		{ retries: 1, timeoutMs: 10_000 }
-	);
+	).then((res) => {
+		// The one write that reaches us as a GET: a device-code login completes
+		// inside a poll, and the provider it just connected brings routable
+		// models with it.
+		if (res?.status === 'approved') invalidateModelOptions();
+		return res;
+	});
 
 /** PKCE only (Anthropic): hand back the code the callback page displayed. */
 export const submitOauthCode = (id: string, sessionId: string, code: string) =>

@@ -1,11 +1,6 @@
 import type { RequestHandler } from './$types';
-import {
-	createSession,
-	getModelOptions,
-	getSession,
-	HermesError,
-	listSessions
-} from '$lib/server/hermes';
+import { createSession, getSession, HermesError, listSessions } from '$lib/server/hermes';
+import { modelOptions } from '$lib/server/catalog';
 import { gate, proxy, readJson } from '$lib/server/respond';
 import {
 	cacheTitle,
@@ -167,7 +162,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// something: to vet an agent's preferred model, or to resolve the
 		// default when the client named none. Fetching it unconditionally would
 		// make a new conversation fail on a listing the caller did not need.
-		const options = agent?.model || !parsed.body.model ? await getModelOptions() : null;
+		const options = agent?.model || !parsed.body.model ? await modelOptions() : null;
 		// The agent's preferred model wins over the picker: choosing an agent is
 		// the more specific decision. It is checked against what the gateway can
 		// actually route first — a stale model id on a session row makes every

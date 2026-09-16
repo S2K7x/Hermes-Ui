@@ -1372,6 +1372,60 @@ Ce qui rend ça sûr, et qu'il ne faut pas défaire :
 catalogue, si les deux listings redeviennent séquentiels, ou si `send()` cesse
 d'attendre `catalogReady()` avant `newSession()`.
 
+**Et le serveur ne le redemande plus à chaque fois.** Ne pas *attendre* le
+catalogue le sortait du chemin critique du navigateur ; ça ne l'empêchait pas
+d'être refait à l'identique à chaque ouverture de l'app. Or rien n'a changé
+entre deux : `_handle_model_options` reconstruit l'inventaire, applique les
+prix **et sonde le fournisseur personnalisé courant sur le réseau**
+(`probe_current_custom_provider=True` dans `build_model_options_payload`) à
+chaque appel.
+
+`src/lib/server/cache.ts` garde donc la dernière réponse en mémoire —
+`cachedRead()`, à un seul vol (`single-flight`) et *stale-while-revalidate* —
+et `src/lib/server/catalog.ts` l'instancie pour `/api/model/options` avec cinq
+minutes de fraîcheur. Au-delà, la réponse connue part **tout de suite** et le
+rafraîchissement tourne derrière la requête ; un rafraîchissement qui échoue
+garde l'ancienne, plutôt que de vider le sélecteur parce que le gateway a
+cligné des yeux.
+
+**Mesuré de bout en bout** sur ce Pi, application construite, contre un faux
+gateway rejouant les latences relevées sur le vrai (2 740 ms au premier appel
+après expiration du cache horaire de Hermes, 134 ms à chaud) :
+
+| | avant | après |
+|---|---|---|
+| `GET /api/models`, 10 appels | 2,78 s puis 141–144 ms | 2,78 s puis **2–5 ms** |
+| appels amont pour ces 10 | 10 | **1** |
+| `POST /api/sessions`, 5 créations | 2,83 s puis 152–154 ms | 2,84 s puis **15–17 ms** |
+| appels amont pour ces 5 | 5 | **1** |
+
+La seconde ligne est celle qui compte : `POST /api/sessions` résout le modèle
+par défaut du gateway, et il tourne **entre la touche Entrée du premier message
+et le départ du tour**. Une conversation créée juste après l'expiration du
+cache de Hermes coûtait presque trois secondes d'attente ; elle en coûte une
+seule fois par démarrage du conteneur.
+
+Deux choses à ne pas défaire :
+
+- **Toute écriture par le dashboard jette le cache.** Une clé enregistrée ou
+  supprimée, un compte connecté ou déconnecté, le modèle global déplacé :
+  chacune change ce que le gateway sait router, et une conversation créée dans
+  les cinq minutes suivantes serait épinglée sur l'ancien défaut. Le crochet
+  est dans `dashboardJson()` — tout appel non-GET qui réussit appelle
+  `invalidateModelOptions()` — plus le cas du sondage OAuth, la seule écriture
+  qui nous arrive en GET (`status === "approved"`). Sur-invalider coûte un
+  aller-retour ; sous-invalider coûte un mauvais modèle sur une ligne de
+  session, c'est-à-dire **chaque tour en échec** (point 1).
+- **Le cache est en mémoire, pas dans `data/hermes-web.db`.** Un catalogue se
+  reconstruit ; un redémarrage est exactement le moment où il faut oublier
+  celui d'avant. Et ça évite d'écrire 24 ko sur le disque à chaque
+  rafraîchissement.
+
+`tests/cache.test.ts` couvre la politique (fenêtre de fraîcheur, réponse
+immédiate en stale, vol unique, échec qui ne vide pas, invalidation pendant un
+vol en cours) et relit la source pour que `getModelOptions` ne revienne pas
+directement dans une route.
+
 ### 27. Un tour ne se voit pas seulement, il doit s'entendre
 
 Tout ce qui dit à l'utilisateur qu'il se passe quelque chose pendant un tour —
@@ -1768,6 +1822,9 @@ src/
 │   │   ├── config.ts    variables d'env + validation au démarrage
 │   │   ├── hermes.ts    client de l'API Hermes (Bearer, timeouts, retries)
 │   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
+│   │   ├── cache.ts     lecture amont gardée en mémoire : vol unique,
+│   │   │                  stale-while-revalidate
+│   │   ├── catalog.ts   l'inventaire des modèles derrière ce cache
 │   │   ├── upstream.ts  socle commun des trois clients amont : UpstreamError,
 │   │   │                  retry des lectures
 │   │   ├── sse.ts       en-têtes SSE + enveloppe d'erreur
