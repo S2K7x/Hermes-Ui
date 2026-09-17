@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyAssistant, groupTranscript, toolIcon, toolLabel, uid } from '../src/lib/transcript.ts';
-import type { HermesMessage } from '../src/lib/types.ts';
+import type { HermesMessage, HermesToolCall } from '../src/lib/types.ts';
 
 // Shorthand: the transcript rows Hermes actually returns are sparse, so tests
 // build them field by field rather than from a fat fixture.
@@ -57,7 +57,7 @@ test('multimodal user content splits into text and images', () => {
 				{ type: 'text', text: 'regarde' },
 				{ type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
 				{ type: 'text', text: 'et dis-moi' }
-			] as unknown as string
+			]
 		})
 	]);
 	assert.equal(turn.content, 'regarde\net dis-moi');
@@ -75,7 +75,7 @@ test('malformed content parts are skipped rather than thrown on', () => {
 				{ type: 'image_url', image_url: {} },
 				{ type: 'text' },
 				{ type: 'text', text: 'ok' }
-			] as unknown as string
+			] as HermesMessage['content']
 		})
 	]);
 	assert.equal(turn.content, 'ok');
@@ -177,7 +177,7 @@ test('tool_calls entries without a name are dropped, junk tool_calls ignored', (
 	);
 
 	const [other] = groupTranscript([
-		m({ role: 'assistant', content: 'ok', tool_calls: 'nope' as unknown as unknown[] })
+		m({ role: 'assistant', content: 'ok', tool_calls: 'nope' as unknown as HermesToolCall[] })
 	]);
 	assert.deepEqual(other.steps, []);
 });

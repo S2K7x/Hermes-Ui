@@ -1681,7 +1681,12 @@ chemins.
 
 Trois points à ne pas défaire :
 
-- `toolIcon()` rend un **nom d'icône**, plus un glyphe.
+- `toolIcon()` et `jobState().icon` rendent un **nom d'icône**, plus un glyphe,
+  et leur type de retour le dit : `IconName`, pas `string`. Cette distinction
+  n'est pas cosmétique — c'est `string` qui a laissé les deux endroits que la
+  migration avait manqués vivre six jours sans que rien n'échoue. Un nom
+  d'icône ne se concatène donc **jamais** dans une chaîne affichée : il se
+  passe à `<Icon name={…}>`.
 - Les pastilles d'état sont des `<span>` colorés par `--ok` / `--accent` /
   `--danger`, plus des ronds emoji.
 - **`agentLabel()` garde l'emoji, et c'est voulu.** Cette chaîne est recopiée
@@ -1696,9 +1701,17 @@ Trois points à ne pas défaire :
   a tapé en est une autre.
 
 `tests/icons.test.ts` vérifie que chaque `<Icon name="…">` des composants
-existe dans le jeu, que chaque tracé est bien du path data, et **qu'aucun
-composant ne contient plus un seul emoji** — c'est le garde-fou contre la
-rechute.
+existe dans le jeu, que chaque tracé est bien du path data, que les cinq états
+d'une tâche planifiée pointent sur une icône réelle, et **qu'aucun composant ne
+contient plus un seul emoji** — c'est le garde-fou contre la rechute.
+
+Ce dernier test ne lit que les `.svelte`, et c'est précisément par là que la
+rechute est passée : `jobState()` vit dans `src/lib/jobs.ts`, que le balayage ne
+regarde pas. Élargir le balayage aux `.ts` ne marcherait pas — `agents.ts` garde
+les emoji de ses fiches par défaut (point ci-dessus) et `approvals.ts` cherche
+le `⚠️` du marqueur amont. C'est donc le **type** qui tient ce rôle hors des
+composants : un glyphe ne s'assigne pas à un `IconName`, et `npm run check`
+échoue avant que quiconque regarde l'écran.
 
 ### 32. La politique d'approbation : trois leviers qui ne se comportent pas pareil
 
@@ -1812,6 +1825,17 @@ constats vérifiés dans les sources de Hermes, qui commandent le pliage :
   rend un `{#each … (step.key)}` clé, et un doublon est une erreur d'exécution,
   pas un défaut d'affichage. D'où la déduplication par `Map` et le `uid()` de
   secours quand une ligne n'a ni `tool_call_id` ni `id`.
+
+Et ces deux lignes ont maintenant un type, comme les trames du flux en ont un
+(`StreamEventData`) : `HermesMessage.content` vaut `string | ContentPart[] |
+null` — la liste multimodale est ce que la colonne contient vraiment dès qu'une
+image est jointe, et la déclarer `string` obligeait chaque test d'une telle
+ligne à passer par un `as unknown as string` — et `tool_calls` vaut
+`HermesToolCall[]`, la forme OpenAI `{id, type, function:{name, arguments}}`
+plus la forme plate `{name, arguments}` que certains fournisseurs émettent.
+Rien n'est validé à l'arrivée pour autant : les gardes `typeof` de `textOf()`
+et le `Array.isArray()` sur `tool_calls` restent la seule vérification réelle,
+parce que ces colonnes sont du JSON que nous n'avons pas écrit.
 
 ## Structure
 

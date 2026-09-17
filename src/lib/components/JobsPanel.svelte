@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import Icon from './Icon.svelte';
 	import Modal from './Modal.svelte';
 	import { shouldLoadPanel } from '$lib/availability';
 	import { jobsStore, type JobInput } from '$lib/stores/jobs.svelte';
@@ -347,7 +348,9 @@
 					{@const agent = agents.byId(job.agent_id)}
 					<li class:paused={state.key === 'paused'}>
 						<div class="row">
-							<span class="icon" title={state.label}>{state.icon}</span>
+							<span class="icon" data-state={state.key} title={state.label}>
+								<Icon name={state.icon} size={15} />
+							</span>
 							<span class="title">{job.name}</span>
 							<span class="when">{scheduleDisplay(job)}</span>
 						</div>
@@ -479,8 +482,22 @@
 		align-items: baseline;
 		gap: 8px;
 	}
+	/* The mark is drawn now, so its colour is ours to choose. The states the
+	   emoji used to colour out of its own font keep saying so — from the
+	   palette this time, so they follow the sixteen presets. */
 	.icon {
 		flex: 0 0 auto;
+		display: flex;
+		color: var(--text-faint);
+	}
+	.icon[data-state='completed'] {
+		color: var(--ok);
+	}
+	.icon[data-state='error'] {
+		color: var(--danger);
+	}
+	.icon[data-state='running'] {
+		color: var(--accent);
 	}
 	.title {
 		flex: 1;

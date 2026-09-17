@@ -72,6 +72,26 @@ test('every tool family maps onto a real icon', async () => {
 });
 
 /**
+ * Same contract, for the scheduled-task badge.
+ *
+ * This one is why `JobStateBadge.icon` is typed `IconName` and not `string`:
+ * it held `⏰ ⏸ ✅ ⚠️ ⏳` long after every component had stopped drawing emoji,
+ * because it lives in `src/lib/jobs.ts` — which the component scan below never
+ * looks at — and `string` happily accepted them.
+ */
+test('every job state maps onto a real icon', async () => {
+	const { jobState } = await import('../src/lib/jobs.ts');
+	const states = ['scheduled', 'paused', 'completed', 'error', 'running', 'inconnu'];
+	const seen = new Set<string>();
+	for (const state of states) {
+		const badge = jobState({ state });
+		assert.ok(badge.icon in ICONS, `${state} \u2192 unknown icon "${badge.icon}"`);
+		seen.add(badge.key);
+	}
+	assert.equal(seen.size, 5, 'the five badges must stay distinguishable');
+});
+
+/**
  * The guard against a relapse: no component may carry a pictographic emoji.
  *
  * Agent personas keep an `emoji` column — it is user data, and it still rides

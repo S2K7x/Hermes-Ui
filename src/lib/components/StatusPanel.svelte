@@ -162,7 +162,7 @@
 					{#each jobs as job (job.id ?? job.name)}
 						{@const state = jobState(job)}
 						<li>
-							<span title={state.label}>{state.icon}</span>
+							<span class="li-icon" title={state.label}><Icon name={state.icon} size={15} /></span>
 							<span class="name">{job.name ?? job.id}</span>
 							<span class="muted small">{jobLine(job)}</span>
 						</li>

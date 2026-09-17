@@ -1,4 +1,4 @@
-import type { HermesMessage, ToolStep } from './types';
+import type { ContentPart, HermesMessage, HermesToolCall, ToolStep } from './types';
 import type { IconName } from './icons';
 
 /** A turn as the UI renders it: one bubble, plus the agent steps behind it. */
@@ -37,17 +37,24 @@ export function emptyAssistant(): UiMessage {
 	};
 }
 
-/** Extract the text of a persisted message, whose content may be multimodal. */
-function textOf(content: unknown): { text: string; images: string[] } {
+/**
+ * Extract the text of a persisted message, whose content may be multimodal.
+ *
+ * The declared type says `string | ContentPart[] | null`, but nothing upstream
+ * validates the column, so each part is still narrowed field by field rather
+ * than trusted — a `Partial<ContentPart>` is what the guards actually assume.
+ */
+function textOf(content: HermesMessage['content']): { text: string; images: string[] } {
 	if (typeof content === 'string') return { text: content, images: [] };
 	if (Array.isArray(content)) {
 		const parts: string[] = [];
 		const images: string[] = [];
-		for (const part of content) {
+		for (const part of content as Array<Partial<ContentPart> | null | undefined>) {
 			if (!part || typeof part !== 'object') continue;
-			const p = part as Record<string, any>;
-			if (p.type === 'text' && typeof p.text === 'string') parts.push(p.text);
-			else if (p.type === 'image_url' && p.image_url?.url) images.push(p.image_url.url);
+			if (part.type === 'text' && typeof part.text === 'string') parts.push(part.text);
+			else if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
+				images.push(part.image_url.url);
+			}
 		}
 		return { text: parts.join('\n'), images };
 	}
@@ -118,7 +125,11 @@ export function groupTranscript(messages: HermesMessage[]): UiMessage[] {
 		}
 
 		// assistant
-		const calls = Array.isArray(msg.tool_calls) ? (msg.tool_calls as any[]) : [];
+		// Not `msg.tool_calls ?? []`: the column is JSON we did not write, and a
+		// row holding a string there would make `for…of` walk its characters.
+		const calls: Array<HermesToolCall | null | undefined> = Array.isArray(msg.tool_calls)
+			? msg.tool_calls
+			: [];
 		for (const call of calls) {
 			const name = call?.function?.name || call?.name;
 			if (!name) continue;
@@ -126,7 +137,7 @@ export function groupTranscript(messages: HermesMessage[]): UiMessage[] {
 				key: String(call.id ?? uid('t')),
 				tool_name: name,
 				status: 'done',
-				args: call?.function?.arguments ?? call?.arguments,
+				args: call.function?.arguments ?? call.arguments,
 				started_at: msg.timestamp ?? Date.now() / 1000
 			});
 		}

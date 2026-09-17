@@ -37,6 +37,7 @@ export const ICONS = {
 	arrowUp: { stroke: ['M12 19V5', 'M6 11l6-6 6 6'] },
 	arrowDown: { stroke: ['M12 5v14', 'M18 13l-6 6-6-6'] },
 	stop: { stroke: ['M7 7h10v10H7z'] },
+	pause: { stroke: ['M9.5 6v12', 'M14.5 6v12'] },
 
 	// --- composer ------------------------------------------------------------
 	paperclip: {

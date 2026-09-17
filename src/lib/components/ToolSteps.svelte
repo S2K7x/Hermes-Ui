@@ -16,9 +16,13 @@
 	let open = $derived(manual ?? streaming);
 
 	let running = $derived(steps.filter((s) => s.status === 'running').length);
+	/** The step taking the time, when one is — the header names it. */
+	let active = $derived(running > 0 ? (steps.at(-1) ?? null) : null);
+	// `toolIcon()` returns an icon NAME, so it is drawn here and never
+	// interpolated: pasted into this string it read "terminal terminal…".
 	let summary = $derived(
-		running > 0
-			? `${toolIcon(steps.at(-1)?.tool_name ?? '')} ${toolLabel(steps.at(-1)?.tool_name ?? 'travail en cours')}…`
+		active
+			? `${toolLabel(active.tool_name || 'travail en cours')}…`
 			: `${steps.length} étape${steps.length > 1 ? 's' : ''}`
 	);
 
@@ -34,6 +38,7 @@
 	<div class="timeline" class:active={running > 0}>
 		<button class="head" onclick={() => (manual = !open)} aria-expanded={open}>
 			<span class="chev" class:open>›</span>
+			{#if active}<Icon name={toolIcon(active.tool_name)} size={14} />{/if}
 			<span class="sum">{summary}</span>
 			{#if running > 0}<span class="pulse"></span>{/if}
 		</button>

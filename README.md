@@ -58,14 +58,14 @@ de l'application.
   des personas ayant chacune son nom, son métier et son prompt système ; une
   conversation appartient à un agent, et un « chef d'équipe » peut confier du
   travail aux autres via la délégation native de Hermes Agent
-- **Éditeur de skills** (📚 dans la sidebar, ou `⌘K` → « Modifier les skills ») :
+- **Éditeur de skills** (Réglages → « Skills », ou `⌘K` → « Modifier les skills ») :
   liste des `SKILL.md` groupée par catégorie, édition en texte brut,
   création guidée d'un nouveau skill
-- **Panneau Providers** (🔑 dans la sidebar, ou `⌘K` → « Providers ») : ajouter
+- **Panneau Providers** (Réglages → « Providers », ou `⌘K` → « Providers ») : ajouter
   ou remplacer une clé d'API avec vérification en ligne, connecter un compte en
   OAuth (code d'appairage + sondage jusqu'à validation), déconnecter, et
   changer le modèle par défaut — sans SSH
-- **Tâches planifiées** (⏰ dans la sidebar, ou `⌘K` → « Tâches planifiées ») :
+- **Tâches planifiées** (Réglages → « Tâches planifiées », ou `⌘K`) :
   confier à l'un de vos agents une tâche récurrente que Yadai exécute seul —
   horaire choisi dans des menus plutôt qu'écrit en cron, puis modifiable,
   duplicable, lançable tout de suite, en pause ou supprimée

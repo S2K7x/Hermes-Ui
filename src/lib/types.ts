@@ -48,13 +48,44 @@ export interface HermesSession {
 	deleted_at?: number;
 }
 
+/**
+ * One entry of an assistant row's `tool_calls`.
+ *
+ * The canonical shape is OpenAI's — `{id, type, function: {name, arguments}}` —
+ * which is what `agent/conversation_loop.py` canonicalises before sending and
+ * what `hermes_state.py` round-trips through the column's JSON. The flat
+ * `name` / `arguments` pair is the other shape some providers emit, and
+ * `groupTranscript` accepts both; declaring both is what lets it stop casting
+ * the list to `any[]` to read them.
+ *
+ * Every field is optional and nothing is validated on arrival — same
+ * convention as `StreamEventData` below. `arguments` stays `unknown` because
+ * upstream canonicalises it to a JSON *string* on the send path but persists
+ * whatever the provider gave, which is sometimes an object.
+ */
+export interface HermesToolCall {
+	id?: string;
+	type?: string;
+	function?: { name?: string; arguments?: unknown };
+	/** Flat form. */
+	name?: string;
+	arguments?: unknown;
+}
+
 export interface HermesMessage {
 	id?: number | string;
 	session_id?: string;
 	role: 'user' | 'assistant' | 'tool' | 'system';
-	content?: string | null;
+	/**
+	 * A plain string on most rows, and the multimodal list on a row the user
+	 * attached an image to — `_message_response` hands back the column as
+	 * stored, and `ContentPart[]` is exactly what the chat endpoints accept on
+	 * the way in. Declaring only `string` here is what forced every test of a
+	 * multimodal row through an `as unknown as string`.
+	 */
+	content?: string | ContentPart[] | null;
 	tool_call_id?: string | null;
-	tool_calls?: unknown;
+	tool_calls?: HermesToolCall[] | null;
 	tool_name?: string | null;
 	timestamp?: number;
 	token_count?: number;

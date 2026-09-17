@@ -1,3 +1,4 @@
+import type { IconName } from './icons';
 import type { HermesJob } from './types';
 
 /**
@@ -555,7 +556,17 @@ export const canEditJob = (job: HermesJob, now: Date = new Date()): boolean =>
 
 export interface JobStateBadge {
 	key: 'scheduled' | 'paused' | 'completed' | 'error' | 'running';
-	icon: string;
+	/**
+	 * A name from `$lib/icons`, never a glyph — same contract as `toolIcon()`.
+	 *
+	 * Typed as `IconName` rather than `string` on purpose: this field held
+	 * `⏰ ⏸ ✅ ⚠️ ⏳` long after the rest of the interface stopped drawing
+	 * emoji, because `string` accepts them and nothing else looked. The badge
+	 * therefore took the platform's own colours — a green tick that was not
+	 * `--ok` — and looked different on the phone than on the desktop, the very
+	 * thing point 31 exists to prevent.
+	 */
+	icon: IconName;
 	label: string;
 }
 
@@ -568,15 +579,15 @@ export function jobState(job: HermesJob): JobStateBadge {
 	const state = typeof job.state === 'string' ? job.state : job.enabled === false ? 'paused' : '';
 	switch (state) {
 		case 'paused':
-			return { key: 'paused', icon: '⏸', label: 'En pause' };
+			return { key: 'paused', icon: 'pause', label: 'En pause' };
 		case 'completed':
-			return { key: 'completed', icon: '✅', label: 'Terminée' };
+			return { key: 'completed', icon: 'check', label: 'Terminée' };
 		case 'error':
-			return { key: 'error', icon: '⚠️', label: 'En erreur' };
+			return { key: 'error', icon: 'warning', label: 'En erreur' };
 		case 'running':
-			return { key: 'running', icon: '⏳', label: 'En cours' };
+			return { key: 'running', icon: 'activity', label: 'En cours' };
 		default:
-			return { key: 'scheduled', icon: '⏰', label: 'Programmée' };
+			return { key: 'scheduled', icon: 'clock', label: 'Programmée' };
 	}
 }
 
