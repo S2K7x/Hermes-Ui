@@ -13,7 +13,13 @@
  * `contenteditable`, no `<audio controls>` and no `<area>`. `[tabindex="-1"]`
  * is excluded because it means "focusable by script, not by Tab" — the modal
  * card itself carries it.
+ *
+ * That exclusion has to be repeated on every entry rather than left to the
+ * last one: `button[tabindex="-1"]` still matches `button:not([disabled])`.
+ * The rows of the command palette are exactly that — options a script moves a
+ * cursor through, which Tab must walk straight past.
  */
+const SCRIPT_ONLY = ':not([tabindex="-1"])';
 export const FOCUSABLE_SELECTOR = [
 	'a[href]',
 	'button:not([disabled])',
@@ -21,8 +27,10 @@ export const FOCUSABLE_SELECTOR = [
 	'select:not([disabled])',
 	'textarea:not([disabled])',
 	'summary',
-	'[tabindex]:not([tabindex="-1"])'
-].join(', ');
+	'[tabindex]'
+]
+	.map((sel) => sel + SCRIPT_ONLY)
+	.join(', ');
 
 /**
  * Where focus must be *forced* so a Tab press cannot leave a modal dialog.
@@ -69,6 +77,41 @@ export function menuIndex(count: number, active: number, key: string): number | 
 		default:
 			return null;
 	}
+}
+
+/** One heading of a listbox, with the options that sit under it. */
+export interface OptionGroup<T> {
+	head: string;
+	items: Array<{ option: T; index: number }>;
+}
+
+/**
+ * Fold a flat option list into the groups a listbox is allowed to contain.
+ *
+ * The command palette prints a heading above each kind of result — actions,
+ * conversations, passages of the open thread — and keeps its rows in one flat
+ * array so the arrow arithmetic stays a single modulo. Announced as a listbox
+ * those headings can no longer be loose paragraphs between the rows: a
+ * listbox may hold nothing but options and groups.
+ *
+ * So the nesting happens here, and every option carries its **flat** index
+ * with it. That is the whole point of testing this: the cursor is an index
+ * into the flat list, and a group that renumbered its rows would highlight one
+ * row while Enter opened another — with nothing on screen to say so.
+ *
+ * An option with no heading joins the group above it. A first option with no
+ * heading opens an unnamed group rather than being dropped, because a dropped
+ * option is one the user can neither see nor reach.
+ */
+export function groupOptions<T extends { head?: string }>(options: T[]): Array<OptionGroup<T>> {
+	const groups: Array<OptionGroup<T>> = [];
+	options.forEach((option, index) => {
+		if (option.head !== undefined || groups.length === 0) {
+			groups.push({ head: option.head ?? '', items: [] });
+		}
+		groups[groups.length - 1].items.push({ option, index });
+	});
+	return groups;
 }
 
 /**

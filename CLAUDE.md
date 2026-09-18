@@ -1171,6 +1171,49 @@ second Échap, menu fermé, l'atteint bien (1). Idem sur le menu d'une ligne :
 tiroir. En 414 × 896 : ⋯ à 44 × 44, les cinq actions à 44 px, les entrées du
 sélecteur de modèle à 44 px.
 
+**Et la palette de commandes est le quatrième — celui qui naviguait en
+aveugle.** ⌘K ouvre un dialogue dont le focus reste dans le champ pendant que
+⬆︎ ⬇︎ déplacent un curseur *visuel* dans la liste en dessous. Trois défauts en
+découlaient, tous invisibles sur une capture d'écran :
+
+- **Le curseur sortait de l'écran.** `.rows` défile (`max-height` 70 vh, 60 dvh
+  sur téléphone) et, avec une douzaine de conversations plus les passages du
+  fil ouvert (point 28), la liste dépasse largement. Le curseur, lui, ne
+  suivait pas : douze ⬇︎ déplaçaient un repère que personne ne voyait, et ↵
+  ouvrait quelque chose qui n'avait jamais été affiché. `scrollIntoView({ block:
+  'nearest' })` sur la ligne active, à chaque déplacement **et** à chaque
+  changement de liste.
+- **Rien n'était annoncé.** Le champ est maintenant un `role="combobox"` avec
+  `aria-activedescendant` qui pointe la ligne active, la liste un
+  `role="listbox"`, chaque ligne un `role="option"` + `aria-selected`. Or un
+  listbox ne peut contenir que des options et des groupes : les intitulés
+  (« Actions », « Conversations », « Dans cette conversation ») ne pouvaient
+  plus rester des paragraphes égarés entre les lignes. D'où `groupOptions()`
+  (`src/lib/a11y.ts`, pure et testée) qui replie le tableau **plat** en groupes
+  `role="group"` — chaque option emportant son **indice plat**, parce que le
+  curseur est un indice dans ce tableau et qu'un groupe qui renumérote ses
+  lignes surlignerait l'une pendant qu'↵ en ouvre une autre. Le tableau plat
+  reste la source de l'arithmétique des flèches, comme au point 28.
+- **Les lignes étaient des arrêts de tabulation**, et `aria-modal="true"` était
+  un mensonge : Tab traversait trente résultats puis sortait dans la page
+  derrière le voile. Elles passent en `tabindex="-1"` (le champ est le seul
+  arrêt) et le dialogue reprend `trapTab` du point 22. Fermer ne déplace
+  **pas** le focus, délibérément : choisir « Prompt : … » le pose dans le
+  composeur, et le rendre au déclencheur l'en arracherait aussitôt.
+
+Ce dernier point a demandé une correction dans `FOCUSABLE_SELECTOR` :
+`button[tabindex="-1"]` correspond quand même à `button:not([disabled])`, donc
+l'exclusion est maintenant répétée sur **chaque** entrée du sélecteur et non
+laissée à la dernière. Les flèches, enfin, réutilisent `menuIndex()` plutôt
+qu'un second modulo écrit à la main — mais **seulement** ⬆︎ ⬇︎ : Début et Fin
+appartiennent au champ de saisie d'un combobox éditable. Et les lignes passent
+à 44 px sous 820 px, comme le reste des listes de l'app.
+
+**Non vérifié** : l'annonce réelle par VoiceOver ou NVDA, et le défilement dans
+un vrai navigateur. Aucun n'était disponible dans le clone où ce changement a
+été écrit — ce qui est testé, c'est la fonction pure et le fait que le balisage
+la branche (`tests/a11y.test.ts`).
+
 Dernier point du même ordre : un `<input type="file">` en `display: none` n'est
 **pas** dans l'ordre de tabulation, et son `<label>` ne peut pas prendre le
 focus à sa place — joindre une image était à la souris uniquement. L'input est
@@ -1891,8 +1934,9 @@ src/
 │   ├── attach.ts      fichier texte déposé : tri binaire/texte, bornes, bloc
 │   │                  de code inséré dans le message
 │   ├── a11y.ts        arrêts de tabulation d'un dialogue (piège de focus),
-│   │                  déplacement des flèches dans un menu surgissant, et
-│   │                  phrase annoncée par la zone live d'un tour
+│   │                  déplacement des flèches dans un menu surgissant,
+│   │                  repliage d'un listbox en groupes, et phrase annoncée
+│   │                  par la zone live d'un tour
 │   ├── availability.ts  l'état d'un panneau optionnel : pas encore lu, prêt,
 │   │                  désactivé, illisible — et quand relire
 │   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
+	import { groupOptions, menuIndex } from '$lib/a11y';
+	import { trapTab } from '$lib/client/dialog.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { activityAt, matchesQuery, relativeTime, sessionLabel } from '$lib/sessions';
 	import { findInMessages } from '$lib/search';
@@ -23,6 +25,11 @@
 	let query = $state('');
 	let index = $state(0);
 	let input = $state<HTMLInputElement | null>(null);
+	let card = $state<HTMLElement | null>(null);
+	let list = $state<HTMLElement | null>(null);
+
+	/** Prefix of each option's id, which `aria-activedescendant` points at. */
+	const OPTION_ID = 'palette-option-';
 
 	interface Row {
 		key: string;
@@ -97,6 +104,12 @@
 		)
 	);
 
+	// The same rows, nested under their heading — the only shape a listbox may
+	// take. The flat `rows` array stays the source of the arrow arithmetic;
+	// `groupOptions` is only how it is drawn, and it carries each flat index
+	// along so the cursor and the click cannot disagree.
+	let groups = $derived(groupOptions(rows));
+
 	// Reset on each open, and keep the highlight inside the result list as it
 	// shrinks under typing.
 	$effect(() => {
@@ -110,6 +123,22 @@
 		if (index >= rows.length) index = Math.max(0, rows.length - 1);
 	});
 
+	/**
+	 * Keep the cursor on screen.
+	 *
+	 * The result list scrolls — twelve conversations and every matching passage
+	 * of a long thread go well past the panel's 70vh. The highlight did not
+	 * follow it: pressing Down a dozen times moved a marker nobody could see,
+	 * and Enter then opened something that was never on screen. Nothing else
+	 * reported it, because the panel looked perfectly still.
+	 */
+	$effect(() => {
+		void rows.length;
+		const i = index;
+		if (!open || !list) return;
+		list.querySelector<HTMLElement>(`#${OPTION_ID}${i}`)?.scrollIntoView({ block: 'nearest' });
+	});
+
 	function choose(row: Row | undefined) {
 		if (!row) return;
 		onclose();
@@ -117,12 +146,15 @@
 	}
 
 	function onKeydown(event: KeyboardEvent) {
-		if (event.key === 'ArrowDown') {
+		// The wrap-around arithmetic is `menuIndex`, the same one the popup
+		// menus use — but only for the two arrows. This is an editable
+		// combobox: Home and End belong to the text field, and stealing them
+		// would stop the caret from jumping to either end of the query.
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			const next = menuIndex(rows.length, index, event.key);
+			if (next === null) return;
 			event.preventDefault();
-			index = rows.length ? (index + 1) % rows.length : 0;
-		} else if (event.key === 'ArrowUp') {
-			event.preventDefault();
-			index = rows.length ? (index - 1 + rows.length) % rows.length : 0;
+			index = next;
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
 			choose(rows[index]);
@@ -136,42 +168,80 @@
 {#if open}
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="scrim" onclick={onclose}></div>
-	<div class="palette" role="dialog" aria-modal="true" aria-label="Palette de commandes">
+	<!-- Tab must not walk out of a panel that calls itself modal: the rows are
+	     options a script moves a cursor through, not stops of their own, so the
+	     field is the only place Tab can land. Closing deliberately leaves the
+	     focus alone — choosing a saved prompt puts it in the composer, and
+	     restoring it here would pull it straight back out. -->
+	<div
+		class="palette"
+		bind:this={card}
+		onkeydown={(event) => card && trapTab(card, event)}
+		role="dialog"
+		aria-modal="true"
+		aria-label="Palette de commandes"
+		tabindex="-1"
+	>
 		<input
 			bind:this={input}
 			bind:value={query}
 			onkeydown={onKeydown}
 			placeholder="Rechercher un message, une conversation, une action…"
 			aria-label="Recherche"
+			role="combobox"
+			aria-controls="palette-results"
+			aria-expanded={rows.length > 0}
+			aria-autocomplete="list"
+			aria-activedescendant={rows[index] ? `${OPTION_ID}${index}` : undefined}
 		/>
-		<div class="rows">
-			{#each rows as row, i (row.key)}
-				{#if row.head}<p class="group">{row.head}</p>{/if}
-				<button
-					class:sel={i === index}
-					onclick={() => choose(row)}
-					onmouseenter={() => (index = i)}
-				>
-					<span class="kind" aria-hidden="true">
-						<Icon
-							name={row.kind === 'command' ? 'command' : row.kind === 'message' ? 'search' : 'message'}
-							size={15}
-						/>
-					</span>
-					{#if row.snippet}
-						<span class="label"
-							>{row.snippet.before}<mark>{row.snippet.match}</mark>{row.snippet.after}</span
+		<div
+			class="rows"
+			bind:this={list}
+			id="palette-results"
+			role="listbox"
+			aria-label="Résultats"
+		>
+			{#each groups as group (group.head)}
+				<div role="group" aria-label={group.head}>
+					<p class="group" aria-hidden="true">{group.head}</p>
+					{#each group.items as { option: row, index: i } (row.key)}
+						<button
+							id="{OPTION_ID}{i}"
+							role="option"
+							aria-selected={i === index}
+							tabindex="-1"
+							class:sel={i === index}
+							onclick={() => choose(row)}
+							onmouseenter={() => (index = i)}
 						>
-					{:else}
-						<span class="label">{row.label}</span>
-					{/if}
-					{#if row.hint}<span class="hint">{row.hint}</span>{/if}
-				</button>
+							<span class="kind" aria-hidden="true">
+								<Icon
+									name={row.kind === 'command'
+										? 'command'
+										: row.kind === 'message'
+											? 'search'
+											: 'message'}
+									size={15}
+								/>
+							</span>
+							{#if row.snippet}
+								<span class="label"
+									>{row.snippet.before}<mark>{row.snippet.match}</mark>{row.snippet.after}</span
+								>
+							{:else}
+								<span class="label">{row.label}</span>
+							{/if}
+							{#if row.hint}<span class="hint">{row.hint}</span>{/if}
+						</button>
+					{/each}
+				</div>
 			{/each}
-			{#if rows.length === 0}
-				<p class="none">Aucun résultat.</p>
-			{/if}
 		</div>
+		{#if rows.length === 0}
+			<!-- Outside the listbox, which may hold nothing but options: an empty
+			     result is the one state the cursor cannot announce by itself. -->
+			<p class="none" role="status">Aucun résultat.</p>
+		{/if}
 		<div class="foot">
 			<kbd>↑</kbd><kbd>↓</kbd> naviguer · <kbd>↵</kbd> ouvrir · <kbd>esc</kbd> fermer
 		</div>
@@ -233,7 +303,7 @@
 		letter-spacing: 0.06em;
 		color: var(--text-faint);
 	}
-	.rows > .group:first-child {
+	.rows > [role='group']:first-child > .group {
 		margin-top: 2px;
 	}
 	mark {
@@ -284,6 +354,11 @@
 	   element is a text field, and a sheet rising from the bottom would put it
 	   exactly where the keyboard lands. */
 	@media (max-width: 820px) {
+		/* Same 44px floor as the sidebar rows and the popup menus: this list is
+		   reached by a thumb too, and its rows sat at 40. */
+		.rows button {
+			min-height: 44px;
+		}
 		.palette {
 			top: max(8px, env(safe-area-inset-top));
 			left: 0;

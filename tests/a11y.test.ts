@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import {
 	FOCUSABLE_SELECTOR,
+	groupOptions,
 	menuIndex,
 	trapIndex,
 	turnAnnouncement,
@@ -53,6 +54,108 @@ test('the focusable selector skips disabled controls and script-only stops', () 
 	assert.ok(FOCUSABLE_SELECTOR.includes('[tabindex]:not([tabindex="-1"])'));
 	// The modal card itself carries tabindex="-1" and must never be a Tab stop.
 	assert.ok(!/\[tabindex\](?!:not)/.test(FOCUSABLE_SELECTOR));
+});
+
+test('every entry of the selector excludes script-only stops, not just the last', () => {
+	// `button[tabindex="-1"]` matches `button:not([disabled])` all the same, so
+	// the exclusion has to be repeated: the palette's rows are buttons a script
+	// moves a cursor through, and counting them as Tab stops would put thirty
+	// of them between the search field and the way out.
+	for (const part of FOCUSABLE_SELECTOR.split(', ')) {
+		assert.ok(part.endsWith(':not([tabindex="-1"])'), `${part} would catch a script-only stop`);
+	}
+});
+
+/**
+ * A listbox may hold nothing but options and groups, so the palette's headings
+ * stopped being loose paragraphs between its rows. The arrow arithmetic still
+ * runs on one flat array: what matters here is that the flat index survives
+ * the nesting, because a cursor and a click that disagree look like nothing at
+ * all on screen.
+ */
+test('grouping options keeps their flat index', () => {
+	const rows = [
+		{ head: 'Actions', label: 'a' },
+		{ label: 'b' },
+		{ head: 'Conversations', label: 'c' },
+		{ label: 'd' },
+		{ label: 'e' }
+	];
+	const groups = groupOptions(rows);
+	assert.deepEqual(
+		groups.map((g) => g.head),
+		['Actions', 'Conversations']
+	);
+	assert.deepEqual(
+		groups.flatMap((g) => g.items.map((it) => it.index)),
+		[0, 1, 2, 3, 4]
+	);
+	assert.equal(groups[1].items[0].option.label, 'c');
+});
+
+test('grouping options drops none of them', () => {
+	// A first row with no heading cannot be thrown away: an option the user can
+	// neither see nor reach is worse than an unnamed group.
+	const groups = groupOptions([{ label: 'orphan' }, { head: 'Suite', label: 'x' }]);
+	assert.equal(groups.length, 2);
+	assert.equal(groups[0].head, '');
+	assert.deepEqual(
+		groups.flatMap((g) => g.items.map((it) => it.index)),
+		[0, 1]
+	);
+	assert.deepEqual(groupOptions([]), []);
+});
+
+/**
+ * The command palette is the app's keyboard surface, and it navigated blind.
+ *
+ * Its result list scrolls past 70vh with a dozen conversations and the
+ * matching passages of a long thread, but the highlight never followed it:
+ * Down a dozen times moved a marker off screen, and Enter opened something
+ * that had never been visible. Nothing else reported it — the panel looked
+ * perfectly still. And with focus staying in the search field, a screen reader
+ * was told nothing at all about which row that marker was on.
+ */
+const PALETTE = readFileSync(
+	new URL('../src/lib/components/CommandPalette.svelte', import.meta.url),
+	'utf8'
+);
+
+test('the palette cursor is scrolled back into view', () => {
+	assert.match(PALETTE, /scrollIntoView\(\{ block: 'nearest' \}\)/);
+});
+
+test('the palette announces its list, and which row the cursor is on', () => {
+	assert.match(PALETTE, /role="combobox"/);
+	assert.match(PALETTE, /aria-activedescendant=\{rows\[index\] \? `\$\{OPTION_ID\}\$\{index\}` : undefined\}/);
+	assert.match(PALETTE, /role="listbox"/);
+	assert.match(PALETTE, /role="option"/);
+	assert.match(PALETTE, /aria-selected=\{i === index\}/);
+	// Ids have to line up on both ends, or the pointer names nothing.
+	assert.match(PALETTE, /id="\{OPTION_ID\}\{i\}"/);
+	assert.match(PALETTE, /aria-controls="palette-results"/);
+	assert.match(PALETTE, /id="palette-results"/);
+});
+
+test('the palette rows are options, not Tab stops, and Tab stays inside', () => {
+	// Thirty results would otherwise be thirty Tab stops in front of the way
+	// out — and a dialog calling itself modal would be letting Tab walk into
+	// the page behind the scrim.
+	assert.match(PALETTE, /role="option"\s+aria-selected=\{i === index\}\s+tabindex="-1"/);
+	assert.match(PALETTE, /import \{ trapTab \} from '\$lib\/client\/dialog\.svelte'/);
+	assert.match(PALETTE, /onkeydown=\{\(event\) => card && trapTab\(card, event\)\}/);
+});
+
+test('the palette reuses the arrow arithmetic, and leaves Home and End alone', () => {
+	assert.match(PALETTE, /menuIndex\(rows\.length, index, event\.key\)/);
+	// Home and End belong to the text field of an editable combobox.
+	assert.match(PALETTE, /event\.key === 'ArrowDown' \|\| event\.key === 'ArrowUp'/);
+	assert.doesNotMatch(PALETTE, /event\.key === 'Home'/);
+});
+
+test('the palette rows are thumb-sized on a phone', () => {
+	const narrow = PALETTE.slice(PALETTE.indexOf('@media (max-width: 820px)'));
+	assert.match(narrow, /\.rows button \{[^}]*min-height:\s*44px/);
 });
 
 /**
