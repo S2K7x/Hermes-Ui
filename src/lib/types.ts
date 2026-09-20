@@ -114,6 +114,21 @@ export interface SessionRuntime {
 	model_lock?: string;
 }
 
+/**
+ * Per-million-token prices, already formatted by Hermes.
+ *
+ * `_apply_pricing` (hermes_cli/inventory.py) hands the GUI strings, not
+ * numbers — "$3.00", or the literal "free", or "" when the catalogue has no
+ * figure. Only openrouter / nous / novita rows carry the key at all, which is
+ * why every field here is optional.
+ */
+export interface ModelPrice {
+	input?: string;
+	output?: string;
+	cache?: string | null;
+	free?: boolean;
+}
+
 export interface ModelOptions {
 	model: string;
 	provider: string;
@@ -125,6 +140,10 @@ export interface ModelOptions {
 		models: string[];
 		total_models: number;
 		warning?: string;
+		/** Keyed by model id; absent for providers without a live catalogue. */
+		pricing?: Record<string, ModelPrice>;
+		/** Models the current account tier cannot select (Nous free tier). */
+		unavailable_models?: string[];
 	}>;
 }
 

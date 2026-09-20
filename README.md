@@ -84,7 +84,12 @@ de l'application.
   accepté ça, et c'est exactement ce qu'on faisait à la main. Un binaire est
   refusé sur son contenu, et rien n'est jamais tronqué en silence
 - **Sélecteur de modèle** parmi les fournisseurs configurés,
-  applicable à la conversation ouverte dès le message suivant
+  applicable à la conversation ouverte dès le message suivant. Chaque ligne
+  affiche ce que le modèle coûte par million de jetons — le catalogue de
+  Hermes le dit déjà pour OpenRouter, Nous et Novita — et signale les modèles
+  gratuits. Le filtre porte aussi sur le nom du fournisseur, et la liste dit
+  combien d'entrées son plafond a laissées de côté au lieu de les faire
+  disparaître
 - **Export markdown** de la conversation
 - **Démarrage rapide** : l'app n'attend plus l'inventaire des modèles pour
   afficher la conversation. Cet appel-là reconstruit le catalogue des

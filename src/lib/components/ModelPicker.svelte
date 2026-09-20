@@ -1,23 +1,19 @@
 <script lang="ts">
-	import { shortModelName } from '$lib/models';
+	import { modelEntries, pickModels, priceDetail, priceLabel, shortModelName } from '$lib/models';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { menuKeydown } from '$lib/client/menu.svelte';
+
+	/** How many rows the menu will build at once. See `pickModels`. */
+	const LIMIT = 100;
 
 	let open = $state(false);
 	let filter = $state('');
 	let trigger = $state<HTMLButtonElement | null>(null);
 	let menu = $state<HTMLDivElement | null>(null);
 
-	// Only providers with credentials can actually serve a turn.
-	let usable = $derived((chat.models?.providers ?? []).filter((p) => p.authenticated && p.models.length));
-	let entries = $derived(
-		usable.flatMap((p) => p.models.map((m) => ({ provider: p.slug, providerName: p.name, model: m })))
-	);
-	let matches = $derived(
-		filter.trim()
-			? entries.filter((e) => e.model.toLowerCase().includes(filter.toLowerCase())).slice(0, 60)
-			: entries.slice(0, 60)
-	);
+	let entries = $derived(modelEntries(chat.models));
+	let page = $derived(pickModels(entries, filter, LIMIT));
+	let matches = $derived(page.shown);
 
 	let short = $derived(shortModelName(chat.activeModel));
 	/** A gateway too old to expose POST /api/sessions/{id}/model still pins the
@@ -74,21 +70,31 @@
 			<input bind:value={filter} placeholder="Filtrer…" type="search" />
 			<div class="items">
 				{#each matches as entry (entry.provider + entry.model)}
+					{@const price = priceLabel(entry.price)}
 					<button
 						class:sel={entry.model === chat.activeModel}
+						title={priceDetail(entry.price) ?? entry.model}
 						onclick={() => {
 							chat.setModel(entry.model);
 							close(true);
 						}}
 					>
 						<span class="m">{entry.model}</span>
-						<span class="p">{entry.providerName}</span>
+						<span class="meta">
+							{#if price}<span class="price" class:free={entry.free}>{price}</span>{/if}
+							<span class="p">{entry.providerName}</span>
+						</span>
 					</button>
 				{/each}
 				{#if matches.length === 0}
 					<p class="hint">Aucun modèle disponible. Configurez un fournisseur avec `hermes model`.</p>
 				{/if}
 			</div>
+			{#if page.hidden}
+				<p class="more">
+					{page.hidden} modèle{page.hidden > 1 ? 's' : ''} de plus — affinez le filtre.
+				</p>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -160,14 +166,41 @@
 		max-height: 320px;
 		overflow-y: auto;
 	}
+	/* Two lines: the id can be forty characters long, and squeezing a price
+	   next to it on 340px left both unreadable. */
 	.items button {
 		display: flex;
-		justify-content: space-between;
-		gap: 10px;
-		padding: 9px 12px;
+		flex-direction: column;
+		align-items: stretch;
+		/* `.items` is a flex column, so a row would otherwise shrink to the
+		   44px floor the touch rule sets and clip its first line. */
+		flex: none;
+		gap: 2px;
+		padding: 8px 12px;
 		border-radius: var(--radius-card);
 		text-align: left;
 		font-size: 13px;
+	}
+	.meta {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 10px;
+	}
+	.price {
+		font-size: 11px;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.price.free {
+		color: var(--ok);
+	}
+	.more {
+		margin: 6px 0 0;
+		padding: 6px 9px;
+		font-size: 11.5px;
+		color: var(--text-faint);
+		text-align: center;
 	}
 	.items button:hover {
 		background: var(--bg-hover);

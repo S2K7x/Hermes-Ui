@@ -1,6 +1,6 @@
 /** Pure helpers over the `/api/model/options` inventory. */
 
-import type { ModelOptions } from './types';
+import type { ModelOptions, ModelPrice } from './types';
 
 /** Last path segment — "openrouter/deepseek/free" reads as "free" in a pill. */
 export function shortModelName(model: string): string {
@@ -35,4 +35,107 @@ export function providerForModel(options: ModelOptions | null, model: string): s
 export function isModelAvailable(options: ModelOptions | null, model: string): boolean {
 	if (!options || !model) return false;
 	return options.providers.some((p) => p.authenticated && p.models.includes(model));
+}
+
+// ---------------------------------------------------------------------------
+// The picker list
+// ---------------------------------------------------------------------------
+
+/** One selectable line of the model menu. */
+export interface ModelEntry {
+	/** Provider slug, as Hermes accepts it in a model lock. */
+	provider: string;
+	providerName: string;
+	model: string;
+	/** What a million tokens costs, when the catalogue says. */
+	price: ModelPrice | null;
+	free: boolean;
+}
+
+/**
+ * Every model a turn could actually run on, in the order Hermes listed them.
+ *
+ * Two exclusions, both of which would otherwise pin an unusable model on a
+ * session row and fail *every* turn afterwards (CLAUDE.md §1):
+ *
+ * - providers without credentials, which is what the picker already did;
+ * - `unavailable_models`, the paid models a Nous free-tier account cannot
+ *   pick. Upstream builds that list in `_apply_pricing` and leaves it empty
+ *   whenever the tier check does not apply or fails, so honouring it can only
+ *   ever remove a model the account was going to be refused anyway.
+ */
+export function modelEntries(options: ModelOptions | null): ModelEntry[] {
+	const out: ModelEntry[] = [];
+	for (const p of options?.providers ?? []) {
+		if (!p.authenticated || !p.models?.length) continue;
+		const blocked = new Set(Array.isArray(p.unavailable_models) ? p.unavailable_models : []);
+		for (const model of p.models) {
+			if (blocked.has(model)) continue;
+			const price = p.pricing?.[model] ?? null;
+			out.push({
+				provider: p.slug,
+				providerName: p.name,
+				model,
+				price,
+				free: price?.free === true
+			});
+		}
+	}
+	return out;
+}
+
+/**
+ * The line shown under a model id, or null when nothing is known.
+ *
+ * The figures come formatted from upstream — this only decides what a missing
+ * half means. Never guesses: a row whose provider has no catalogue simply says
+ * nothing, rather than implying the model is free.
+ */
+export function priceLabel(price: ModelPrice | null | undefined): string | null {
+	if (!price) return null;
+	if (price.free) return 'Gratuit';
+	const parts = [price.input, price.output].filter((v): v is string => Boolean(v) && v !== 'free');
+	if (parts.length === 0) return null;
+	return `${parts.join(' / ')} par Mtok`;
+}
+
+/** The same figures spelled out, for the row's tooltip. */
+export function priceDetail(price: ModelPrice | null | undefined): string | null {
+	if (!price) return null;
+	if (price.free) return 'Gratuit, par million de jetons';
+	const parts: string[] = [];
+	if (price.input) parts.push(`Entrée ${price.input}`);
+	if (price.output) parts.push(`Sortie ${price.output}`);
+	if (price.cache) parts.push(`Cache ${price.cache}`);
+	if (parts.length === 0) return null;
+	return `${parts.join(' · ')}, par million de jetons`;
+}
+
+/**
+ * Filter and cap the menu, saying how many rows the cap hid.
+ *
+ * The cap is what keeps a provider with three hundred models from building
+ * three hundred DOM nodes on a Pi the moment the menu opens. What it must not
+ * do is drop them in silence: the previous `.slice(0, 60)` left twenty of this
+ * machine's eighty models unreachable unless the user happened to type a
+ * filter that matched them, with nothing on screen to suggest they existed.
+ *
+ * The query matches the provider too — its name is drawn on every row, so
+ * typing what is written there has to work.
+ */
+export function pickModels(
+	entries: ModelEntry[],
+	query: string,
+	limit: number
+): { shown: ModelEntry[]; hidden: number } {
+	const needle = query.trim().toLowerCase();
+	const matched = needle
+		? entries.filter(
+				(e) =>
+					e.model.toLowerCase().includes(needle) ||
+					e.providerName.toLowerCase().includes(needle) ||
+					e.provider.toLowerCase().includes(needle)
+			)
+		: entries;
+	return { shown: matched.slice(0, limit), hidden: Math.max(0, matched.length - limit) };
 }

@@ -1808,6 +1808,55 @@ Ce qui compte dans le code :
 
 Route : `GET|PUT /api/approvals`.
 
+### 33. Le catalogue de modèles dit déjà le prix — et le sélecteur en cachait vingt
+
+`GET /api/model/options` ne renvoie pas qu'une liste de noms.
+`build_model_options_payload` (`hermes_cli/inventory.py`) l'appelle avec
+`pricing=True`, `capabilities=True` et `featured=True`, et `_apply_pricing`
+ajoute alors sur chaque ligne de fournisseur qui a un catalogue vivant
+(openrouter / nous / novita) :
+
+```
+row["pricing"] = {model_id: {"input": "$3.00" | "free" | "",
+                             "output": …, "cache": … | null, "free": bool}}
+```
+
+Les montants sont **déjà formatés** par le serveur, par million de jetons : le
+navigateur n'a rien à calculer et surtout rien à arrondir lui-même. Nous les
+ignorions entièrement. **Relevé sur cette machine** contre l'application en
+production : les 49 modèles d'OpenRouter portent tous un prix, de `free` à
+`$30.00`, dont 8 gratuits — de quoi choisir, et jusqu'ici invisible.
+
+`modelEntries()` / `priceLabel()` / `priceDetail()` (`src/lib/models.ts`, purs
+et testés) sont les trois fonctions qui traduisent ça. Trois règles :
+
+- **Aucune supposition.** Un fournisseur sans catalogue (anthropic, copilot
+  ici) n'a pas de clé `pricing` : la ligne n'affiche alors **rien**, jamais
+  « gratuit ». Un prix à moitié connu s'affiche à moitié.
+- **`unavailable_models` est respecté.** Upstream y range les modèles payants
+  qu'un compte Nous en palier gratuit ne peut pas prendre. Les proposer, c'est
+  épingler sur une ligne de session un modèle que Hermes refusera ensuite à
+  **chaque** tour (point 1). La liste est vide dès que le test de palier ne
+  s'applique pas ou échoue, donc la respecter ne peut retirer qu'un modèle déjà
+  condamné.
+- Le prix détaillé (`entrée · sortie · cache`) est l'infobulle de la ligne ; le
+  libellé visible tient en `$2.00 / $10.00 par Mtok`.
+
+**Et le plafond de la liste ne ment plus.** Le menu tranchait à
+`.slice(0, 60)`, sans rien dire. **Mesuré ici** : 80 modèles servables
+(49 openrouter + 17 copilot + 13 anthropic + 1 moa), donc **20 inatteignables**
+à moins de deviner un filtre qui les fasse remonter — dont la totalité de
+Copilot. `pickModels()` rend maintenant `{shown, hidden}`, le plafond est à
+100, et ce qu'il coupe est annoncé (« N modèles de plus — affinez le filtre »).
+Le filtre porte aussi sur le **fournisseur** : son nom est écrit sur chaque
+ligne, taper « copilot » devait marcher.
+
+Détail de mise en page à ne pas défaire : une ligne du menu est maintenant sur
+deux niveaux (l'identifiant, puis prix + fournisseur) et porte `flex: none`.
+`.items` est une colonne flex, et sans ça la règle tactile `min-height: 44px`
+devenait une hauteur *imposée* — mesuré en 414 × 896, la première ligne de
+chaque entrée était rognée.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -1948,7 +1997,8 @@ src/
 │   ├── errors.ts      ApiError + codes + `humanizeError`
 │   ├── jobs.ts        horaires cron validés/traduits/composés, état et tri
 │   │                  des tâches, fiche d'agent dans le prompt d'une tâche
-│   ├── models.ts      inventaire /api/model/options (provider d'un modèle…)
+│   ├── models.ts      inventaire /api/model/options : provider d'un modèle,
+│   │                  lignes du sélecteur, prix par million de jetons
 │   ├── prompts.ts     prompts enregistrés : titres, bornes, recherche
 │   ├── push.ts        charge utile d'une notification, libellés, capacités
 │   ├── search.ts      recherche accent-insensible dans le fil ouvert, extraits

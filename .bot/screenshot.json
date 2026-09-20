@@ -1,7 +1,7 @@
 {
 	"path": "/",
-	"js": "(async()=>{const r=ms=>new Promise(x=>setTimeout(x,ms));const b=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('aria-label')||'').startsWith('Rechercher'));if(!b)return'no search button';b.click();await r(800);const inp=document.querySelector('[role=\"combobox\"]');if(!inp)return'no combobox';inp.focus();for(let i=0;i<14;i++){inp.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));await r(70);}await r(400);return document.querySelector('[aria-selected=\"true\"]')?.textContent?.trim()??'no cursor';})()",
-	"caption": "La palette ⌘K après quatorze ⬇︎ : le curseur reste à l'écran au lieu de descendre hors du cadre, et la ligne active est maintenant une option annoncée (role=option, aria-selected) que le champ désigne par aria-activedescendant.",
+	"js": "(async()=>{const r=ms=>new Promise(x=>setTimeout(x,ms));const b=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('aria-label')||'').startsWith('Modèle'));if(!b)return'no model button';b.click();await r(900);return document.querySelectorAll('.menu .items button').length+' modèles';})()",
+	"caption": "Le sélecteur de modèle affiche enfin ce que Hermes savait déjà : le prix par million de jetons de chaque modèle, gratuit compris. Et il ne tranche plus la liste en silence — les 80 modèles servables par ce Pi y sont, alors que vingt (dont tout Copilot) étaient inatteignables.",
 	"width": 1280,
 	"height": 900
 }
