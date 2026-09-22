@@ -184,13 +184,19 @@
 	let flashId = $state<string | null>(null);
 	let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
-	async function jumpToMessage(id: string) {
+	async function jumpToMessage(id: string, sessionId?: string) {
+		// Leaving the bottom by hand: without this, a turn still streaming would
+		// pull the view back down before the smooth scroll has settled. Set
+		// before the transcript loads, or the arriving messages glue the view
+		// to the bottom the moment they render.
+		pinnedToBottom = false;
+		// A hit from the cross-conversation search names a thread that is not
+		// open yet. The ids match because the server grouped the transcript with
+		// the very same `groupTranscript` that renders it here.
+		if (sessionId && sessionId !== chat.sessionId) await chat.openSession(sessionId);
 		flashId = id;
 		if (flashTimer) clearTimeout(flashTimer);
 		flashTimer = setTimeout(() => (flashId = null), 2400);
-		// Leaving the bottom by hand: without this, a turn still streaming would
-		// pull the view back down before the smooth scroll has settled.
-		pinnedToBottom = false;
 		await tick();
 		for (const node of scroller?.querySelectorAll('[data-mid]') ?? []) {
 			if (node.getAttribute('data-mid') !== id) continue;

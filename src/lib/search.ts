@@ -1,13 +1,17 @@
 /**
- * Finding a passage inside the conversation that is already open.
+ * Finding a passage inside a conversation.
  *
  * The sidebar and the command palette match a conversation by its title and
- * its preview; neither can answer "where did it give me that command?". The
- * whole transcript is already in the browser — `openSession()` loads up to 500
- * messages — so that question is answerable without asking Hermes anything,
- * which matters twice on a phone: an installed PWA has no find-in-page at all,
- * and the gateway exposes no message search to fall back on (there is no such
- * route in `api_server.py`).
+ * its preview; neither can answer "where did it give me that command?". For
+ * the open thread the whole transcript is already in the browser —
+ * `openSession()` loads up to 500 messages — so that question is answerable
+ * without asking Hermes anything, which matters twice on a phone: an installed
+ * PWA has no find-in-page at all, and the gateway exposes no message search to
+ * fall back on (there is no such route in `api_server.py`).
+ *
+ * The same rules serve the cross-conversation search, where the server reads
+ * the other transcripts instead — see `findInTranscript` at the bottom for
+ * what changes when there are forty of them rather than one.
  *
  * Everything here is pure apart from one memo table, keyed by message id and
  * invalidated whenever that message's text changes.
@@ -203,4 +207,72 @@ export function findInMessages(
 		});
 	}
 	return out;
+}
+
+/**
+ * Fold a text without building the origin map.
+ *
+ * The map is what makes an excerpt quotable, and it costs one array slot per
+ * character — fine for the one transcript a browser holds, ruinous for the
+ * forty a server-side search walks through. Answering "does this contain the
+ * needle?" needs the folded string and nothing else.
+ */
+function foldedText(input: string): string {
+	const parts: string[] = [];
+	for (let i = 0; i < input.length; i++) {
+		const code = input.charCodeAt(i);
+		if (code >= 97 && code < 128) parts.push(input[i]);
+		else if (code >= 65 && code <= 90) parts.push(String.fromCharCode(code + 32));
+		else parts.push(foldChar(input[i]));
+	}
+	return parts.join('');
+}
+
+/**
+ * The same search, over a transcript that is not the open one.
+ *
+ * Used by the cross-conversation search, which walks dozens of transcripts in
+ * one request: it must not leave dozens of index maps behind in the memo
+ * table, nor build one for a message that does not match. Hence two passes —
+ * a map-free fold to decide, then `findInMessages` on the single message that
+ * matched, so the excerpt is cut by exactly the code the open thread uses.
+ */
+export function findInTranscript(
+	messages: readonly SearchableMessage[],
+	query: string,
+	limit = 3
+): MessageMatch[] {
+	const needle = foldedText(query.trim());
+	if (needle.length < MIN_QUERY_CHARS || limit <= 0) return [];
+
+	const out: MessageMatch[] = [];
+	for (let i = messages.length - 1; i >= 0 && out.length < limit; i--) {
+		const message = messages[i];
+		if (!message.content || !foldedText(message.content).includes(needle)) continue;
+		const [hit] = findInMessages([message], query, 1);
+		if (hit) out.push(hit);
+	}
+	return out;
+}
+
+// ---------------------------------------------------------------------------
+// Across conversations — the shape `/api/search` answers with
+// ---------------------------------------------------------------------------
+
+/** One other conversation that matched, with a few of its passages. */
+export interface SessionMatches {
+	session_id: string;
+	title: string;
+	last_active: number;
+	hits: MessageMatch[];
+}
+
+export interface SearchResult {
+	object: 'list';
+	query: string;
+	data: SessionMatches[];
+	/** How many conversations were actually read. */
+	scanned: number;
+	/** True when older conversations were left out of the fan-out. */
+	truncated: boolean;
 }

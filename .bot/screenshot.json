@@ -1,7 +1,7 @@
 {
 	"path": "/",
-	"js": "(async()=>{const r=ms=>new Promise(x=>setTimeout(x,ms));const b=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('aria-label')||'').startsWith('Modèle'));if(!b)return'no model button';b.click();await r(900);return document.querySelectorAll('.menu .items button').length+' modèles';})()",
-	"caption": "Le sélecteur de modèle affiche enfin ce que Hermes savait déjà : le prix par million de jetons de chaque modèle, gratuit compris. Et il ne tranche plus la liste en silence — les 80 modèles servables par ce Pi y sont, alors que vingt (dont tout Copilot) étaient inatteignables.",
+	"js": "(async()=>{const r=ms=>new Promise(x=>setTimeout(x,ms));const open=[...document.querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')||'').startsWith('Rechercher un message'));if(!open)return'no search button';open.click();await r(600);const inp=document.querySelector('input[aria-label=\"Recherche\"]');if(!inp)return'no input';const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(inp,'le');inp.dispatchEvent(new Event('input',{bubbles:true}));await r(600);const go=[...document.querySelectorAll('.rows button')].find(b=>b.textContent.includes('dans les autres conversations'));if(!go)return'no trigger row';go.click();for(let i=0;i<20;i++){await r(500);const n=document.querySelector('.note');if(n&&!n.textContent.includes('Recherche dans'))break;}await r(400);return document.querySelectorAll('.rows button').length+' lignes';})()",
+	"caption": "La palette ⌘K sait maintenant chercher dans les autres conversations, pas seulement dans le fil ouvert : Hermes n'ayant aucune route de recherche, le serveur lit les transcripts des 40 conversations les plus récentes et rend les passages trouvés avec le nom de leur conversation. Choisir un résultat ouvre cette conversation et défile jusqu'au message.",
 	"width": 1280,
 	"height": 900
 }

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MIN_QUERY_CHARS, findInMessages, type SearchableMessage } from '../src/lib/search.ts';
+import {
+	MIN_QUERY_CHARS,
+	findInMessages,
+	findInTranscript,
+	type SearchableMessage
+} from '../src/lib/search.ts';
 
 /**
  * Searching the open conversation.
@@ -121,4 +126,59 @@ test('the search reaches a long transcript in one pass', () => {
 	const hits = findInMessages(many, 'paillasson');
 	assert.equal(hits.length, 1);
 	assert.equal(hits[0].id, many[2].id);
+});
+
+
+/**
+ * The same search over a transcript that is not the open one.
+ *
+ * `findInTranscript` decides with a map-free fold and only then pays for an
+ * excerpt, so what has to hold is that it finds exactly what `findInMessages`
+ * finds and quotes it exactly the same way — the cheaper first pass must not
+ * change a single answer.
+ */
+
+test('a transcript hit is quoted exactly as the open-thread search quotes it', () => {
+	const one = msg('Le résumé de la journée est prêt.');
+	const [cheap] = findInTranscript([one], 'resume');
+	const [full] = findInMessages([one], 'resume');
+	assert.deepEqual(cheap, full);
+});
+
+test('an accented query still reaches unaccented text across a transcript', () => {
+	const hits = findInTranscript([msg('voici le resume')], 'résumé');
+	assert.equal(hits.length, 1);
+	assert.equal(hits[0].match, 'resume');
+});
+
+test('transcript hits come back most recent first, and stop at the limit', () => {
+	const many = [msg('docker un'), msg('docker deux'), msg('docker trois'), msg('docker quatre')];
+	const hits = findInTranscript(many, 'docker', 2);
+	assert.equal(hits.length, 2);
+	assert.equal(hits[0].id, many[3].id);
+	assert.equal(hits[1].id, many[2].id);
+});
+
+test('a transcript query under the floor finds nothing at all', () => {
+	assert.equal(MIN_QUERY_CHARS, 2);
+	assert.equal(findInTranscript([msg('abc')], 'a').length, 0);
+	assert.equal(findInTranscript([msg('abc')], '  ').length, 0);
+});
+
+test('a zero limit asks for nothing and reads nothing', () => {
+	assert.equal(findInTranscript([msg('docker ps')], 'docker', 0).length, 0);
+});
+
+test('an empty message is skipped by the transcript search too', () => {
+	assert.equal(findInTranscript([msg('')], 'quoi').length, 0);
+});
+
+test('occurrences are counted the same way on both paths', () => {
+	const one = msg('docker ps puis docker logs puis docker stop');
+	assert.equal(findInTranscript([one], 'docker')[0].count, 3);
+});
+
+test('a non-matching transcript costs no excerpt and yields nothing', () => {
+	const many = Array.from({ length: 200 }, (_, i) => msg(`ligne ordinaire ${i}`));
+	assert.equal(findInTranscript(many, 'paillasson').length, 0);
 });

@@ -4,7 +4,10 @@
 	import { trapTab } from '$lib/client/dialog.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { activityAt, matchesQuery, relativeTime, sessionLabel } from '$lib/sessions';
-	import { findInMessages } from '$lib/search';
+	import { findInMessages, MIN_QUERY_CHARS, type SearchResult } from '$lib/search';
+	import { api } from '$lib/client/api';
+	import { humanizeError } from '$lib/errors';
+	import { hasMod, modKey } from '$lib/client/platform';
 
 	interface Command {
 		id: string;
@@ -17,29 +20,38 @@
 		open: boolean;
 		onclose: () => void;
 		commands: Command[];
-		/** Scroll the thread to one of its messages, and flash it. */
-		onjump?: (messageId: string) => void;
+		/**
+		 * Scroll the thread to one of its messages, and flash it. A result from
+		 * the cross-conversation search names its conversation too: the thread
+		 * is opened first, and the same jump then lands in it.
+		 */
+		onjump?: (messageId: string, sessionId?: string) => void;
 	}
 	let { open, onclose, commands, onjump }: Props = $props();
 
 	let query = $state('');
 	let index = $state(0);
+	const mod = modKey();
 	let input = $state<HTMLInputElement | null>(null);
 	let card = $state<HTMLElement | null>(null);
 	let list = $state<HTMLElement | null>(null);
 
 	/** Prefix of each option's id, which `aria-activedescendant` points at. */
 	const OPTION_ID = 'palette-option-';
+	/** Mirrors the cap `/api/search` applies, so freshness can be compared. */
+	const MAX_QUERY_CHARS = 120;
 
 	interface Row {
 		key: string;
-		kind: 'command' | 'session' | 'message';
+		kind: 'command' | 'session' | 'message' | 'elsewhere';
 		label: string;
 		hint?: string;
 		/** Heading printed above this row, when it opens a group. */
 		head?: string;
 		/** A message excerpt, split so the match can be marked. */
 		snippet?: { before: string; match: string; after: string };
+		/** Rows that act on the palette itself, rather than leaving it. */
+		keepOpen?: boolean;
 		run: () => void;
 	}
 
@@ -90,17 +102,102 @@
 			}))
 	);
 
+	/**
+	 * Passages of the *other* conversations — the only group that costs a round
+	 * trip, and the only one that has to be asked for.
+	 *
+	 * Hermes has no message search, so this is a fan-out over transcripts on the
+	 * server (see `$lib/server/search`). Running it on every keystroke would
+	 * spend dozens of upstream reads per letter typed, so the group holds a
+	 * single action until it has been used, and the answer is kept only as long
+	 * as the query that produced it.
+	 */
+	let elsewhere = $state<SearchResult | null>(null);
+	let searching = $state(false);
+	let searchError = $state('');
+
+	async function searchEverywhere(q: string) {
+		if (searching) return;
+		searching = true;
+		searchError = '';
+		try {
+			// Far longer than the default: this is dozens of upstream reads, and
+			// the first one after the gateway's hourly cache expires is slow.
+			elsewhere = await api<SearchResult>(`/api/search?q=${encodeURIComponent(q)}`, {
+				timeoutMs: 60_000
+			});
+		} catch (err) {
+			elsewhere = null;
+			searchError = humanizeError(err);
+		} finally {
+			searching = false;
+		}
+	}
+
+	/**
+	 * The query as the route will see it — trimmed and capped the same way, so
+	 * a very long paste still recognises its own answer when it comes back.
+	 */
+	let needle = $derived(query.trim().slice(0, MAX_QUERY_CHARS));
+	/** True once the answer in hand is the answer to what is typed now. */
+	let elsewhereFresh = $derived(elsewhere !== null && elsewhere.query === needle);
+	let canSearchEverywhere = $derived(needle.length >= MIN_QUERY_CHARS);
+
+	let matchedElsewhere = $derived.by<Row[]>(() => {
+		if (!open || !canSearchEverywhere) return [];
+		if (!elsewhereFresh) {
+			return searching
+				? []
+				: [
+						{
+							key: 'x:run',
+							kind: 'elsewhere',
+							label: `Chercher « ${needle} » dans les autres conversations`,
+							keepOpen: true,
+							run: () => void searchEverywhere(needle)
+						}
+					];
+		}
+		return (elsewhere?.data ?? [])
+			.filter((s) => s.session_id !== chat.sessionId)
+			.flatMap((session) =>
+				session.hits.map<Row>((hit) => ({
+					key: `x:${session.session_id}:${hit.id}`,
+					kind: 'elsewhere',
+					label: `${hit.before}${hit.match}${hit.after}`,
+					hint: session.title.length > 28 ? `${session.title.slice(0, 27)}…` : session.title,
+					snippet: { before: hit.before, match: hit.match, after: hit.after },
+					run: () => onjump?.(hit.id, session.session_id)
+				}))
+			);
+	});
+
+	/** What the search is doing, said outside the listbox — which holds options only. */
+	let elsewhereNote = $derived.by(() => {
+		if (!canSearchEverywhere) return '';
+		if (searching) return 'Recherche dans les autres conversations…';
+		if (searchError) return searchError;
+		if (!elsewhereFresh) return '';
+		const found = matchedElsewhere.length;
+		const scanned = elsewhere?.scanned ?? 0;
+		const scope = `${scanned} conversation${scanned > 1 ? 's' : ''} explorée${scanned > 1 ? 's' : ''}`;
+		const more = elsewhere?.truncated ? ' — les plus récentes seulement' : '';
+		return found ? `${scope}${more}.` : `Rien trouvé ailleurs — ${scope}${more}.`;
+	});
+
 	const HEADS: Record<Row['kind'], string> = {
 		command: 'Actions',
 		message: 'Dans cette conversation',
-		session: 'Conversations'
+		session: 'Conversations',
+		elsewhere: 'Dans les autres conversations'
 	};
 
 	// A heading is carried by the first row of each group, so the rendered list
 	// stays one flat array and the arrow keys keep their arithmetic.
 	let rows = $derived(
-		[...matchedCommands, ...matchedSessions, ...matchedMessages].map((row, i, all) =>
-			i === 0 || all[i - 1].kind !== row.kind ? { ...row, head: HEADS[row.kind] } : row
+		[...matchedCommands, ...matchedSessions, ...matchedMessages, ...matchedElsewhere].map(
+			(row, i, all) =>
+				i === 0 || all[i - 1].kind !== row.kind ? { ...row, head: HEADS[row.kind] } : row
 		)
 	);
 
@@ -116,6 +213,10 @@
 		if (open) {
 			query = '';
 			index = 0;
+			// An answer belongs to the query that asked for it and to the session
+			// list of the moment: reopening the palette starts over.
+			elsewhere = null;
+			searchError = '';
 			queueMicrotask(() => input?.focus());
 		}
 	});
@@ -141,7 +242,9 @@
 
 	function choose(row: Row | undefined) {
 		if (!row) return;
-		onclose();
+		// Launching the cross-conversation search is the one row that acts on
+		// the palette itself: closing it would throw away the result it asks for.
+		if (!row.keepOpen) onclose();
 		row.run();
 	}
 
@@ -157,6 +260,12 @@
 			index = next;
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
+			// The action row sits at the bottom of a list that can be long; this
+			// reaches it from the field, which is where the caret already is.
+			if (hasMod(event) && canSearchEverywhere && !elsewhereFresh) {
+				void searchEverywhere(needle);
+				return;
+			}
 			choose(rows[index]);
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
@@ -220,7 +329,9 @@
 										? 'command'
 										: row.kind === 'message'
 											? 'search'
-											: 'message'}
+											: row.kind === 'elsewhere'
+												? 'layers'
+												: 'message'}
 									size={15}
 								/>
 							</span>
@@ -242,8 +353,14 @@
 			     result is the one state the cursor cannot announce by itself. -->
 			<p class="none" role="status">Aucun résultat.</p>
 		{/if}
+		<!-- Same reason: how far the cross-conversation search got is a status,
+		     not an option, and a listbox may hold nothing but options. -->
+		{#if elsewhereNote}
+			<p class="note" role="status">{elsewhereNote}</p>
+		{/if}
 		<div class="foot">
-			<kbd>↑</kbd><kbd>↓</kbd> naviguer · <kbd>↵</kbd> ouvrir · <kbd>esc</kbd> fermer
+			<kbd>↑</kbd><kbd>↓</kbd> naviguer · <kbd>↵</kbd> ouvrir · <kbd>esc</kbd> fermer{#if canSearchEverywhere && !elsewhereFresh}
+				· <kbd>{mod}</kbd><kbd>↵</kbd> chercher partout{/if}
 		</div>
 	</div>
 {/if}
@@ -326,6 +443,12 @@
 	}
 	.hint {
 		flex: 0 0 auto;
+		font-size: 11.5px;
+		color: var(--text-faint);
+	}
+	.note {
+		margin: 0;
+		padding: 2px 20px 6px;
 		font-size: 11.5px;
 		color: var(--text-faint);
 	}

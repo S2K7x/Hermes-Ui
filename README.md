@@ -37,13 +37,20 @@ de l'application.
   conversations archivées de toutes ses listes, l'app les retrouve une par une
   à partir des identifiants qu'elle a déjà vus
 - **Palette de commandes** `⌘K` (bouton ⌕ dans l'entête) : recherche
-  insensible aux accents dans toutes les conversations + actions rapides
+  insensible aux accents sur les titres des conversations + actions rapides
 - **Recherche dans la conversation ouverte**, dans cette même palette : à
   partir de deux caractères, elle liste les messages du fil qui contiennent ce
   qu'on tape, avec un extrait où le passage trouvé est surligné ; le choisir
   fait défiler le fil jusqu'à ce message et le souligne un instant. C'est la
   seule façon de retrouver un passage sur téléphone, où une PWA installée n'a
   pas de « rechercher dans la page »
+- **Recherche dans les *autres* conversations**, dans la même palette :
+  « Chercher « … » dans les autres conversations » (ou `⌘↵`) lit les
+  transcripts côté serveur — Hermes n'a aucune route de recherche — et rend
+  les passages trouvés, avec le nom de leur conversation. Le choisir ouvre
+  cette conversation **et** défile jusqu'au message. Explicite et jamais
+  déclenchée à la frappe : c'est une lecture amont par conversation, bornée
+  aux 40 plus récemment actives
 - **Timeline des étapes de l'agent** : chaque appel d'outil (terminal, web,
   navigateur, MCP…) affiché en direct, repliable
 - **Panneau d'état** `⌘/` : contrôles de disponibilité (base, modèle,

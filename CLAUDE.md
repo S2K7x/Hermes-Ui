@@ -1575,6 +1575,57 @@ halo est en `--focus`, donc lisible sur tous les préréglages (point 22).
 dans le clone où ce changement a été écrit ; ce qui est testé, c'est la
 fonction pure (`tests/search.test.ts`) et le fait que le balisage la branche.
 
+**Et les autres conversations : le serveur va lire, parce que lui seul le
+peut.** Le navigateur ne détient que le fil ouvert ; les quarante autres sont
+sur le disque du Pi, derrière une API qui n'a **aucune** route de recherche
+(vérifié à nouveau ci-dessus dans la table de routage). La seule façon
+de répondre à « c'était dans quelle conversation ? » est donc de lire les
+transcripts et de regarder — ce que le serveur fait en un aller-retour pour le
+client, sur la boucle locale.
+
+`GET /api/search?q=…` (`src/lib/server/search.ts`) est ce fan-out, et il est
+borné sur chaque axe : les **40** conversations les plus récemment actives, **4**
+sondes en vol, **3** extraits par conversation, la même fenêtre de 500 messages
+que le fil ouvert. Rien ne le déclenche tout seul — `gate('search', 1, 3)`, et
+la palette ne l'appelle **jamais à la frappe** : le groupe « Dans les autres
+conversations » ne contient qu'une action tant qu'on ne l'a pas lancée, et la
+réponse n'est gardée que tant que la requête qui l'a produite est celle qui est
+tapée. Un `⌘↵` depuis le champ fait la même chose, parce que cette ligne est en
+bas d'une liste qui peut être longue.
+
+Trois choses qui rendent ça sûr, et qu'il ne faut pas défaire :
+
+- **Le transcript est replié par `groupTranscript()` avant d'être fouillé.**
+  L'identifiant d'un extrait est alors exactement le `data-mid` que le
+  navigateur rendra après `openSession()` — chercher dans les lignes brutes
+  rendrait des ids qui n'atteignent jamais le DOM, et le saut inter-conversation
+  ne tomberait sur rien. C'est ce qui permet à `jumpToMessage(id, sessionId)`
+  d'ouvrir la conversation **puis** de défiler jusqu'au passage.
+- **`findInTranscript()` ne paie pas l'extrait d'un message qui ne matche
+  pas.** La carte d'indices de `fold()` coûte un emplacement de tableau par
+  caractère — acceptable pour le seul transcript qu'un navigateur tient,
+  ruineux pour les quarante d'une requête. D'où deux passes : un repli **sans
+  carte** pour décider, puis `findInMessages()` sur le seul message retenu, si
+  bien que l'extrait est découpé par exactement le code du fil ouvert
+  (`tests/search.test.ts` compare les deux sorties champ par champ).
+- **Une conversation illisible ne vide pas le résultat** (supprimée en cours de
+  route, hoquet amont) : la sonde rend `null` et les autres continuent. Les
+  conversations en corbeille sont exclues comme dans la sidebar — les trouver
+  ici contredirait le fait de les avoir supprimées.
+
+Ce que l'UI en dit : le nombre de conversations réellement explorées, et « les
+plus récentes seulement » quand il y en avait davantage. Un compte muet
+laisserait croire à une recherche exhaustive.
+
+**Non vérifié** : le rendu dans un vrai navigateur, pour la même raison que
+ci-dessus. Ce qui est mesuré, c'est la route elle-même, jouée contre un faux
+gateway : trois conversations, `?q=gateway` → l'extrait du message assistant et
+celui du message utilisateur de la bonne conversation, `?q=resume` → « résumé »
+cité **accentué** dans l'autre, `?q=a` → 400 `invalid_query`, et six lectures
+amont pour deux recherches sur trois conversations.
+
+Route : `GET /api/search?q=<requête>`.
+
 ### 29. Le langage visuel : l'élévation remplace le trait
 
 L'app suivait une maquette d'affiches ; elle en suit maintenant la grammaire
@@ -1947,6 +1998,7 @@ src/
 │   │   ├── agents.ts    magasin d'agents, lien conversation → agent, héritage
 │   │   │                  de `session_meta` après une compression
 │   │   ├── jobs.ts      lien tâche planifiée → agent, prompt composé
+│   │   ├── search.ts    recherche de passages à travers les conversations
 │   │   ├── trash.ts     balayage à échéance + contenu de la corbeille
 │   │   ├── turns.ts     registre des tours en vol, présence, notification
 │   │   ├── push.ts      envoi Web Push (abonnements, 410 → oubli)
@@ -2001,7 +2053,7 @@ src/
 │   │                  lignes du sélecteur, prix par million de jetons
 │   ├── prompts.ts     prompts enregistrés : titres, bornes, recherche
 │   ├── push.ts        charge utile d'une notification, libellés, capacités
-│   ├── search.ts      recherche accent-insensible dans le fil ouvert, extraits
+│   ├── search.ts      recherche accent-insensible dans un fil, extraits
 │   ├── providers.ts   groupement des clés par provider, statut des comptes,
 │   │                  machine à états du flux OAuth
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage,
