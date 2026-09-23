@@ -179,3 +179,36 @@ test('a dashboard write drops the cached catalogue', async () => {
 	assert.match(source, /invalidateModelOptions/);
 	assert.match(source, /opts\.method \?\? 'GET'\) !== 'GET'/);
 });
+
+test('the skills listing is read through the cache, never straight from the gateway', async () => {
+	const source = await readFile(new URL('../src/routes/api/skills/+server.ts', import.meta.url), 'utf8');
+	// Two upstream handlers, 26 ms measured through this proxy — the slowest
+	// read of the boot fan-out now that the model catalogue is cached, for an
+	// answer Hermes cannot change without being restarted.
+	assert.ok(
+		!/getSkills|getToolsets/.test(source),
+		'src/routes/api/skills/+server.ts must go through $lib/server/catalog'
+	);
+	assert.match(source, /skillCatalogue/);
+});
+
+test('writing to the skill tree drops the cached listing', async () => {
+	for (const file of [
+		'src/routes/api/skills/files/+server.ts',
+		'src/routes/api/skills/files/content/+server.ts'
+	]) {
+		const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+		assert.match(
+			source,
+			/invalidateSkillCatalogue\(\)/,
+			`${file} changes the tree the listing is built from, so it must drop it`
+		);
+	}
+});
+
+test('the two skill listings are fetched side by side, not one after the other', async () => {
+	const source = await readFile(new URL('../src/lib/server/catalog.ts', import.meta.url), 'utf8');
+	// `/v1/skills` and `/v1/toolsets` read nothing of each other's answer;
+	// chaining them would add the slower one's latency to the faster one's.
+	assert.match(source, /Promise\.all\(\[getSkills\(\), getToolsets\(\)\]\)/);
+});

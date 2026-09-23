@@ -363,8 +363,9 @@ Après toute modification de `~/.hermes/.env` ou `config.yaml` :
 
 ### 11. L'éditeur de skills touche des fichiers, pas l'API
 
-`GET /v1/skills` (proxifié par `/api/skills`) dit ce que Hermes **a chargé**.
-L'éditeur, lui, travaille sur le disque : `SKILLS_DIR` (le bind mount `/skills`
+`GET /v1/skills` (proxifié par `/api/skills`, et servi depuis le cache mémoire
+du point 26) dit ce que Hermes **a chargé**. L'éditeur, lui, travaille sur le
+disque : `SKILLS_DIR` (le bind mount `/skills`
 en Docker, rien du tout ailleurs) pointe sur `~/.hermes/skills`, organisé en
 `<catégorie>/<skill>/SKILL.md` avec un `DESCRIPTION.md` par catégorie.
 
@@ -1464,10 +1465,46 @@ Deux choses à ne pas défaire :
   celui d'avant. Et ça évite d'écrire 24 ko sur le disque à chaque
   rafraîchissement.
 
+**Et la liste des skills suit la même règle.** Une fois le catalogue de modèles
+servi depuis la mémoire, `GET /api/skills` est devenu l'appel le plus cher du
+démarrage — et de loin. **Mesuré à travers le proxy en production sur ce Pi**,
+dix échantillons chacun : `/api/skills` **25–28 ms (médiane 26)**, contre 7 ms
+pour une liste de 200 conversations, 5 ms pour `/api/capabilities` et 1,4 ms
+pour le catalogue de modèles désormais caché.
+
+C'est un outlier parce que ce sont **deux** handlers amont et non un :
+`_handle_skills` parcourt l'arbre des skills via `_find_all_skills`, et
+`_handle_toolsets` recharge `config.yaml`, résout chaque toolset et va chercher
+l'état d'abonnement Nous (`get_nous_subscription_features`) — le tout refait
+depuis zéro à chaque appel.
+
+Or rien là-dedans ne peut avoir changé entre deux ouvertures de l'app : Hermes
+ne recharge pas ses skills à chaud (point 11), donc éditer un `SKILL.md` ne
+change ce que `GET /v1/skills` annonce qu'après un
+`systemctl --user restart hermes-gateway`. La durée de vie honnête de cette
+réponse, c'est « jusqu'au prochain redémarrage du gateway » — cinq minutes de
+fraîcheur sont largement dedans. Et ce que le navigateur en fait est une
+palette `/`, un compteur d'outils et une ligne sur la carte d'accueil : des
+choses qu'on va chercher, jamais ce dont un tour dépend.
+
+**Mesuré de bout en bout** sur ce Pi, application construite, contre un faux
+gateway rejouant les 26 ms relevées sur le vrai :
+
+| | avant | après |
+|---|---|---|
+| `GET /api/skills`, 10 appels | 68 ms puis 25–32 ms | 56 ms puis **2–6 ms** |
+| appels amont pour ces 10 | **20** (2 par appel) | **2** (un de chaque) |
+
+L'écriture d'un `SKILL.md` (création ou remplacement) jette le cache, comme une
+écriture du dashboard jette celui des modèles. Ça ne fait pas apparaître le
+nouveau fichier dans la liste — seul un redémarrage du gateway le fera — mais
+ça évite d'empiler notre fenêtre par-dessus la sienne.
+
 `tests/cache.test.ts` couvre la politique (fenêtre de fraîcheur, réponse
 immédiate en stale, vol unique, échec qui ne vide pas, invalidation pendant un
-vol en cours) et relit la source pour que `getModelOptions` ne revienne pas
-directement dans une route.
+vol en cours) et relit la source pour que ni `getModelOptions` ni
+`getSkills`/`getToolsets` ne reviennent directement dans une route, et que les
+deux listings partent bien de front.
 
 ### 27. Un tour ne se voit pas seulement, il doit s'entendre
 
@@ -1991,7 +2028,7 @@ src/
 │   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
 │   │   ├── cache.ts     lecture amont gardée en mémoire : vol unique,
 │   │   │                  stale-while-revalidate
-│   │   ├── catalog.ts   l'inventaire des modèles derrière ce cache
+│   │   ├── catalog.ts   modèles, skills et toolsets derrière ce cache
 │   │   ├── upstream.ts  socle commun des trois clients amont : UpstreamError,
 │   │   │                  retry des lectures
 │   │   ├── sse.ts       en-têtes SSE + enveloppe d'erreur

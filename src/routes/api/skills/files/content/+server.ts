@@ -1,4 +1,5 @@
 import type { RequestHandler } from './$types';
+import { invalidateSkillCatalogue } from '$lib/server/catalog';
 import { errorResponse, gate, readJson } from '$lib/server/respond';
 import { readSkillFile, refFromParams, skillsJson, writeSkillFile } from '$lib/server/skills';
 import { SKILL_FILE, type EditableFile } from '$lib/skills';
@@ -36,14 +37,18 @@ export const PUT: RequestHandler = async ({ request }) => {
 		return errorResponse(400, 'Le champ « content » doit être une chaîne.', 'invalid_body');
 	}
 
-	return skillsJson(() =>
-		writeSkillFile(
+	return skillsJson(async () => {
+		const written = await writeSkillFile(
 			{
 				category: String(category ?? ''),
 				skill: typeof skill === 'string' && skill ? skill : null,
 				file: (typeof file === 'string' ? file : SKILL_FILE) as EditableFile
 			},
 			content
-		)
-	);
+		);
+		// Same reason as creating one: the description this listing carries is
+		// read from the file that has just been rewritten.
+		invalidateSkillCatalogue();
+		return written;
+	});
 };

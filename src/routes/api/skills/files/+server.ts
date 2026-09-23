@@ -1,4 +1,5 @@
 import type { RequestHandler } from './$types';
+import { invalidateSkillCatalogue } from '$lib/server/catalog';
 import { gate, readJson } from '$lib/server/respond';
 import {
 	createSkill,
@@ -44,12 +45,17 @@ export const POST: RequestHandler = async ({ request }) => {
 	if ('response' in parsed) return parsed.response;
 	const { category, name, description, content } = parsed.body;
 
-	return skillsJson(() =>
-		createSkill({
+	return skillsJson(async () => {
+		const created = await createSkill({
 			category: String(category ?? ''),
 			name: String(name ?? ''),
 			description: typeof description === 'string' ? description : undefined,
 			content: typeof content === 'string' ? content : undefined
-		})
-	);
+		});
+		// The tree on disk is what `GET /v1/skills` enumerates, so our own copy
+		// of that listing has just been outrun — drop it rather than hold it for
+		// the rest of its window on top of the gateway's own staleness.
+		invalidateSkillCatalogue();
+		return created;
+	});
 };
