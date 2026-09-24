@@ -10,6 +10,8 @@
  * reuses `normalizePrompts()` to bound what ever reaches the database.
  */
 
+import { clip, includesFolded, oneLine, searchNeedle } from './text.ts';
+
 export interface SavedPrompt {
 	id: string;
 	title: string;
@@ -22,18 +24,13 @@ export const MAX_PROMPTS = 40;
 export const MAX_PROMPT_CHARS = 4000;
 export const MAX_TITLE_CHARS = 60;
 
-const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
-
 /**
  * A one-line label for a prompt: its first meaningful line, without the
  * markdown furniture that would make every title start with "#" or "-".
  */
 export function promptTitle(text: string): string {
 	for (const raw of text.split('\n')) {
-		const line = raw
-			.replace(/^\s*(?:[#>*+-]+|\d+[.)])\s*/, '')
-			.replace(/\s+/g, ' ')
-			.trim();
+		const line = oneLine(raw.replace(/^\s*(?:[#>*+-]+|\d+[.)])\s*/, ''));
 		if (line) return clip(line, MAX_TITLE_CHARS);
 	}
 	return 'Prompt';
@@ -63,7 +60,7 @@ export function normalizePrompts(value: unknown): SavedPrompt[] {
 		if (seen.has(id)) continue;
 		seen.add(id);
 
-		const rawTitle = typeof row.title === 'string' ? row.title.replace(/\s+/g, ' ').trim() : '';
+		const rawTitle = typeof row.title === 'string' ? oneLine(row.title) : '';
 		const created = typeof row.created_at === 'number' && Number.isFinite(row.created_at) ? row.created_at : 0;
 
 		out.push({
@@ -114,7 +111,7 @@ export function addPrompt(
 	if (list.some((p) => p.text === body)) return { ok: false, reason: 'duplicate' };
 	if (list.length >= MAX_PROMPTS) return { ok: false, reason: 'full' };
 
-	const label = title?.replace(/\s+/g, ' ').trim();
+	const label = title === undefined ? undefined : oneLine(title);
 	return {
 		ok: true,
 		list: [
@@ -130,17 +127,9 @@ export function removePrompt(list: PromptBaseline, id: string): PromptWriteResul
 	return { ok: true, list: list.filter((p) => p.id !== id) };
 }
 
-// Strip combining marks so "resume" finds "résumé" — same rule as the sidebar
-// search.
-const normalize = (s: string) =>
-	s
-		.toLowerCase()
-		.normalize('NFD')
-		.replace(/[\u0300-\u036f]/g, '');
-
 /** Case- and accent-insensitive substring match over title and body. */
 export function matchPrompts(list: SavedPrompt[], query: string): SavedPrompt[] {
-	const needle = normalize(query.trim());
+	const needle = searchNeedle(query);
 	if (!needle) return list;
-	return list.filter((p) => normalize(p.title).includes(needle) || normalize(p.text).includes(needle));
+	return list.filter((p) => includesFolded(p.title, needle) || includesFolded(p.text, needle));
 }

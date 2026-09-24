@@ -1,3 +1,4 @@
+import { includesFolded, searchNeedle } from './text.ts';
 import type { HermesSession } from './types';
 
 /** Seconds-since-epoch of the last activity on a session. */
@@ -88,20 +89,10 @@ export function groupSessions(sessions: HermesSession[], now: Date = new Date())
 
 /** Case- and accent-insensitive substring match over title and preview. */
 export function matchesQuery(session: HermesSession, query: string): boolean {
-	const needle = normalize(query);
+	const needle = searchNeedle(query);
 	if (!needle) return true;
-	return (
-		normalize(session.title ?? '').includes(needle) ||
-		normalize(session.preview ?? '').includes(needle)
-	);
+	return includesFolded(session.title, needle) || includesFolded(session.preview, needle);
 }
-
-// Strip combining marks so "resume" finds "résumé".
-const normalize = (s: string) =>
-	s
-		.toLowerCase()
-		.normalize('NFD')
-		.replace(/[\u0300-\u036f]/g, '');
 
 /**
  * Session ids worth probing one by one to rebuild the archived list.

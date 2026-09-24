@@ -2097,6 +2097,8 @@ src/
 │   │                  candidats de la vue archivée, rotations de compression
 │   ├── skills.ts      chemins de skills validés, gabarits, groupement
 │   ├── sse.ts         parseur SSE incrémental + lecture d'un tour (partagés)
+│   ├── text.ts        repli d'accents, correspondance, troncature, slug —
+│   │                  la seule définition de « ça correspond »
 │   ├── theme.ts       préréglages, dérivation color-mix, contraste WCAG, refus
 │   │                  d'écrire un thème composé sur une ligne non lue
 │   ├── turns.ts       résumé d'un tour + « faut-il notifier ? »
@@ -2241,6 +2243,24 @@ Points de détail qui comptent :
   étape de build. N'y mettez que de la logique pure (pas de DOM) — c'est
   pourquoi `renderMarkdown` n'est pas testé directement, seulement
   `closeOpenConstructs` et la sortie de `marked`.
+- **Un import de valeur d'un module de `src/lib` vers un autre porte son
+  extension `.ts`** (`from './text.ts'`). Le type-stripping de Node ne devine
+  pas l'extension : sans elle, `npm run check` et `npm run build` passent —
+  Vite, lui, la devine — et `npm test` échoue en `ERR_MODULE_NOT_FOUND` sur
+  chaque fichier de test qui traverse ce module. `tsconfig.json` porte déjà
+  `allowImportingTsExtensions`.
+- **Une seule règle de correspondance**, dans `src/lib/text.ts` :
+  `foldAccents()` (minuscules, puis marques diacritiques retirées),
+  `searchNeedle()` pour ce qu'un champ de recherche cherche vraiment (replié et
+  débarrassé des espaces d'une requête à moitié tapée) et `includesFolded()`
+  pour le test lui-même. Les six champs de recherche de l'app y passent —
+  sidebar, palette (actions, conversations, passages), prompts enregistrés,
+  sélecteur de modèle, providers, skills. Ils avaient divergé : quatre
+  comparaient du texte en minuscules tel quel, deux repliaient les accents, et
+  les deux règles cohabitaient dans **la même** boîte de recherche — taper
+  « modele » dans la palette trouvait la conversation et le passage, jamais
+  l'action « Modèle » posée juste au-dessus. `clip()`, `oneLine()` et
+  `slugify()` sont là pour la même raison : ils existaient en double.
 - Thème piloté par des tokens CSS. Les littéraux d'`src/app.css` ne sont que
   le rendu d'avant hydratation ; la source est `src/lib/theme.ts`, appliquée
   en propriétés inline sur `<html>` avec `data-theme` pour le mode. Toute

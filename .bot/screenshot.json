@@ -1,7 +1,7 @@
 {
 	"path": "/",
-	"js": "(async()=>{const r=ms=>new Promise(x=>setTimeout(x,ms));const ta=document.querySelector('textarea');if(!ta)return'no textarea';ta.focus();const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(ta,'/');ta.dispatchEvent(new Event('input',{bubbles:true}));await r(900);return document.querySelectorAll('.palette button').length+' skills'})()",
-	"caption": "La palette de skills du composeur (tapez « / ») : c'est elle, le compteur d'outils et la carte d'accueil que GET /api/skills alimente. Cet appel coûtait 26 ms au Pi à chaque ouverture de l'app — deux handlers amont qui parcourent l'arbre des skills et rechargent config.yaml — pour une réponse que Hermes ne peut pas changer sans redémarrer. Il est maintenant servi depuis la mémoire : 26 ms et 2 appels amont deviennent 2 à 6 ms et zéro, jusqu'à ce que le cache soit périmé.",
+	"js": "(async()=>{const r=ms=>new Promise(x=>setTimeout(x,ms));const b=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('aria-label')||'').startsWith('Rechercher'));if(!b)return'no search button';b.click();await r(700);const i=document.querySelector('input[placeholder^=\"Rechercher\"]');if(!i)return'no input';i.focus();const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(i,'taches');i.dispatchEvent(new Event('input',{bubbles:true}));await r(900);return i.value})()",
+	"caption": "La palette (⌘K) avec « taches » tapé sans accent. Jusqu'à hier ce mot ne trouvait rien : la palette repliait les accents pour les conversations et les passages du fil, mais comparait les actions en minuscules brutes — « Tâches planifiées » restait invisible dans la même boîte de recherche. Les six champs de recherche de l'app (sidebar, palette, prompts, modèles, providers, skills) partagent maintenant une seule règle, dans src/lib/text.ts.",
 	"width": 1280,
 	"height": 900
 }

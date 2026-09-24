@@ -11,6 +11,8 @@
  * whose contents Hermes feeds to an agent holding a terminal.
  */
 
+import { includesFolded, searchNeedle, slugify } from './text.ts';
+
 /** Skill and category names, as Hermes' own tree uses them. */
 export const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -96,14 +98,7 @@ export function utf8Length(content: string): number {
  * `resume-d-articles` instead of `r-sum-d-articles`.
  */
 export function slugifySkillName(input: string): string {
-	return input
-		.normalize('NFD')
-		.replace(/[\u0300-\u036f]/g, '')
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '')
-		.slice(0, MAX_NAME_LENGTH)
-		.replace(/-+$/, '');
+	return slugify(input, MAX_NAME_LENGTH);
 }
 
 /** Starting point for a new SKILL.md: valid frontmatter, obvious blanks. */
@@ -162,18 +157,18 @@ export function groupSkillFiles(entries: SkillFileEntry[], query = ''): SkillCat
 		else group.skills.push(entry);
 	}
 
-	const needle = query.trim().toLowerCase();
+	const needle = searchNeedle(query);
 	const result: SkillCategoryGroup[] = [];
 	for (const group of groups.values()) {
 		if (!needle) {
 			result.push(group);
 			continue;
 		}
-		if (group.category.toLowerCase().includes(needle)) {
+		if (includesFolded(group.category, needle)) {
 			result.push(group);
 			continue;
 		}
-		const skills = group.skills.filter((s) => (s.skill ?? '').toLowerCase().includes(needle));
+		const skills = group.skills.filter((s) => includesFolded(s.skill, needle));
 		if (skills.length) result.push({ ...group, skills });
 	}
 

@@ -1,5 +1,6 @@
 /** Pure helpers over the `/api/model/options` inventory. */
 
+import { includesFolded, searchNeedle } from './text.ts';
 import type { ModelOptions, ModelPrice } from './types';
 
 /** Last path segment — "openrouter/deepseek/free" reads as "free" in a pill. */
@@ -128,13 +129,13 @@ export function pickModels(
 	query: string,
 	limit: number
 ): { shown: ModelEntry[]; hidden: number } {
-	const needle = query.trim().toLowerCase();
+	const needle = searchNeedle(query);
 	const matched = needle
 		? entries.filter(
 				(e) =>
-					e.model.toLowerCase().includes(needle) ||
-					e.providerName.toLowerCase().includes(needle) ||
-					e.provider.toLowerCase().includes(needle)
+					includesFolded(e.model, needle) ||
+					includesFolded(e.providerName, needle) ||
+					includesFolded(e.provider, needle)
 			)
 		: entries;
 	return { shown: matched.slice(0, limit), hidden: Math.max(0, matched.length - limit) };

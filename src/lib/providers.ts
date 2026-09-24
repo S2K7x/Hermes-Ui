@@ -15,6 +15,8 @@
  * `redacted_value`, and that is all this module carries.
  */
 
+import { includesFolded, searchNeedle } from './text.ts';
+
 // ---------------------------------------------------------------------------
 // API keys
 // ---------------------------------------------------------------------------
@@ -128,21 +130,17 @@ export function filterProviderGroups(
 	groups: ProviderKeyGroup[],
 	query = ''
 ): ProviderKeyGroup[] {
-	const needle = query.trim().toLowerCase();
+	const needle = searchNeedle(query);
 	if (!needle) return groups;
 
 	const result: ProviderKeyGroup[] = [];
 	for (const group of groups) {
-		if (
-			group.label.toLowerCase().includes(needle) ||
-			group.provider.toLowerCase().includes(needle)
-		) {
+		if (includesFolded(group.label, needle) || includesFolded(group.provider, needle)) {
 			result.push(group);
 			continue;
 		}
 		const keys = group.keys.filter(
-			(k) =>
-				k.key.toLowerCase().includes(needle) || k.description.toLowerCase().includes(needle)
+			(k) => includesFolded(k.key, needle) || includesFolded(k.description, needle)
 		);
 		if (keys.length) result.push({ ...group, keys });
 	}

@@ -22,6 +22,8 @@
  * reuse `normalizeAgents()` so nothing unbounded reaches SQLite.
  */
 
+import { clip, oneLine, slugify } from './text.ts';
+
 export interface Agent {
 	id: string;
 	name: string;
@@ -71,9 +73,6 @@ export const AGENT_COLOR_HEX: Record<string, string> = {
 export const agentColor = (agent: Pick<Agent, 'color'>): string =>
 	AGENT_COLOR_HEX[agent.color] ?? AGENT_COLOR_HEX.azur;
 
-const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
-const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
-
 /**
  * Keep only the first couple of characters of an emoji field.
  *
@@ -90,13 +89,7 @@ export function normalizeEmoji(value: unknown): string {
 
 /** A readable, stable id derived from a name. Collisions are the caller's job. */
 export function agentSlug(name: string, suffix: string): string {
-	const base = oneLine(name)
-		.toLowerCase()
-		.normalize('NFD')
-		.replace(/[\u0300-\u036f]/g, '')
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '')
-		.slice(0, 32);
+	const base = slugify(name, 32);
 	return base ? `${base}-${suffix}` : `agent-${suffix}`;
 }
 

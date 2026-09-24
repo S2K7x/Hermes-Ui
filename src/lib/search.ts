@@ -17,6 +17,8 @@
  * invalidated whenever that message's text changes.
  */
 
+import { foldAccents } from './text.ts';
+
 /** The little a search needs to know about a message. */
 export interface SearchableMessage {
 	id: string;
@@ -66,18 +68,22 @@ interface Folded {
 }
 
 /**
- * Fold one character: lowercase, then drop its combining marks.
+ * Fold one character, by the app's one folding rule (`$lib/text`).
  *
  * Memoised because `normalize()` is by far the expensive part and a transcript
  * only ever uses a few dozen distinct accented characters. Measured on this Pi
  * 5: folding a megabyte of French prose takes ~130 ms with the memo, against
  * seconds without — and ASCII, which is most of it, never reaches this at all.
+ *
+ * A character at a time rather than `foldAccents(whole string)` because this
+ * search also has to say *where* the match is in the original text, which the
+ * index map below records as it goes.
  */
 const charMemo = new Map<string, string>();
 function foldChar(ch: string): string {
 	let folded = charMemo.get(ch);
 	if (folded === undefined) {
-		folded = ch.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+		folded = foldAccents(ch);
 		charMemo.set(ch, folded);
 	}
 	return folded;

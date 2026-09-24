@@ -8,6 +8,7 @@
 	import { api } from '$lib/client/api';
 	import { humanizeError } from '$lib/errors';
 	import { hasMod, modKey } from '$lib/client/platform';
+	import { includesFolded, searchNeedle } from '$lib/text';
 
 	interface Command {
 		id: string;
@@ -55,9 +56,17 @@
 		run: () => void;
 	}
 
+	/**
+	 * Folded once per keystroke, not once per command — and folded at all, so
+	 * that one search box does not hold two ideas of what matching means:
+	 * "modele" already found the conversation and the passage, never the
+	 * « Modèle » command sitting right above them.
+	 */
+	let commandNeedle = $derived(searchNeedle(query));
+
 	let matchedCommands = $derived(
 		commands
-			.filter((c) => !query || c.label.toLowerCase().includes(query.toLowerCase()))
+			.filter((c) => includesFolded(c.label, commandNeedle))
 			.map<Row>((c) => ({ key: `c:${c.id}`, kind: 'command', label: c.label, hint: c.hint, run: c.run }))
 	);
 
