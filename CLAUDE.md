@@ -1172,6 +1172,43 @@ second Échap, menu fermé, l'atteint bien (1). Idem sur le menu d'une ligne :
 tiroir. En 414 × 896 : ⋯ à 44 × 44, les cinq actions à 44 px, les entrées du
 sélecteur de modèle à 44 px.
 
+**Le composeur en tenait deux de plus, et ce balayage-là les avait manquées.**
+La bibliothèque de prompts (le signet) et la palette de skills (taper `/`) sont
+des panneaux flottants ouverts depuis le composeur : mêmes obligations, et les
+mêmes manques. **Mesuré au CDP en 414 × 896** sur l'application construite,
+avant correction :
+
+- **Échap n'était arrêté que dans le champ de saisie.** Tapé sur un contrôle
+  *à l'intérieur* de la bibliothèque, il **laissait le panneau ouvert** et
+  atteignait quand même le gestionnaire de la fenêtre (compteur à 1) — c'est-à-dire
+  `chat.stop()` pendant qu'une réponse s'écrivait. Et la palette `/`, elle,
+  se refermait bien mais laissait passer la touche tout de même : son `Escape`
+  n'appelait ni `preventDefault()` ni `stopPropagation()`.
+- **Les cibles tactiles étaient les plus petites de l'app** : le ✕ de la
+  bibliothèque à **22 × 14 px**, et son « supprimer » à **28 × 24 px** collé à
+  une ligne de 332 px qui, elle, *insère* le prompt. Un doigt qui rate jetait un
+  prompt enregistré au lieu de s'en servir — la même forme d'erreur que
+  « Supprimer » à 35 px sous « Archiver ».
+- **La palette `/` naviguait en aveugle**, exactement comme la palette de
+  commandes avant le point ci-dessous : huit correspondances font 350 px de
+  lignes dans une boîte de 260 px, et amener le curseur sur la dernière la
+  laissait à **301 px du haut d'une liste haute de 260**, `scrollTop` toujours à
+  0. ↵ lançait alors un skill qui n'avait jamais été affiché. Ses lignes
+  n'étaient enfin ni annoncées (aucun `role`, aucun `aria-selected`) ni retirées
+  de la tabulation, alors que les flèches les parcourent déjà depuis le champ.
+
+Les deux passent donc par le contrat commun : `menuKeydown` pour la
+bibliothèque — qui rend le focus à son déclencheur, et dont le déclencheur
+porte `aria-haspopup` et se focalise au clic (Safari) —, et pour la palette `/`
+un `role="listbox"` dont les lignes sont des `role="option"` en `tabindex="-1"`,
+pointées par l'`aria-activedescendant` du champ et ramenées dans la vue par
+`scrollIntoView({ block: 'nearest' })`. **Re-mesuré après** : Échap n'atteint
+plus la fenêtre (0) et referme vraiment, ⬇︎ depuis le signet entre dans le
+panneau et reboucle, la dernière des huit lignes est visible (`scrollTop` 100,
+haut à 216 d'une liste de 260), et tout ce qui se tape dans ces deux panneaux
+fait 44 px. `tests/a11y.test.ts` compte maintenant le composeur parmi les
+surfaces à menu, aux mêmes conditions que les trois autres.
+
 **Et la palette de commandes est le quatrième — celui qui naviguait en
 aveugle.** ⌘K ouvre un dialogue dont le focus reste dans le champ pendant que
 ⬆︎ ⬇︎ déplacent un curseur *visuel* dans la liste en dessous. Trois défauts en

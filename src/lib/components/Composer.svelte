@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
 	import { untrack } from 'svelte';
+	import { menuKeydown } from '$lib/client/menu.svelte';
 	import { chat } from '$lib/stores/chat.svelte';
 	import { drafts } from '$lib/stores/drafts.svelte';
 	import { prompts } from '$lib/stores/prompts.svelte';
@@ -45,19 +46,63 @@
 	// Skills palette: typing "/" at the start of the composer opens it.
 	let paletteOpen = $state(false);
 	let paletteIndex = $state(0);
+	let skillList = $state<HTMLDivElement | null>(null);
 	let paletteQuery = $derived(text.startsWith('/') ? text.slice(1).split(/\s/)[0].toLowerCase() : '');
 	let paletteMatches = $derived(
 		paletteOpen
 			? chat.skills.filter((s) => s.name.toLowerCase().includes(paletteQuery)).slice(0, 8)
 			: []
 	);
+	/** Prefix of the row ids `aria-activedescendant` points at. */
+	const SKILL_OPTION_ID = 'composer-skill-';
+
+	/**
+	 * Keep the highlighted skill on screen.
+	 *
+	 * The list caps at eight matches and the popup at 260px: **measured at
+	 * 414×896**, eight rows are 350px of content in a 260px box, and walking
+	 * the cursor to the last one left it 301px down a list 260px tall with
+	 * `scrollTop` still at 0. Enter then ran a skill that had never been
+	 * visible — the same blind cursor the command palette had.
+	 */
+	$effect(() => {
+		void paletteMatches.length;
+		const i = paletteIndex;
+		if (!paletteOpen || !skillList) return;
+		skillList.querySelector<HTMLElement>(`#${SKILL_OPTION_ID}${i}`)?.scrollIntoView({
+			block: 'nearest'
+		});
+	});
 
 	// Saved prompts: the library lives server-side, so it is the same on the
 	// phone and on the desktop.
 	let promptsOpen = $state(false);
 	let promptFilter = $state('');
+	let promptTrigger = $state<HTMLButtonElement | null>(null);
+	let promptPanel = $state<HTMLDivElement | null>(null);
 	let promptMatches = $derived(matchPrompts(prompts.items, promptFilter));
 	const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+	/** Escape hands the focus back to the button the library came from. */
+	function closePrompts(refocus = false) {
+		promptsOpen = false;
+		if (refocus) promptTrigger?.focus();
+	}
+
+	/**
+	 * The library is a popup menu like the three in the header and the sidebar,
+	 * so it owes the keyboard the same contract.
+	 *
+	 * It was pointer-only everywhere but the composer field: **measured**, an
+	 * Escape pressed on a control *inside* the popup left it open and reached
+	 * the window handler of `+page.svelte`, where a bare Escape means "close
+	 * the drawer" or, while a turn streams, "detach the answer". Dismissing a
+	 * list of prompts must never do that.
+	 */
+	function onPromptKeydown(event: KeyboardEvent) {
+		if (!promptsOpen) return;
+		if (menuKeydown(promptPanel, event) === 'close') closePrompts(true);
+	}
 
 	/**
 	 * Park the text on the conversation being left, pick up the one being
@@ -191,7 +236,8 @@
 		if (promptsOpen && event.key === 'Escape') {
 			event.preventDefault();
 			event.stopPropagation();
-			promptsOpen = false;
+			// No refocus: the caret was here, and this is where it stays.
+			closePrompts();
 			return;
 		}
 		if (paletteOpen && paletteMatches.length) {
@@ -211,6 +257,11 @@
 				return;
 			}
 			if (event.key === 'Escape') {
+				// Stopped here, like every other popup: unstopped it reached the
+				// window handler as well, which reads a bare Escape as "close the
+				// drawer" or, mid-turn, "detach the answer being written".
+				event.preventDefault();
+				event.stopPropagation();
 				paletteOpen = false;
 				return;
 			}
@@ -304,11 +355,12 @@
 
 	{#if promptsOpen}
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-		<div class="pscrim" onclick={() => (promptsOpen = false)}></div>
-		<div class="palette prompts">
+		<div class="pscrim" onclick={() => closePrompts()}></div>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="palette prompts" bind:this={promptPanel} onkeydown={onPromptKeydown}>
 			<div class="p-head">
 				<span>Prompts enregistrés</span>
-				<button class="p-x" onclick={() => (promptsOpen = false)} aria-label="Fermer"><Icon name="close" size={14} /></button>
+				<button class="p-x" onclick={() => closePrompts(true)} aria-label="Fermer"><Icon name="close" size={14} /></button>
 			</div>
 
 			{#if text.trim()}
@@ -371,9 +423,24 @@
 	{/if}
 
 	{#if paletteOpen && !promptsOpen && paletteMatches.length}
-		<div class="palette">
+		<!-- A listbox driven from the field below: the rows are options a script
+		     walks with the arrows, never Tab stops in front of the way out. -->
+		<div
+			class="palette"
+			id="composer-skills"
+			role="listbox"
+			aria-label="Skills"
+			bind:this={skillList}
+		>
 			{#each paletteMatches as skill, i (skill.name)}
-				<button class:sel={i === paletteIndex} onclick={() => choose(skill.name)}>
+				<button
+					role="option"
+					aria-selected={i === paletteIndex}
+					tabindex="-1"
+					id="{SKILL_OPTION_ID}{i}"
+					class:sel={i === paletteIndex}
+					onclick={() => choose(skill.name)}
+				>
 					<span class="sk-name">/{skill.name}</span>
 					<span class="sk-desc">{skill.description ?? ''}</span>
 				</button>
@@ -417,9 +484,17 @@
 		<button
 			class="attach prompt-btn"
 			class:on={promptsOpen}
-			onclick={togglePrompts}
+			bind:this={promptTrigger}
+			onclick={(event) => {
+				// Safari does not focus a clicked button; without this the next
+				// Escape would be typed at <body> and reach the page handler.
+				event.currentTarget.focus();
+				togglePrompts();
+			}}
+			onkeydown={onPromptKeydown}
 			title="Prompts enregistrés"
 			aria-label="Prompts enregistrés"
+			aria-haspopup="true"
 			aria-expanded={promptsOpen}><Icon name="bookmark" size={17} /></button
 		>
 
@@ -431,6 +506,10 @@
 			onpaste={onPaste}
 			rows="1"
 			aria-label="Message à Yadai"
+			aria-controls={paletteOpen && paletteMatches.length ? 'composer-skills' : undefined}
+			aria-activedescendant={paletteOpen && paletteMatches[paletteIndex]
+				? `${SKILL_OPTION_ID}${paletteIndex}`
+				: undefined}
 			placeholder={chat.streaming
 				? 'Yadai travaille…'
 				: narrow
@@ -755,6 +834,27 @@
 		textarea {
 			font-size: 14px;
 			padding: 11px 4px;
+		}
+		/* A popup row is a tap target like every other one in this app.
+		   Measured at 414×896 before: the library's close button was 22×14, and
+		   its "supprimer" 28×24 pressed against a 332px-wide row that *uses*
+		   the prompt — a mis-tap threw a saved prompt away instead of inserting
+		   it. Skill rows measured 42px.
+
+		   `flex: none` because `.palette` is a flex column, where a
+		   `min-height` on a child becomes an imposed height instead of a
+		   floor (same trap as the model picker, CLAUDE.md §33). */
+		.palette button {
+			flex: none;
+			min-height: 44px;
+		}
+		.palette .p-x,
+		.palette .p-del {
+			min-width: 44px;
+			justify-content: center;
+		}
+		.p-filter {
+			min-height: 44px;
 		}
 	}
 	.sk-name {

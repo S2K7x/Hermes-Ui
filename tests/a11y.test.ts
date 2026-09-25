@@ -366,7 +366,12 @@ test('the shared popup helper swallows Escape', () => {
 
 test('every popup routes its keys through that helper and gives the focus back', () => {
 	const dir = new URL('../src/lib/components/', import.meta.url);
-	for (const name of ['ModelPicker.svelte', 'AgentPicker.svelte', 'Sidebar.svelte']) {
+	for (const name of [
+		'ModelPicker.svelte',
+		'AgentPicker.svelte',
+		'Sidebar.svelte',
+		'Composer.svelte'
+	]) {
 		const source = readFileSync(new URL(name, dir), 'utf8');
 		assert.match(source, /import \{ menuKeydown \} from '\$lib\/client\/menu\.svelte'/, name);
 		assert.match(source, /menuKeydown\([\s\S]{0,40}\) === 'close'/, name);
@@ -384,12 +389,71 @@ test('every popup routes its keys through that helper and gives the focus back',
  */
 test('popup rows are thumb-sized on a phone', () => {
 	const dir = new URL('../src/lib/components/', import.meta.url);
-	for (const name of ['ModelPicker.svelte', 'AgentPicker.svelte', 'Sidebar.svelte']) {
+	for (const name of [
+		'ModelPicker.svelte',
+		'AgentPicker.svelte',
+		'Sidebar.svelte',
+		'Composer.svelte'
+	]) {
 		const source = readFileSync(new URL(name, dir), 'utf8');
 		const narrow = source.slice(source.indexOf('@media (max-width: 820px)'));
 		assert.ok(narrow.length > 0, `${name} has no phone block`);
-		assert.match(narrow, /\.(items button|menu button)[\s\S]{0,120}min-height: 44px/, name);
+		assert.match(narrow, /\.(items|menu|palette) button[\s\S]{0,120}min-height: 44px/, name);
 	}
+});
+
+/**
+ * The composer holds the two popups the sweep above missed.
+ *
+ * `+page.svelte` reads a bare Escape as "close the drawer" or, while a turn is
+ * streaming, "detach the answer". **Measured at 414x896** against the built
+ * app, before this: an Escape pressed inside the saved-prompts library left it
+ * open *and* reached the window handler, and the "/" palette closed but let the
+ * key through all the same. The tap targets were the smallest in the app — the
+ * library's close button 22x14, its "supprimer" 28x24 pressed against a 332px
+ * row that inserts the prompt, so a mis-tap threw a saved prompt away.
+ *
+ * And the "/" palette navigated blind, exactly as the command palette once
+ * did: eight matches are 350px of rows in a 260px box, and walking the cursor
+ * to the last one left it 301px down a list 260px tall with `scrollTop` still
+ * at 0. Enter then ran a skill that had never been on screen.
+ */
+const COMPOSER = readFileSync(
+	new URL('../src/lib/components/Composer.svelte', import.meta.url),
+	'utf8'
+);
+
+test('the skills palette stops Escape instead of detaching the turn', () => {
+	// Two popups live in this file, so the assertion has to name the branch:
+	// the one guarded by `paletteOpen`, not the prompt library above it.
+	const branch = COMPOSER.slice(COMPOSER.indexOf('if (paletteOpen && paletteMatches.length)'));
+	const escape = branch.slice(branch.indexOf("event.key === 'Escape'"));
+	assert.match(escape.slice(0, 400), /event\.stopPropagation\(\)/);
+	assert.match(escape.slice(0, 400), /paletteOpen = false/);
+});
+
+test('the skills palette announces its rows, and which one the cursor is on', () => {
+	assert.match(COMPOSER, /role="listbox"/);
+	assert.match(COMPOSER, /aria-label="Skills"/);
+	// Options, not Tab stops: the arrows already reach them from the field.
+	assert.match(COMPOSER, /role="option"\s+aria-selected=\{i === paletteIndex\}\s+tabindex="-1"/);
+	// The pointer and the ids it names have to line up on both ends.
+	assert.match(COMPOSER, /id="\{SKILL_OPTION_ID\}\{i\}"/);
+	assert.match(COMPOSER, /aria-activedescendant=\{paletteOpen && paletteMatches\[paletteIndex\]/);
+	assert.match(COMPOSER, /aria-controls=\{paletteOpen && paletteMatches\.length \? 'composer-skills'/);
+	assert.match(COMPOSER, /id="composer-skills"/);
+});
+
+test('the highlighted skill is scrolled back into view', () => {
+	assert.match(COMPOSER, /scrollIntoView\(\{\s*block: 'nearest'/);
+});
+
+test('the prompt library gives the focus back to its own trigger', () => {
+	// Not to whatever had it: the caret may be mid-sentence in the field, which
+	// is why the field's own Escape closes without refocusing.
+	assert.match(COMPOSER, /function closePrompts\(refocus = false\)/);
+	assert.match(COMPOSER, /if \(refocus\) promptTrigger\?\.focus\(\)/);
+	assert.match(COMPOSER, /closePrompts\(true\)/);
 });
 
 /**
