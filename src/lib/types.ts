@@ -39,6 +39,15 @@ export interface HermesSession {
 	 */
 	agent_id?: string;
 	/**
+	 * The reasoning effort this conversation's turns ask for.
+	 *
+	 * Not a Hermes field either, for the opposite reason to `agent_id`: upstream
+	 * keeps `model_options` request-scoped and never stores them, so the choice
+	 * lives in our `session_meta` and the stream route re-sends it with every
+	 * message (see `src/lib/reasoning.ts`). Absent means `auto`.
+	 */
+	reasoning?: string;
+	/**
 	 * When this conversation was thrown away, on the bin listing only.
 	 *
 	 * Also not a Hermes field. Upstream the session is untouched — the delete
@@ -144,6 +153,14 @@ export interface ModelOptions {
 		pricing?: Record<string, ModelPrice>;
 		/** Models the current account tier cannot select (Nous free tier). */
 		unavailable_models?: string[];
+		/**
+		 * Keyed by model id: what `_apply_capabilities` knows about each one.
+		 *
+		 * `reasoning` comes from the models.dev catalogue and defaults to true
+		 * upstream when a model is not listed there; `fast` mirrors
+		 * `model_supports_fast_mode`. Always present, possibly empty.
+		 */
+		capabilities?: Record<string, { fast?: boolean; reasoning?: boolean }>;
 	}>;
 }
 

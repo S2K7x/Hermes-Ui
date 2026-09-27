@@ -4,6 +4,7 @@ import { sseErrorResponse, sseHeaders } from '$lib/server/sse';
 import { beginTurn } from '$lib/server/turns';
 import { releaseTurn, tryAcquireTurn, turnLimit } from '$lib/server/limits';
 import { systemPromptForSession } from '$lib/server/agents';
+import { reasoningForTurn } from '$lib/server/reasoning';
 import { AppErrorCode } from '$lib/errors';
 
 /**
@@ -27,6 +28,10 @@ import { AppErrorCode } from '$lib/errors';
  * does not get a say: a persona the client could override would drift the
  * moment two tabs disagreed, and switching a session's model even clears the
  * stored column upstream.
+ *
+ * The conversation's reasoning effort rides along for exactly the same reason:
+ * upstream reads `model_options` off this body and keeps it request-scoped, so
+ * it is composed here on every message too (see `src/lib/reasoning.ts`).
  */
 export const POST: RequestHandler = async ({ params, request }) => {
 	let body: { message?: unknown };
@@ -64,7 +69,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	try {
 		const upstream = await sessionChatStream(
 			params.id,
-			{ message: body.message, system_message: systemPromptForSession(params.id) },
+			{
+				message: body.message,
+				system_message: systemPromptForSession(params.id),
+				model_options: reasoningForTurn(params.id)
+			},
 			abort.signal
 		);
 		if (!upstream.ok || !upstream.body) {

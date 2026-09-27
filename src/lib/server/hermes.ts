@@ -13,6 +13,7 @@ import type {
 import { AppErrorCode } from '$lib/errors';
 import { decodeJson } from '$lib/json';
 import { UpstreamError, retrying } from './upstream';
+import type { ReasoningModelOptions } from '$lib/reasoning';
 
 /** A gateway failure. Everything a response needs is on `UpstreamError`. */
 export class HermesError extends UpstreamError {
@@ -257,10 +258,18 @@ export const setSessionModel = (id: string, body: { model: string; provider?: st
 		{ method: 'POST', body }
 	);
 
-/** SSE turn. Returns the raw upstream Response for the relay to pipe. */
+/**
+ * SSE turn. Returns the raw upstream Response for the relay to pipe.
+ *
+ * `model_options` is how a turn asks for a reasoning effort: upstream reads
+ * `model_options.reasoning.{enabled,effort}` out of this body on every request
+ * and never stores it, so it has to be re-sent each time (see
+ * `src/lib/reasoning.ts`). It carries no model — sending one here would be a
+ * per-turn model override, which is not what this field is for.
+ */
 export const sessionChatStream = (
 	id: string,
-	body: { message: unknown; system_message?: string },
+	body: { message: unknown; system_message?: string; model_options?: ReasoningModelOptions },
 	signal?: AbortSignal
 ) =>
 	hermesFetch(`/api/sessions/${encodeURIComponent(id)}/chat/stream`, {

@@ -1273,9 +1273,10 @@ tri. Mais la ligne porte alors l'`id` de la **continuation**, et l'ancien dans
 `_lineage_root_id` (exposé par `_session_response`).
 
 Or tout ce que cette app range par `session_id` vit dans `session_meta` :
-l'agent de la conversation (point 18) et le cache de titre. Sans rien faire,
-une conversation perdait donc **sa persona au moment précis où Hermes la
-compressait**, et repassait en silence au prompt par défaut du gateway.
+l'agent de la conversation (point 18), son effort de réflexion (point 34) et le
+cache de titre. Sans rien faire, une conversation perdait donc **sa persona au
+moment précis où Hermes la compressait**, et repassait en silence au prompt par
+défaut du gateway.
 
 - `lineageRotations()` / `rotatedSessionId()` (`src/lib/sessions.ts`, purs et
   testés) lisent ces rotations dans une liste.
@@ -1982,6 +1983,98 @@ deux niveaux (l'identifiant, puis prix + fournisseur) et porte `flex: none`.
 devenait une hauteur *imposée* — mesuré en 414 × 896, la première ligne de
 chaque entrée était rognée.
 
+### 34. L'effort de réflexion : Hermes l'accepte à chaque tour, l'UI ne l'envoyait jamais
+
+Le corps d'un tour de `POST /api/sessions/{id}/chat/stream` peut porter un objet
+`model_options`, et `_request_reasoning_config()` y lit
+`reasoning.{enabled, effort}` pour le poser sur `AIAgent(reasoning_config=…)` —
+**vérifié** dans `api_server.py` (0.20.0), ligne 2886 : une valeur explicite de
+la requête l'emporte sur `agent.reasoning_effort` de `config.yaml`. C'est le
+même levier que le `/reasoning` du CLI. Rien de nouveau n'est demandé à Hermes ;
+simplement, ce champ partait vide depuis toujours.
+
+Deux propriétés de ce code amont commandent tout le reste :
+
+- **Les niveaux acceptés sont un ensemble fermé** (`_REASONING_EFFORTS` :
+  `none | minimal | low | medium | high | xhigh`), et ce qui n'y est pas est
+  **ignoré** au lieu d'être refusé — le tour tourne alors sur le réglage du
+  gateway. Un niveau inconnu ne peut donc pas faire échouer un tour, mais il
+  peut ne rien faire en silence : d'où `auto` comme **choix explicite** de cette
+  app plutôt qu'une chaîne hors borne, et un 400 sur
+  `POST /api/sessions/{id}/reasoning` quand la valeur n'est pas reconnue.
+- **`model_options` reste à portée de requête**, dans les mots d'amont
+  (« model_options stay request-scoped regardless of which selection wins »).
+  Rien n'est retenu sur la ligne de session, donc la valeur doit repartir **à
+  chaque message** — exactement comme le `system_message` d'un agent (point 18),
+  et pour la même raison elle est composée **côté serveur** : le navigateur n'a
+  pas voix au chapitre, sinon deux onglets pourraient se contredire sur la façon
+  dont une conversation réfléchit.
+
+**Ce qui rend le levier sûr**, et qu'il faut vérifier avant d'en ajouter un
+autre : chaque plugin de fournisseur traduit `reasoning_config` pour son propre
+protocole dans `build_api_kwargs_extras` — OpenRouter en `extra_body.reasoning`,
+Copilot en rabattant le niveau sur ce que son catalogue vivant annonce,
+Anthropic en `thinking` (sauté sur Haiku), et les Claude à réflexion obligatoire
+reçoivent `verbosity` et **aucun** champ `reasoning`, précisément parce qu'un
+`{enabled: false}` les faisait répondre 400. Un fournisseur sans surcharge
+l'ignore. Le pire cas est donc un niveau sans effet, jamais une requête refusée.
+
+Le stockage est à nous : colonne `reasoning` de `session_meta`
+(`data/hermes-web.db`), `auto` étant stocké en NULL — l'absence d'opinion est ce
+qu'a une conversation qu'on n'a pas touchée. Trois conséquences dans le code :
+
+- `GET /api/sessions` et `GET /api/sessions/{id}` ajoutent `reasoning` à la
+  ligne, comme ils ajoutent `agent_id` (point 18) : ce n'est **pas** un champ
+  Hermes, et pour la raison inverse — le gateway ignore ce qu'est une persona,
+  et il oublie volontairement les `model_options` d'un tour.
+- `inheritSessionMeta()` le transporte lors d'une rotation de compression
+  (point 23). Sans ça une conversation longue perdrait son effort au moment
+  précis où Hermes la compresse. **Mesuré** contre un faux gateway qui annonce
+  la rotation : `sess-2` hérite bien de `xhigh` et la ligne de continuation
+  arrive décorée.
+- `src/lib/reasoning.ts` (pur, testé) tient l'ensemble fermé, la normalisation
+  et la charge utile. `none` part en `{enabled: false}` et non en
+  `{effort: 'none'}` : amont traite les deux à l'identique et le booléen est la
+  forme que lisent tous les plugins.
+
+Le sélecteur de modèle a gagné une rangée de pastilles « Réflexion » plutôt
+qu'un quatrième menu surgissant : le contrat clavier du point 22 est déjà celui
+de ce menu (`menuStops` ramasse les nouveaux arrêts tout seuls, Échap y est déjà
+arrêté), et un dialogue de plus aurait voulu dire un piège de tabulation de
+plus. Le déclencheur affiche une pastille accentuée quand la conversation
+**s'écarte** du réglage de Hermes — jamais pour `auto`, qui est le point de
+départ de tout le monde — et son `aria-label` la nomme.
+
+`modelDoesReasoning()` s'appuie sur la carte `capabilities`
+(`{modèle: {fast, reasoning}}`) que `/api/model/options` publie déjà, construite
+par `_apply_capabilities` (`hermes_cli/inventory.py`) depuis le catalogue
+models.dev. Amont met ce drapeau à `true` pour un modèle qu'il ne connaît pas —
+cacher le levier à un modèle capable mais non catalogué est le pire échec — et
+on fait pareil. **Relevé sur cette machine** : les 81 modèles servables
+l'annoncent tous à `true`, donc ça ne cache rien aujourd'hui ; c'est là pour que
+l'app cesse de **promettre** un levier le jour où un modèle catalogué sans
+réflexion apparaît.
+
+**Mesuré de bout en bout** sur l'application construite, contre un faux gateway
+qui journalise le corps de chaque tour : sans réglage → aucun `model_options` sur
+le fil ; `high` → `{reasoning:{enabled:true,effort:"high"}}` ;
+`none` → `{reasoning:{enabled:false}}` ; retour à `auto` → le champ disparaît
+à nouveau ; `"ultra"` → `400 invalid_body`. **Non vérifié** : le rendu des
+pastilles dans un vrai navigateur (aucun n'était installé dans le clone où ce
+changement a été écrit) et l'effet réel sur un tour, qui dépend du fournisseur.
+
+**Ce qui n'est délibérément pas fait** : le second levier que
+`_runtime_options_from_model_options` accepte, `service_tier` / `fast`
+(→ `service_tier: "priority"`). C'est un palier de facturation et non un réglage
+de qualité, et `capabilities[modèle].fast` est la seule chose qui dit s'il
+s'applique — à traiter séparément, ou pas du tout.
+
+Route : `POST /api/sessions/{id}/reasoning` (`auto` ou `null` pour revenir au
+réglage de Hermes — effectif au message suivant, comme le verrou de modèle du
+point 3 et le lien d'agent du point 18). `POST /api/sessions` accepte aussi
+`reasoning`, pour que le choix mémorisé s'applique dès la première ligne d'une
+nouvelle discussion.
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -2072,13 +2165,16 @@ src/
 │   │   ├── agents.ts    magasin d'agents, lien conversation → agent, héritage
 │   │   │                  de `session_meta` après une compression
 │   │   ├── jobs.ts      lien tâche planifiée → agent, prompt composé
+│   │   ├── reasoning.ts effort de réflexion d'une conversation, et les
+│   │   │                  `model_options` que son prochain tour portera
 │   │   ├── search.ts    recherche de passages à travers les conversations
 │   │   ├── trash.ts     balayage à échéance + contenu de la corbeille
 │   │   ├── turns.ts     registre des tours en vol, présence, notification
 │   │   ├── push.ts      envoi Web Push (abonnements, 410 → oubli)
 │   │   ├── push-crypto.ts RFC 8291 + RFC 8292, sans dépendance
 │   │   ├── db.ts        better-sqlite3 (prefs, prompts, thème, titres, push)
-│   │   │                  — la table `agents` vit dans server/agents.ts
+│   │   │                  — la table `agents` vit dans server/agents.ts, et
+│   │   │                  c'est ici que les colonnes de `session_meta` naissent
 │   │   ├── limits.ts    sémaphore de tours + token bucket
 │   │   ├── skills.ts    lecture/écriture des SKILL.md sur le disque
 │   │   └── respond.ts   UpstreamError → réponse JSON typée, `gate`, `readJson`
@@ -2127,6 +2223,8 @@ src/
 │   │                  lignes du sélecteur, prix par million de jetons
 │   ├── prompts.ts     prompts enregistrés : titres, bornes, recherche
 │   ├── push.ts        charge utile d'une notification, libellés, capacités
+│   ├── reasoning.ts   effort de réflexion : niveaux acceptés par Hermes,
+│   │                  libellés, charge utile `model_options` d'un tour
 │   ├── search.ts      recherche accent-insensible dans un fil, extraits
 │   ├── providers.ts   groupement des clés par provider, statut des comptes,
 │   │                  machine à états du flux OAuth

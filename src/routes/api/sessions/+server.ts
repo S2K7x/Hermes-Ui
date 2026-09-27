@@ -17,22 +17,33 @@ import {
 	listAgents,
 	sessionAgentMap
 } from '$lib/server/agents';
+import { sessionReasoningMap, setSessionReasoning } from '$lib/server/reasoning';
+import { normalizeReasoning } from '$lib/reasoning';
 import { archivedCandidates, lineageRotations } from '$lib/sessions';
 import { composeSystemPrompt } from '$lib/agents';
 import type { HermesSession } from '$lib/types';
 
 /**
- * Tag each row with the agent that owns the conversation.
+ * Tag each row with the state this app keeps about the conversation.
  *
- * `agent_id` is ours, not Hermes' — the gateway has no idea what a persona is
- * — so it is added on the way out rather than stored upstream. The sidebar and
- * the thread header read it to show whose conversation this is.
+ * Neither `agent_id` nor `reasoning` is a Hermes field — the gateway has no
+ * idea what a persona is, and it deliberately forgets a turn's `model_options`
+ * — so both are added on the way out rather than stored upstream. The sidebar
+ * and the thread header read them to show whose conversation this is and how
+ * hard it is asked to think.
  */
-function withAgents<T extends HermesSession>(rows: T[]): T[] {
+function withLocalMeta<T extends HermesSession>(rows: T[]): T[] {
 	const bindings = sessionAgentMap();
+	const efforts = sessionReasoningMap();
 	return rows.map((row) => {
 		const agentId = bindings.get(row.id);
-		return agentId ? { ...row, agent_id: agentId } : row;
+		const effort = efforts.get(row.id);
+		if (!agentId && !effort) return row;
+		return {
+			...row,
+			...(agentId ? { agent_id: agentId } : {}),
+			...(effort ? { reasoning: effort } : {})
+		};
 	});
 }
 
@@ -98,7 +109,7 @@ async function listArchivedSessions() {
 
 	return {
 		object: 'list',
-		data: withAgents(found),
+		data: withLocalMeta(found),
 		// The client says so rather than pretending this is the whole archive.
 		truncated: candidates.length >= ARCHIVE_PROBE_LIMIT
 	};
@@ -145,7 +156,7 @@ export const GET: RequestHandler = ({ url }) => {
 		// never allowed to fail the listing — see `sweepTrash`.
 		void sweepTrash();
 
-		return { ...res, data: withAgents(data) };
+		return { ...res, data: withLocalMeta(data) };
 	});
 };
 
@@ -153,7 +164,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	const limited = gate('sessions:write', 2, 8);
 	if (limited) return limited;
 
-	const parsed = await readJson<{ title?: string; model?: string; agent_id?: string }>(request);
+	const parsed = await readJson<{
+		title?: string;
+		model?: string;
+		agent_id?: string;
+		reasoning?: string;
+	}>(request);
 	if ('response' in parsed) return parsed.response;
 
 	return proxy(async () => {
@@ -188,9 +204,20 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (created.session?.id) {
 			rememberSessions([created.session.id]);
 			if (created.session.title) cacheTitle(created.session.id, created.session.title);
-			if (agent) {
-				bindSessionAgent(created.session.id, agent.id);
-				return { ...created, session: { ...created.session, agent_id: agent.id } };
+			// Anything the client did not spell out correctly reads as `auto`,
+			// i.e. no `model_options` at all — the behaviour before this dial.
+			const effort = normalizeReasoning(parsed.body.reasoning);
+			if (effort !== 'auto') setSessionReasoning(created.session.id, effort);
+			if (agent || effort !== 'auto') {
+				if (agent) bindSessionAgent(created.session.id, agent.id);
+				return {
+					...created,
+					session: {
+						...created.session,
+						...(agent ? { agent_id: agent.id } : {}),
+						...(effort !== 'auto' ? { reasoning: effort } : {})
+					}
+				};
 			}
 		}
 		return created;

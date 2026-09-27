@@ -55,6 +55,13 @@ const metaColumns = db.prepare('PRAGMA table_info(session_meta)').all() as Array
 if (!metaColumns.some((c) => c.name === 'deleted_at')) {
 	db.exec('ALTER TABLE session_meta ADD COLUMN deleted_at REAL');
 }
+// The reasoning effort a conversation's turns ask for (see
+// `src/lib/server/reasoning.ts`). Added here, next to `deleted_at` and before
+// any statement is prepared, so that `server/agents.ts` — which carries this
+// column across a compression rotation and is loaded later — can name it.
+if (!metaColumns.some((c) => c.name === 'reasoning')) {
+	db.exec('ALTER TABLE session_meta ADD COLUMN reasoning TEXT');
+}
 
 const selPref = db.prepare<[string], { value: string }>('SELECT value FROM prefs WHERE key = ?');
 const upsertPref = db.prepare(

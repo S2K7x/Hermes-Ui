@@ -4,6 +4,13 @@ import { ApiError, AppErrorCode } from '$lib/errors';
 import { isModelAvailable, providerForModel, shortModelName } from '$lib/models';
 import { isTerminalTurnEvent, readTurnStream } from '$lib/sse';
 import { renameSession, rotatedSessionId } from '$lib/sessions';
+import {
+	DEFAULT_REASONING,
+	modelDoesReasoning,
+	normalizeReasoning,
+	reasoningLabel,
+	type ReasoningEffort
+} from '$lib/reasoning';
 import { emptyAssistant, groupTranscript, uid, type UiMessage } from '$lib/transcript';
 import { drafts } from './drafts.svelte';
 import { toasts } from './toast.svelte';
@@ -63,6 +70,8 @@ class ChatStore {
 	nextModel = $state('');
 	/** Agent a NEW conversation starts with. '' means Hermes' default prompt. */
 	nextAgent = $state('');
+	/** Reasoning effort a NEW conversation starts on. `auto` = Hermes decides. */
+	nextReasoning = $state<ReasoningEffort>(DEFAULT_REASONING);
 	skills = $state<Array<{ name: string; description?: string }>>([]);
 	toolCount = $state(0);
 	mcpTools = $state<string[]>([]);
@@ -112,6 +121,22 @@ class ChatStore {
 		return this.nextAgent;
 	}
 
+	/** Reasoning effort the next message asks for: the open one's, else nextReasoning. */
+	get activeReasoning(): ReasoningEffort {
+		if (this.sessionId) return normalizeReasoning(this.current?.reasoning);
+		return this.nextReasoning;
+	}
+
+	/**
+	 * Does the catalogue say the active model thinks?
+	 *
+	 * True while the catalogue is still loading, and for any model it does not
+	 * describe — same default as upstream's own `_apply_capabilities`.
+	 */
+	get canPickReasoning(): boolean {
+		return modelDoesReasoning(this.models, this.activeModel);
+	}
+
 	// -- bootstrap ----------------------------------------------------------
 
 	/**
@@ -137,6 +162,7 @@ class ChatStore {
 	async init() {
 		this.nextModel = readJSON('yadai-next-model', '');
 		this.nextAgent = readJSON('yadai-next-agent', '');
+		this.nextReasoning = normalizeReasoning(readJSON('yadai-next-reasoning', ''));
 		// Nothing awaits this until `catalogReady()` might, so it is kept
 		// non-rejecting: a floating rejection would reach the global
 		// `unhandledrejection` net in +layout.svelte.
@@ -391,6 +417,43 @@ class ChatStore {
 		}
 	}
 
+	/**
+	 * Pick how hard the next messages think.
+	 *
+	 * Same shape again as `setModel()` / `setAgent()`. Nothing reaches Hermes
+	 * here: the effort is stored server-side and re-sent as `model_options` with
+	 * every turn (see `src/lib/reasoning.ts`), so it applies from the next
+	 * message and the transcript keeps whatever produced it.
+	 */
+	async setReasoning(effort: ReasoningEffort) {
+		if (effort === this.activeReasoning) return;
+		const previousNext = this.nextReasoning;
+		this.nextReasoning = effort;
+		writeJSON('yadai-next-reasoning', effort);
+
+		const id = this.sessionId;
+		if (!id) return;
+
+		const previous = normalizeReasoning(this.current?.reasoning);
+		this.#patchLocal(id, { reasoning: effort });
+		try {
+			await api(`/api/sessions/${encodeURIComponent(id)}/reasoning`, {
+				method: 'POST',
+				body: JSON.stringify({ reasoning: effort })
+			});
+			toasts.success(
+				effort === DEFAULT_REASONING
+					? 'Effort de réflexion : réglage de Hermes, à partir du prochain message.'
+					: `Effort de réflexion : ${reasoningLabel(effort)}, à partir du prochain message.`
+			);
+		} catch (err) {
+			this.#patchLocal(id, { reasoning: previous });
+			this.nextReasoning = previousNext;
+			writeJSON('yadai-next-reasoning', previousNext);
+			toasts.error(err);
+		}
+	}
+
 	// -- session lifecycle --------------------------------------------------
 
 	async newSession(title?: string): Promise<string | null> {
@@ -400,7 +463,8 @@ class ChatStore {
 				body: JSON.stringify({
 					title,
 					model: this.nextModel || undefined,
-					agent_id: this.nextAgent || undefined
+					agent_id: this.nextAgent || undefined,
+					reasoning: this.nextReasoning
 				})
 			});
 			this.sessions = [res.session, ...this.sessions];

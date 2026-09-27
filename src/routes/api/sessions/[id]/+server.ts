@@ -3,14 +3,25 @@ import { deleteSession, getSession, patchSession } from '$lib/server/hermes';
 import { proxy } from '$lib/server/respond';
 import { cacheTitle, forgetSession, trashSession } from '$lib/server/db';
 import { sessionAgentId } from '$lib/server/agents';
+import { sessionReasoning } from '$lib/server/reasoning';
 import { TRASH_DAYS } from '$lib/trash';
 
 export const GET: RequestHandler = ({ params }) =>
 	proxy(async () => {
 		const res = await getSession(params.id);
-		// `agent_id` is this app's own field — Hermes knows nothing of personas.
+		// Both fields are this app's own: Hermes knows nothing of personas, and
+		// it forgets a turn's `model_options` on purpose.
 		const agentId = sessionAgentId(params.id);
-		return agentId ? { ...res, session: { ...res.session, agent_id: agentId } } : res;
+		const effort = sessionReasoning(params.id);
+		if (!agentId && effort === 'auto') return res;
+		return {
+			...res,
+			session: {
+				...res.session,
+				...(agentId ? { agent_id: agentId } : {}),
+				...(effort !== 'auto' ? { reasoning: effort } : {})
+			}
+		};
 	});
 
 export const PATCH: RequestHandler = async ({ params, request }) =>

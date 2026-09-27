@@ -97,6 +97,13 @@ de l'application.
   gratuits. Le filtre porte aussi sur le nom du fournisseur, et la liste dit
   combien d'entrées son plafond a laissées de côté au lieu de les faire
   disparaître
+- **Effort de réflexion**, dans ce même menu : `Auto` laisse Hermes Agent
+  décider selon sa propre configuration, et les six autres niveaux — de `Aucun`
+  à `Max` — s'appliquent à la conversation ouverte dès le message suivant. C'est
+  le levier que l'API de Hermes accepte sur chaque tour (`model_options`) et le
+  même que le `/reasoning` du CLI ; le dernier choix devient le défaut des
+  nouvelles discussions. `Aucun` est le plus rapide, `Max` le plus lent et le
+  plus cher
 - **Export markdown** de la conversation
 - **Démarrage rapide** : l'app n'attend plus l'inventaire des modèles pour
   afficher la conversation. Cet appel-là reconstruit le catalogue des
