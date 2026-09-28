@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
 	DRAFT_TTL_MS,
 	MAX_DRAFTS,
@@ -13,6 +14,7 @@ import {
 	hasDraft,
 	normalizeDrafts,
 	renameDraft,
+	restoreDraft,
 	setDraft,
 	type DraftMap
 } from '../src/lib/drafts.ts';
@@ -151,4 +153,74 @@ test('draftPreview flattens whitespace and ellipsises', () => {
 	assert.equal(draftPreview(''), '');
 	assert.equal(draftPreview('abcdef', 4), 'abc…');
 	assert.equal(draftPreview('abcd', 4), 'abcd');
+});
+
+// ---------------------------------------------------------------------------
+// A turn that never started must not eat the message
+// ---------------------------------------------------------------------------
+
+test('restoreDraft hands a refused message back, in the order it was typed', () => {
+	assert.equal(restoreDraft('', 'mon message'), 'mon message');
+	// Whatever was typed while the creation was failing came after.
+	assert.equal(restoreDraft('la suite', 'mon message'), 'mon message\n\nla suite');
+	assert.equal(restoreDraft('   \n  la suite', 'mon message   '), 'mon message\n\nla suite');
+});
+
+test('restoreDraft never drops either side of the merge', () => {
+	// Nothing to restore: leave the composer exactly as it is, spaces included.
+	assert.equal(restoreDraft('  déjà là  ', '   '), '  déjà là  ');
+	assert.equal(restoreDraft('', ''), '');
+	// A blank composer is not a reason to lose the restored text.
+	assert.equal(restoreDraft('   \n\n ', 'mon message'), 'mon message');
+});
+
+/**
+ * The wiring, read from the sources.
+ *
+ * `Composer.submit()` empties itself *before* awaiting `chat.send()`, because
+ * creating the conversation moves `chat.sessionId` and with it the key the
+ * draft is filed under. That is correct and has to stay — but it means a turn
+ * refused before it started left the text nowhere at all: not in the transcript
+ * (`send()` pushes the user bubble only once it holds a session id), not in
+ * localStorage (`drafts.clear`), not in the box.
+ *
+ * **Measured** against the built app with the gateway down — the ordinary state
+ * after `systemctl --user restart hermes-gateway`, or a phone off the tailnet:
+ * `POST /api/sessions` answers `502 {"code":"hermes_unreachable"}`, so
+ * `newSession()` returns null and `send()` bails. These two guards fail if the
+ * return value that makes the message recoverable disappears again.
+ */
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+
+test('send() reports a turn that never started', () => {
+	const source = read('../src/lib/stores/chat.svelte.ts');
+	const start = source.indexOf('async send(');
+	assert.notEqual(start, -1, 'send() not found');
+	const body = source.slice(start, source.indexOf('async #consume(', start));
+	assert.match(
+		source.slice(start, start + 200),
+		/async send\([^)]*\): Promise<boolean>/s,
+		'send() must declare what it returns: the composer branches on it'
+	);
+	// The session-creation failure is the unambiguous one — nothing was sent and
+	// nothing was rendered.
+	assert.match(body, /if \(!id\) return false;/, 'a refused conversation must report false');
+	assert.match(body, /\n\t\treturn true;\n\t\}/, 'a started turn must report true');
+});
+
+test('the composer puts a refused message back', () => {
+	const source = read('../src/lib/components/Composer.svelte');
+	assert.match(
+		source,
+		/if \(!\(await chat\.send\(payload, files\)\)\) restore\(/,
+		'submit() must act on a turn that never started, or the text is deleted'
+	);
+	assert.match(source, /restoreDraft\(/, 'the merge rule lives in $lib/drafts, tested above');
+	// Appending text meant for one conversation onto another is the swap
+	// per-conversation drafts exist to prevent.
+	assert.match(
+		source,
+		/if \(from === boundId\)/,
+		'the restore must only touch the composer the text was typed in'
+	);
 });

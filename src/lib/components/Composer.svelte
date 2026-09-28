@@ -14,6 +14,7 @@
 		inlineTextFile,
 		refusalMessage
 	} from '$lib/attach';
+	import { restoreDraft } from '$lib/drafts';
 	import { uid } from '$lib/transcript';
 	import type { Attachment } from '$lib/types';
 
@@ -328,13 +329,45 @@
 		if (!payload.trim() && files.length === 0) return;
 		// Cleared before the turn starts: `send()` may create the conversation,
 		// which moves `chat.sessionId` and with it the key this text is under.
+		const from = boundId;
 		drafts.clear(boundId);
 		text = '';
 		attachments = [];
 		paletteOpen = false;
 		promptsOpen = false;
 		queueMicrotask(autosize);
-		await chat.send(payload, files);
+		if (!(await chat.send(payload, files))) restore(from, payload, files);
+	}
+
+	/**
+	 * The turn never started, so the message is still the user's.
+	 *
+	 * Clearing above is what lets a brand-new conversation keep its draft key
+	 * straight, but it also means a refused turn left nothing anywhere: not in
+	 * the transcript (`send()` pushes the bubble only once it has an id), not in
+	 * localStorage (`drafts.clear`), not in the box. **Measured** with the
+	 * gateway down, `POST /api/sessions` answers 502 `hermes_unreachable` — one
+	 * restart of the gateway, or a phone stepping off the tailnet, and a long
+	 * message typed on a touch keyboard was gone for good.
+	 *
+	 * Merged rather than assigned, and only into the composer it was typed in:
+	 * appending text meant for one conversation onto another is the very swap
+	 * per-conversation drafts exist to prevent, so a conversation switched in
+	 * the meantime gets its text parked on its own key — where the sidebar's
+	 * draft marker shows it.
+	 */
+	function restore(from: string | null, payload: string, files: Attachment[]) {
+		if (from === boundId) {
+			text = restoreDraft(text, payload);
+			attachments = [...files, ...attachments];
+			drafts.set(boundId, text);
+			queueMicrotask(autosize);
+			textarea?.focus();
+			flash('Message non envoyé : il est resté dans le composeur.');
+		} else {
+			drafts.set(from, restoreDraft(drafts.get(from), payload));
+			flash('Message non envoyé : il est resté sur la conversation où il a été écrit.');
+		}
 	}
 </script>
 

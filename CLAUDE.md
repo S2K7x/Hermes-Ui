@@ -1396,6 +1396,31 @@ D'où un brouillon **par conversation**, gardé côté navigateur
 - La sidebar affiche un ✎ accentué sur toute ligne qui en porte un, avec le
   début du texte en infobulle : sans ça, un message écrit et jamais envoyé est
   invisible depuis n'importe quelle autre conversation.
+- **Un tour refusé rend le message.** Le composeur se vide **avant** d'appeler
+  `send()`, et il le doit : créer la conversation déplace `chat.sessionId`,
+  donc la clé sous laquelle ce texte est rangé. Mais un tour refusé *avant
+  d'avoir commencé* ne laissait alors le texte nulle part — ni dans le fil (la
+  bulle utilisateur n'est posée qu'une fois l'identifiant obtenu), ni dans
+  `localStorage` (`drafts.clear`), ni dans la boîte. **Mesuré** sur
+  l'application construite, gateway arrêté : `POST /api/sessions` répond
+  `502 hermes_unreachable`, `newSession()` rend `null`, et `send()` sortait là
+  sans un mot. C'est l'état ordinaire après un
+  `systemctl --user restart hermes-gateway` (point 10) — celui que le panneau
+  Providers réclame à chaque clé enregistrée — ou celui d'un téléphone qui
+  quitte le tailnet. `send()` rend donc un booléen : `false` veut dire « rien
+  n'est parti, le texte est toujours à toi », et `Composer` le remet en place
+  avec `restoreDraft()` (pur, testé). **Fusionné** et non substitué, dans
+  l'ordre où il a été tapé, et **seulement dans le composeur où il a été
+  écrit** : une conversation ouverte entre-temps voit le texte garé sur sa
+  propre clé, parce que l'ajouter en tête d'une autre conversation est
+  exactement l'échange que ce point entier existe pour empêcher.
+- **Ce qui reste volontairement perdable** : un tour dont le flux casse *après*
+  le POST. Le serveur possède le tour (point 16) et on ne sait pas s'il l'a
+  reçu ; rendre le texte au composeur pendant que la réponse s'écrit ferait
+  envoyer la même question deux fois. Là, la bulle est déjà dans le fil et le
+  toast propose « Recharger ». `tests/drafts.test.ts` garde les deux moitiés du
+  contrat : la fonction de fusion, et le fait que `send()` et `submit()` la
+  branchent encore.
 
 ### 26. Le catalogue de modèles ne doit pas retarder la conversation
 
@@ -2210,7 +2235,8 @@ src/
 │   │                  par la zone live d'un tour
 │   ├── availability.ts  l'état d'un panneau optionnel : pas encore lu, prêt,
 │   │                  désactivé, illisible — et quand relire
-│   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction
+│   ├── drafts.ts      brouillons de composeur : clés, bornes, éviction, et le
+│   │                  message rendu quand le tour n'a jamais démarré
 │   ├── icons.ts       le jeu d'icônes : tracés 24×24, sans dépendance
 │   ├── trash.ts       corbeille : compte à rebours, échéance, lignes à balayer
 │   ├── json.ts        décodage d'un corps de réponse qui n'est peut-être pas du JSON

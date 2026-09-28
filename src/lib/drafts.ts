@@ -127,6 +127,21 @@ export function renameDraft(map: DraftMap, from: string, to: string): DraftMap {
 	return out;
 }
 
+/**
+ * Put back a message the composer cleared for a turn that never started.
+ *
+ * Appended rather than substituted, and in the order it was typed: `restored`
+ * came first, whatever the composer holds now came after. Same rule as the
+ * prompt library — neither side of the merge may overwrite the other, because
+ * both are text a person wrote and nobody asked for either to be dropped.
+ */
+export function restoreDraft(current: string, restored: string): string {
+	if (!restored.trim()) return current;
+	const kept = current.replace(/^\s+/, '');
+	if (!kept) return restored;
+	return `${restored.replace(/\s+$/, '')}\n\n${kept}`;
+}
+
 export const draftText = (map: DraftMap, key: string): string => map[key]?.text ?? '';
 
 export const hasDraft = (map: DraftMap, key: string): boolean => Boolean(map[key]);

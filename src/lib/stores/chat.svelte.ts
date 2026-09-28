@@ -732,10 +732,26 @@ class ChatStore {
 		await this.send(text, attachments);
 	}
 
-	async send(text: string, attachments: Attachment[] = []) {
-		if (this.streaming) return;
+	/**
+	 * Run one turn.
+	 *
+	 * @returns `true` once the message is on screen and the turn has started —
+	 * from then on the transcript owns it. `false` means nothing was sent and
+	 * nothing was rendered, so the caller still owns the text: the composer
+	 * clears itself *before* calling (creating the conversation moves
+	 * `sessionId`, and with it the key the draft is filed under), so a `false`
+	 * that nobody acts on is a typed message deleted without a trace.
+	 *
+	 * **Measured** against the built app with the gateway down — the ordinary
+	 * state after `systemctl --user restart hermes-gateway`, or a phone off the
+	 * tailnet: `POST /api/sessions` answers
+	 * `502 {"code":"hermes_unreachable"}`, `newSession()` returns null, and this
+	 * used to bail here having pushed nothing into `messages`.
+	 */
+	async send(text: string, attachments: Attachment[] = []): Promise<boolean> {
+		if (this.streaming) return false;
 		const trimmed = text.trim();
-		if (!trimmed && attachments.length === 0) return;
+		if (!trimmed && attachments.length === 0) return false;
 
 		this.detached = false;
 		this.#lastPrompt = { text, attachments };
@@ -749,7 +765,9 @@ class ChatStore {
 			// user had to type something first.
 			await this.catalogReady();
 			id = await this.newSession(titleFrom(trimmed));
-			if (!id) return;
+			// `newSession()` has already said why in a toast. Saying "not sent"
+			// is this return value's whole job.
+			if (!id) return false;
 		}
 
 		// Hermes accepts a plain string or an OpenAI-style content array.
@@ -812,6 +830,10 @@ class ChatStore {
 			// message_count / preview / last_active only change server-side.
 			this.refreshSessions();
 		}
+		// Reached even on a mid-turn failure: the user message is in the
+		// transcript by now and the agent keeps running server-side (§16), so
+		// the text is no longer the composer's to hold back.
+		return true;
 	}
 
 	/**
