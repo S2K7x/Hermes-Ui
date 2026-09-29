@@ -130,6 +130,15 @@ export const ICONS = {
 	},
 	chart: { stroke: ['M4 20V11', 'M10 20V4', 'M16 20v-6', 'M2 20h20'] },
 
+	// --- the host's vital signs ---------------------------------------------
+	// Four pins, not eight: at 15 px the denser chip turned into a blob next to
+	// the gear two rows below it.
+	cpu: {
+		stroke: ['M5 5h14v14H5z', 'M9.5 9.5h5v5h-5z', 'M12 2v3', 'M12 19v3', 'M2 12h3', 'M19 12h3']
+	},
+	memory: { stroke: ['M3 7h18v9H3z', 'M7 16v3', 'M12 16v3', 'M17 16v3', 'M7 10.5v2', 'M12 10.5v2', 'M17 10.5v2'] },
+	gauge: { stroke: ['M4 18a8 8 0 1 1 16 0', 'M12 18l4-5'] },
+
 	// --- tool families (see toolIcon) ----------------------------------------
 	plug: { stroke: ['M9 2v6', 'M15 2v6', 'M6 8h12v3a6 6 0 0 1-12 0z', 'M12 17v5'] },
 	thought: { stroke: ['M8 16.5a4 4 0 0 1-.6-8A5 5 0 0 1 17 9a3.7 3.7 0 0 1-.6 7.4z', 'M8.5 20h.01', 'M12 22.5h.01'] },

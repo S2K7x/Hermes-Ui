@@ -56,6 +56,11 @@ de l'application.
 - **Panneau d'état** `⌘/` : contrôles de disponibilité (base, modèle,
   disque, gateway, plateformes), outils/skills exposés, tâches planifiées,
   tours en cours, coût et tokens de la conversation
+- **L'état du Raspberry Pi**, dans ce même panneau : processeur, charge
+  rapportée au nombre de cœurs, mémoire et durée d'allumage — la question que
+  la page d'accueil suggérait de poser à l'agent, qui coûtait un tour entier et
+  un appel `terminal` pour quatre nombres que le dashboard de Hermes Agent
+  publie déjà. Lu à l'ouverture du panneau seulement, jamais en boucle
 - **Palette de skills** : `/` dans le composeur
 - **Prompts enregistrés** (🔖 dans le composeur, ou `⌘K` → « Prompt : … ») :
   enregistrer le message en cours pour le réutiliser d'un tap ; la

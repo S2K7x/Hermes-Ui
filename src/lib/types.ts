@@ -1,5 +1,7 @@
 /** Shapes returned by the Hermes API server (gateway/platforms/api_server.py). */
 
+import type { SystemStats } from './system.ts';
+
 export interface HermesSession {
 	id: string;
 	source?: string;
@@ -221,6 +223,9 @@ export interface StatusPayload {
 	healthError: string | null;
 	jobs: HermesJob[];
 	jobsAvailable: boolean;
+	/** The host's vital signs, from the dashboard — null when it cannot answer. */
+	system: SystemStats | null;
+	systemError: string | null;
 	turns: { active: number; limit: number };
 }
 

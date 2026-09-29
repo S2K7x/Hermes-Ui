@@ -496,9 +496,10 @@ Ce que l'UI ne fait délibérément pas :
   *est* l'information utile (« run `hermes auth add qwen-oauth` manually »).
   D'où l'absence de cas supplémentaires dans `humanizeError()`.
 
-Une route de lecture supplémentaire vient du dashboard sans rapport avec les
+Deux routes de lecture viennent du dashboard sans rapport avec les
 providers : `GET /api/cron/delivery-targets`, qui dit quelles plateformes ont un
-canal d'accueil configuré. Voir le point 14.
+canal d'accueil configuré (point 14), et `GET /api/system/stats`, les
+constantes vitales du Pi (point 35).
 
 Le jeton vient de `HERMES_DASHBOARD_SESSION_TOKEN` dans
 `~/.hermes/dashboard.env`, que l'unité systemd `hermes-dashboard.service` lit
@@ -2100,6 +2101,63 @@ point 3 et le lien d'agent du point 18). `POST /api/sessions` accepte aussi
 `reasoning`, pour que le choix mémorisé s'applique dès la première ligne d'une
 nouvelle discussion.
 
+### 35. L'état de la machine vient du dashboard, et coûte 100 ms par lecture
+
+La carte d'accueil propose, depuis toujours, « Quel est l'état du Raspberry Pi
+(CPU, RAM, disque) ? » — une question qui coûtait **un tour entier** : le
+modèle, un appel `terminal`, l'attente, puis une réponse en prose. Or le
+dashboard publie ces nombres : `GET /api/system/stats`
+(`hermes_cli/web_server.py`) rend l'OS, l'architecture, le nombre de cœurs,
+`cpu_percent`, `load_avg`, `memory`, `disk`, `uptime_seconds` — dans les mots
+d'amont, « read-only and non-sensitive (no env values, no paths beyond the
+hermes home root) ». Le gateway, lui, n'expose rien de tout ça : sa seule
+donnée machine est le contrôle `disk` de `/health/detailed`.
+
+Ce qui a été **mesuré sur ce Pi**, contre l'application construite et les deux
+serveurs amont réels :
+
+| | avant | après |
+|---|---|---|
+| `GET /api/status` | 13 ms | **110 ms** |
+
+Les 100 ms ne sont pas les nôtres : `get_system_stats` appelle
+`psutil.cpu_percent(interval=0.1)`, c'est-à-dire qu'il **échantillonne le CPU
+pendant un dixième de seconde** dans le handler. C'est le prix d'une mesure
+instantanée, et c'est pourquoi cet appel :
+
+- part **en parallèle** des deux autres dans `Promise.allSettled` (le coût est
+  un `max`, pas une somme) ;
+- n'est **jamais sondé en boucle** — le panneau d'état ne lit qu'à l'ouverture
+  et sur « Actualiser », comme il le faisait déjà pour `/health/detailed` ;
+- porte 5 s de plafond et **aucun retry** : c'est un agrément sur un panneau de
+  diagnostic, il ne doit pas retarder les contrôles de disponibilité si le
+  dashboard se fige.
+
+Trois règles dans `src/lib/system.ts` (pur, testé) :
+
+- **Une ligne dont les nombres manquent n'est pas dessinée.** Amont dégrade
+  proprement quand `psutil` est absent (`psutil: false`) : il ne reste que la
+  charge, lue dans la bibliothèque standard. Afficher 0 % de processeur serait
+  présenter une absence de mesure comme une mesure.
+- **La charge se lit par cœur.** 3,5 c'est l'oisiveté sur un serveur à seize
+  cœurs et une file d'attente sur les quatre de ce Pi : le niveau vient de
+  `load_avg[0] / cpu_count`, et la ligne affiche « N % de 4 cœurs ».
+- **Le disque est délibérément absent** de cette section : le contrôle `disk`
+  du gateway l'affiche déjà six lignes plus haut dans le même panneau, et le
+  même nombre deux fois se lit comme deux mesures. Pour la même raison les
+  tailles sont en puissances de 1024, comme cette ligne-là.
+
+Vérifié sur l'application construite, contre les deux amonts : dashboard
+joignable → les quatre lignes ; dashboard arrêté → `system: null`,
+`systemError` porte « Le dashboard Hermes est injoignable », et les contrôles
+de disponibilité restent affichés (82 ms) ; `HERMES_DASHBOARD_TOKEN` vide → la
+section dit que le jeton manque, **avec ses mots à elle** : le message partagé
+`dashboard_disabled` parle de « la gestion des providers », ce qui est vrai du
+panneau pour lequel il a été écrit et trompeur sous un titre qui parle du
+Raspberry Pi.
+
+Route : `GET /api/status` (champs `system` et `systemError`).
+
 ## Événements SSE de `/api/sessions/{id}/chat/stream`
 
 | Événement | Charge utile utile | Traitement UI |
@@ -2180,7 +2238,7 @@ src/
 │   ├── server/        code jamais envoyé au navigateur
 │   │   ├── config.ts    variables d'env + validation au démarrage
 │   │   ├── hermes.ts    client de l'API Hermes (Bearer, timeouts, retries)
-│   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers)
+│   │   ├── dashboard.ts client du dashboard Hermes (jeton, providers, machine)
 │   │   ├── cache.ts     lecture amont gardée en mémoire : vol unique,
 │   │   │                  stale-while-revalidate
 │   │   ├── catalog.ts   modèles, skills et toolsets derrière ce cache
@@ -2252,6 +2310,8 @@ src/
 │   ├── reasoning.ts   effort de réflexion : niveaux acceptés par Hermes,
 │   │                  libellés, charge utile `model_options` d'un tour
 │   ├── search.ts      recherche accent-insensible dans un fil, extraits
+│   ├── system.ts      les constantes vitales de la machine : lignes, seuils,
+│   │                  tailles et durée d'allumage
 │   ├── providers.ts   groupement des clés par provider, statut des comptes,
 │   │                  machine à états du flux OAuth
 │   ├── sessions.ts    groupement par date, recherche, libellés, usage,

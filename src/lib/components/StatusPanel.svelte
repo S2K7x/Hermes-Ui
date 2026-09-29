@@ -5,6 +5,8 @@
 	import { chat } from '$lib/stores/chat.svelte';
 	import { usageSummary } from '$lib/sessions';
 	import { jobState, nextRunLabel, scheduleDisplay, sortJobs } from '$lib/jobs';
+	import { machineLine, systemRows, type SystemRow } from '$lib/system';
+	import type { IconName } from '$lib/icons';
 	import type { HermesJob } from '$lib/types';
 
 	interface Props {
@@ -36,6 +38,19 @@
 
 	let health = $derived(chat.status?.health ?? null);
 	let checks = $derived(Object.entries(health?.readiness?.checks ?? {}));
+
+	/* The Pi itself. Four numbers the gateway does not report, which used to
+	   cost an agent turn and a `terminal` call to obtain — see $lib/system for
+	   why disk is not among them, and why a missing field draws no row. */
+	let machine = $derived(systemRows(chat.status?.system));
+	/* Keyed by the union, so a new row cannot ship without its icon — the type
+	   is what guards this, since the icon scan only reads `name="…"`. */
+	const SYSTEM_ICONS: Record<SystemRow['key'], IconName> = {
+		cpu: 'cpu',
+		load: 'gauge',
+		memory: 'memory',
+		uptime: 'clock'
+	};
 
 	/* A coloured dot, not a coloured emoji: the emoji circles came from the
 	   platform's font, so "healthy" was a different green on the phone than on
@@ -116,6 +131,27 @@
 					</li>
 				{/each}
 			</ul>
+		{/if}
+
+		{#if machine.length > 0 || chat.status?.systemError}
+			<h3>Le Raspberry Pi</h3>
+			{#if machine.length > 0}
+				{#if machineLine(chat.status?.system)}
+					<p class="muted small machine">{machineLine(chat.status?.system)}</p>
+				{/if}
+				<ul class="checks">
+					{#each machine as row (row.key)}
+						<li>
+							<span class="li-icon"><Icon name={SYSTEM_ICONS[row.key]} size={15} /></span>
+							<span class="name">{row.label}</span>
+							<span class="value {row.level}">{row.value}</span>
+							{#if row.detail}<span class="muted small">{row.detail}</span>{/if}
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="muted small machine">{chat.status?.systemError}</p>
+			{/if}
 		{/if}
 
 		<h3>Cette interface</h3>
@@ -289,6 +325,21 @@
 	.name {
 		flex: 1;
 		min-width: 0;
+	}
+	/* The number carries the verdict here, rather than a dot: a percentage is
+	   already the reading, and a dot beside it would say the same thing twice. */
+	.value {
+		font-variant-numeric: tabular-nums;
+	}
+	.value.warn {
+		color: var(--accent);
+	}
+	.value.ko {
+		color: var(--danger);
+	}
+	.machine {
+		margin: 0 0 4px;
+		padding: 0 8px;
 	}
 	.tools {
 		display: flex;

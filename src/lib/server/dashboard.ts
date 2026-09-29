@@ -3,6 +3,7 @@ import { proxy } from './respond';
 import { UpstreamError, retrying } from './upstream';
 import { invalidateModelOptions } from './catalog';
 import { decodeJson } from '$lib/json';
+import type { SystemStats } from '$lib/system';
 import type {
 	EnvVarMap,
 	OauthPollResponse,
@@ -293,6 +294,21 @@ export const putHermesConfig = (config: Record<string, unknown>) =>
 		method: 'PUT',
 		body: { config }
 	});
+
+/**
+ * The host's own vital signs: CPU, load average, memory, uptime.
+ *
+ * Read-only and carries nothing sensitive — upstream's own words are "no env
+ * values, no paths beyond the hermes home root". It is a nicety on a
+ * diagnostics panel, so it is kept on a short leash: no retry and a 5 s
+ * ceiling, because the panel waits for it alongside the gateway's readiness
+ * and a wedged dashboard must not hold that back.
+ *
+ * Note that upstream samples the CPU for 100 ms inside the handler, so this
+ * call can never be cheap and must never be polled.
+ */
+export const getSystemStats = () =>
+	dashboardJson<SystemStats>('/api/system/stats', { timeoutMs: 5000 });
 
 export const getCronDeliveryTargets = () =>
 	dashboardJson<{ targets: { id: string; name?: string; home_target_set?: boolean }[] }>(
