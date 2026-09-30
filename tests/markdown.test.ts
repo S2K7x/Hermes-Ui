@@ -9,7 +9,8 @@ import {
 	loadHighlighter,
 	MAX_RENDER_DEBOUNCE_MS,
 	RENDER_DEBOUNCE_MS,
-	renderDelayMs
+	renderDelayMs,
+	stablePrefixEnd
 } from '../src/lib/markdown.ts';
 
 // `renderMarkdown` itself needs a DOM for DOMPurify, so these tests cover the
@@ -147,4 +148,123 @@ test('the work rate stays near flat instead of growing with the answer', () => {
 	for (let i = 0; i < measured.length; i++) {
 		assert.ok(adaptive[i] <= flat[i] + 1e-9, `${measured[i][0]} chars got slower`);
 	}
+});
+
+// ---------------------------------------------------------------------------
+// stablePrefixEnd — the part of a streaming answer that will not be re-parsed
+// ---------------------------------------------------------------------------
+
+/**
+ * Replay a whole turn the way `Markdown.svelte` does, and check at every step
+ * that the two pieces render into what one whole-buffer parse renders.
+ *
+ * This is the only property the optimisation rests on. The boundary itself is
+ * an implementation detail; being able to cut there is not.
+ */
+function replaySplit(doc: string, steps = Number.POSITIVE_INFINITY) {
+	let from = 0;
+	let head = '';
+	let disabled = false;
+	const norm = (h: string) => h.replace(/\s+/g, ' ').trim();
+	const stride = Math.max(1, Math.floor(doc.length / steps));
+	let frozeSomething = false;
+	let everDisabled = false;
+	for (let n = 1; n <= doc.length; n += stride) {
+		const src = doc.slice(0, n);
+		if (!disabled) {
+			const cut = stablePrefixEnd(src, from);
+			if (cut < 0) {
+				disabled = true;
+				everDisabled = true;
+				from = 0;
+				head = '';
+			} else if (cut > from) {
+				assert.ok(cut <= src.length, 'boundary past the end of the buffer');
+				head += html(src.slice(from, cut));
+				from = cut;
+				frozeSomething = true;
+			}
+		}
+		if (disabled) continue;
+		assert.equal(
+			norm(head + html(src.slice(from))),
+			norm(html(src)),
+			`split at ${from} of ${src.length} rendered differently`
+		);
+	}
+	return { frozeSomething, everDisabled, from };
+}
+
+test('a frozen prefix plus the live tail render as one whole parse', () => {
+	const docs = [
+		'Intro.\n\n## Un\n\ntexte **gras**\n\n## Deux\n\n- a\n- b\n\n## Trois\n\nfin',
+		'Voici :\n\n```bash\nls -la\n```\n\nEt puis :\n\n```ts\nconst a = 1;\n```\n\nVoilà.',
+		// A loose list must not be cut between its items and turned into two.
+		'Avant.\n\n- a\n\n- b\n\n## Après\n\nsuite',
+		// An indent-0 fence ends a list upstream too, so cutting there is a no-op.
+		'- item un\n- item deux\n\n```\ncode\n```\n\n- item trois',
+		'| a | b |\n| --- | --- |\n| 1 | 2 |\n\n## Suite\n\ntexte',
+		'> une citation\n> sur deux lignes\n\n## Titre\n\naprès',
+		'para un\n\n---\n\npara deux\n\n***\n\npara trois',
+		// Headings inside a fence are text, not boundaries.
+		'```md\n## pas un titre\n\n## non plus\n```\n\n## vrai titre\n\nok',
+		'~~~py\nx = 1\n~~~\n\n## Titre\n\nfin',
+		// An indented fence belongs to the list item; it is not a top-level block.
+		'- item\n\n    ```\n    code\n    ```\n\n## Titre\n\nfin',
+		// `---` under a paragraph is a setext heading, not a break: no blank line.
+		'Titre\n=====\n\nDu texte.\n\n## Autre\n\nfin',
+		'1. un\n2. deux\n\n## Titre\n\n3. trois'
+	];
+	for (const doc of docs) {
+		const { frozeSomething, everDisabled } = replaySplit(doc);
+		assert.ok(!everDisabled, `splitting was abandoned on: ${doc.slice(0, 30)}`);
+		assert.ok(frozeSomething, `nothing was ever frozen in: ${doc.slice(0, 30)}`);
+	}
+});
+
+test('a long answer freezes almost all of itself', () => {
+	let doc = "Voici l'analyse demandée.\n\n";
+	for (let i = 1; i <= 10; i++) {
+		doc += `## Section ${i}\n\nUn paragraphe d'explication avec de l'\`inline code\` et du **gras**.\n\n`;
+		doc += '- premier point\n- deuxième point\n\n';
+		doc += '```ts\nexport const f' + i + ' = (x: number) => x * ' + i + ';\n```\n\n';
+	}
+	const { from } = replaySplit(doc, 60);
+	// The tail left live is the section being written, not the whole answer.
+	assert.ok(from > doc.length * 0.8, `only froze ${from} of ${doc.length}`);
+});
+
+test('a link reference definition abandons splitting for the message', () => {
+	// Declared anywhere, used anywhere: text already on screen would change.
+	assert.equal(stablePrefixEnd('## Un\n\ntexte\n\n[doc]: https://exemple.fr\n'), -1);
+	assert.equal(stablePrefixEnd('voir [doc]\n\n   [doc]: https://exemple.fr\n'), -1);
+	// Four spaces is indented code, not a definition.
+	assert.ok(stablePrefixEnd('## Un\n\n    [doc]: https://exemple.fr\n') >= 0);
+});
+
+test('a raw HTML block abandons splitting for the message', () => {
+	// Its open tag can be closed blocks later; the halves would be sanitised
+	// apart and the tag balanced twice.
+	assert.equal(stablePrefixEnd('## Un\n\n<div class="x">\n\ndedans\n\n</div>\n'), -1);
+	assert.equal(stablePrefixEnd('para\n\n<br>\n\npara\n'), -1);
+	// Inline HTML in the middle of a line is not a block and is left alone.
+	assert.ok(stablePrefixEnd('## Un\n\ndu texte <b>gras</b> ici\n\n## Deux\n') > 0);
+});
+
+test('nothing is frozen without a hard block start after a blank line', () => {
+	assert.equal(stablePrefixEnd(''), 0);
+	assert.equal(stablePrefixEnd('juste un paragraphe'), 0);
+	assert.equal(stablePrefixEnd('para un\n\npara deux\n\npara trois'), 0);
+	// The very first line of a message has nothing above it to freeze.
+	assert.equal(stablePrefixEnd('## Titre\n\ntexte'), 0);
+	// The last boundary wins — freeze as much as the text allows — and the scan
+	// resumes where it left off rather than going back over frozen text.
+	const doc = 'a\n\n## Un\n\nb\n\n## Deux\n\nc';
+	const last = stablePrefixEnd(doc, 0);
+	assert.equal(doc.slice(last, last + 7), '## Deux');
+	assert.equal(stablePrefixEnd(doc, last), last);
+	// Growing the buffer one section at a time walks the boundary forward.
+	const upToB = doc.slice(0, doc.indexOf('## Deux'));
+	const first = stablePrefixEnd(upToB, 0);
+	assert.equal(upToB.slice(first, first + 5), '## Un');
 });

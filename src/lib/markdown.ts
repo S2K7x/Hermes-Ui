@@ -69,6 +69,98 @@ export function renderDelayMs(chars: number): number {
 
 marked.setOptions({ gfm: true, breaks: true });
 
+// ---------------------------------------------------------------------------
+// Incremental streaming: freezing the part of a message that cannot change
+// ---------------------------------------------------------------------------
+
+/**
+ * A line that, at column 0 and after a blank line, can only *start* a block.
+ *
+ * An ATX heading, a fence opener and a thematic break share the one property
+ * this whole mechanism rests on: none of them can continue the block above,
+ * and each of them terminates any container that was still open — a list, a
+ * table, a blockquote. So the text before such a line renders the same whether
+ * the rest of the message is appended to it or not.
+ *
+ * Setext (`text\n---`) is not a counter-example: it needs the underline to sit
+ * directly under the paragraph, and a candidate here always has a blank line
+ * above it, which makes the same `---` a thematic break in both readings.
+ */
+const HARD_BLOCK_START = /^(?:#{1,6}(?:[ \t]|$)|```+|~~~+|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$)/;
+
+/** Fence opener or closer, at any indent — used only to track fence state. */
+const FENCE_LINE = /^[ \t]*(```+|~~~+)/;
+
+/**
+ * A link reference definition. It is declared anywhere and used anywhere, so
+ * one arriving late changes how text that is already on screen renders — the
+ * one construct that makes a frozen prefix a lie. Splitting is abandoned for
+ * the rest of the message when one shows up.
+ */
+const LINK_DEFINITION = /^ {0,3}\[[^\]\n]+\]:/;
+
+/** A raw HTML block. Its open tag can be closed several blocks later, and the
+ *  two halves would then be sanitised apart. Same treatment. */
+const HTML_BLOCK = /^ {0,3}<[a-zA-Z!/?]/;
+
+/**
+ * How much of a streaming message will never be re-parsed again.
+ *
+ * A streaming re-render re-parses the whole buffer, re-sanitises the whole
+ * output and hands `{@html}` a subtree that replaces the previous one — all
+ * three linear in the length of the answer so far, on the CPU that is running
+ * the agent writing it (see `renderDelayMs` for the measurements). Yet almost
+ * none of that text has changed since the last pass: what changed is the last
+ * paragraph.
+ *
+ * So the buffer is cut in two at the last point where markdown guarantees the
+ * two halves render as they would together — see `HARD_BLOCK_START`. Everything
+ * before it is parsed once and its DOM is left alone; only the tail is redone
+ * on each tick.
+ *
+ * @param src   the whole buffer received so far
+ * @param from  end of the prefix already frozen; the scan starts there, which
+ *              is sound because a boundary is only ever chosen outside a fence,
+ *              so no fence is open at `from`
+ * @returns the new prefix end (>= `from`), or -1 when a construct in the text
+ *          makes freezing unsafe and the caller must go back to rendering the
+ *          whole buffer
+ */
+export function stablePrefixEnd(src: string, from = 0): number {
+	let best = from;
+	let openMarker: string | null = null;
+	// The line at `from` is itself a boundary that has already been taken, and
+	// at `from === 0` there is nothing above: either way, no blank line above.
+	let blankAbove = false;
+	let pos = from;
+
+	while (pos < src.length) {
+		const nl = src.indexOf('\n', pos);
+		const end = nl === -1 ? src.length : nl;
+		const line = src.slice(pos, end);
+
+		if (openMarker) {
+			const fence = FENCE_LINE.exec(line);
+			if (fence && fence[1].startsWith(openMarker)) openMarker = null;
+			blankAbove = false;
+		} else if (line.trim() === '') {
+			blankAbove = true;
+		} else {
+			if (LINK_DEFINITION.test(line) || HTML_BLOCK.test(line)) return -1;
+			const indented = line.startsWith(' ') || line.startsWith('\t');
+			if (blankAbove && !indented && HARD_BLOCK_START.test(line)) best = pos;
+			const fence = FENCE_LINE.exec(line);
+			if (fence) openMarker = fence[1];
+			blankAbove = false;
+		}
+
+		if (nl === -1) break;
+		pos = nl + 1;
+	}
+
+	return best;
+}
+
 /**
  * Balance constructs left open by a truncated stream.
  * Operates on a copy — never mutates the authoritative buffer.

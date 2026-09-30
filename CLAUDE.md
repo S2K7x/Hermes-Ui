@@ -321,9 +321,57 @@ donc le texte affiché à la fin d'un tour est le même qu'avant, à la même
 milliseconde. Seule la fréquence des états intermédiaires baisse — et le
 curseur clignotant reste ce qui dit que du texte arrive entre deux parses.
 
-**Le post-traitement d'un message terminé doit attendre `tick()`.** `html` est
+**Et un redessin ne repart plus du début du message.** Baisser la cadence ne
+changeait rien au fait que *chaque* passe refaisait tout : re-parser le tampon
+entier, ré-assainir toute la sortie, remplacer l'intégralité du sous-arbre —
+alors que la seule chose qui avait bougé depuis la passe précédente était le
+dernier paragraphe.
+
+`stablePrefixEnd()` (`src/lib/markdown.ts`, pure et testée) coupe donc le
+tampon au **dernier** endroit où markdown garantit que les deux moitiés se
+rendent comme elles se rendraient ensemble : une ligne qui, à la colonne 0 et
+après une ligne vide, ne peut que *commencer* un bloc — un titre ATX, une
+ouverture de bloc de code, un filet horizontal. Aucun des trois ne peut
+continuer le bloc du dessus, et chacun clôt tout conteneur encore ouvert
+(liste, tableau, citation) : ce qui précède se rend donc à l'identique, seul
+ou suivi du reste. `Markdown.svelte` parse cette tête **une fois par section**
+et laisse son DOM tranquille ; seule la queue est refaite à chaque tick.
+
+Trois choses qui rendent ça sûr, et qu'il ne faut pas défaire :
+
+- **Un message terminé n'est jamais coupé.** Le rendu final reste une passe
+  unique sur tout le tampon, comme avant. Le pire qu'une coupure mal choisie
+  puisse coûter est donc un instant d'affichage bancal *pendant* le stream,
+  corrigé à la milliseconde où le tour se termine.
+- **Deux constructions font abandonner la coupure** pour le reste du message
+  (retour `-1`, et retour au comportement d'avant) : une **définition de lien
+  de référence** (`[doc]: https://…`), qui se déclare n'importe où et s'utilise
+  n'importe où — donc change ce qui est déjà à l'écran —, et un **bloc HTML
+  brut**, dont la balise ouvrante peut se fermer plusieurs blocs plus loin et
+  dont les deux moitiés seraient assainies séparément.
+- `assistant.completed` **remplace** le tampon au lieu de l'allonger
+  (point ci-dessus sur l'autorité de cette trame), et peut arriver alors que
+  `streaming` est encore vrai. D'où le `source.startsWith(headSrc)` avant
+  toute réutilisation : un memcmp, contre des millisecondes de parsing.
+
+**Mesuré sur ce Pi**, tour entier rejoué (texte à 120 caractères/seconde,
+cadence du debounce ci-dessus, `marked` réellement appelé) :
+
+| réponse | markdown parsé | HTML livré à `{@html}` | CPU de parsing |
+|---|---|---|---|
+| 4 ko | 1,05 Mo → 0,11 Mo | 1,44 Mo → 0,15 Mo | −88 % |
+| 10 ko | 5,63 Mo → 0,45 Mo | 7,73 Mo → 0,62 Mo | −92 % |
+| 20 ko | 13,8 Mo → 1,44 Mo | 18,9 Mo → 1,98 Mo | −90 % |
+| 34 ko | 25,4 Mo → 3,77 Mo | 34,9 Mo → 5,19 Mo | −86 % |
+
+L'assainissement et l'échange DOM sont linéaires dans ces mêmes octets — c'est
+la mesure du tableau du dessus —, donc les deux autres tiers du coût baissent
+dans la même proportion. Une réponse courte sans titre ni bloc de code ne coupe
+rien du tout et se comporte exactement comme avant.
+
+**Le post-traitement d'un message terminé doit attendre `tick()`.** `tail` est
 affecté *depuis* un effet, donc quand l'effet suivant s'exécute Svelte n'a pas
-encore écrit `{@html html}` dans le DOM : lire `container` à ce moment-là
+encore écrit `{@html tail}` dans le DOM : lire `container` à ce moment-là
 décore le balisage **précédent**, que l'échange à venir jette. C'est ce qui
 faisait que ni la coloration syntaxique ni le bouton « copier » n'apparaissaient
 jamais. **Mesuré sur l'app en production** avant correction : un transcript
@@ -352,8 +400,11 @@ conséquences dans le code :
   reste entier. Un échec de chargement laisse le code en noir et blanc plutôt
   que de casser le message.
 
-`tests/markdown.test.ts` vérifie qu'aucun `import` **statique** de
-`highlight.js` ne revient — ce serait remettre les 164 Ko sur le chemin
+`tests/markdown.test.ts` rejoue un tour entier caractère par caractère et
+compare, à chaque étape, `tête + queue` au rendu d'une seule passe sur tout le
+tampon — c'est la seule propriété sur laquelle repose la coupure ; l'endroit où
+elle tombe est un détail d'implémentation. Il vérifie aussi qu'aucun `import`
+**statique** de `highlight.js` ne revient — ce serait remettre les 164 Ko sur le chemin
 critique sans que rien ne le signale.
 
 ### 10. Hermes ne recharge pas `.env` à chaud
@@ -2323,7 +2374,8 @@ src/
 │   ├── theme.ts       préréglages, dérivation color-mix, contraste WCAG, refus
 │   │                  d'écrire un thème composé sur une ligne non lue
 │   ├── turns.ts       résumé d'un tour + « faut-il notifier ? »
-│   ├── markdown.ts    rendu tolérant à l'incomplet
+│   ├── markdown.ts    rendu tolérant à l'incomplet, et la part d'un message
+│   │                  en cours qui ne sera plus re-parsée
 │   └── transcript.ts  regroupement du transcript persisté en tours UI
 ├── hooks.server.ts    contrôle d'origine à l'exécution + en-têtes de sécurité
 ├── routes/

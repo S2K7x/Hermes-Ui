@@ -5,7 +5,8 @@
 		highlighterReady,
 		loadHighlighter,
 		renderDelayMs,
-		renderMarkdown
+		renderMarkdown,
+		stablePrefixEnd
 	} from '$lib/markdown';
 	import { onDestroy, tick } from 'svelte';
 
@@ -15,7 +16,26 @@
 	}
 	let { source, streaming = false }: Props = $props();
 
-	let html = $state('');
+	/**
+	 * The message, in two pieces.
+	 *
+	 * `head` is the HTML of the part of a streaming answer that markdown
+	 * guarantees can no longer change — see `stablePrefixEnd`. It is written
+	 * once per section and then left alone, which is what keeps its DOM out of
+	 * the swap below. `tail` is the part still being written, re-rendered on
+	 * every debounce tick as before.
+	 *
+	 * A finished message has no head at all: the final render is one
+	 * whole-buffer parse, exactly as it was. So the worst a mis-chosen boundary
+	 * could ever cost is a moment of odd layout mid-stream, corrected the
+	 * instant the turn ends.
+	 */
+	let head = $state('');
+	let tail = $state('');
+	/** Source text whose HTML is in `head`. Always a prefix of `source`. */
+	let headSrc = '';
+	/** Set when the text holds something that makes freezing a prefix unsafe. */
+	let noSplit = false;
 	let container = $state<HTMLDivElement | null>(null);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -23,11 +43,40 @@
 	let warmed = false;
 
 	function render() {
-		html = renderMarkdown(source, streaming);
+		if (!streaming) {
+			// The authoritative pass: one parse of the whole buffer, no split.
+			headSrc = '';
+			head = '';
+			tail = renderMarkdown(source);
+			return;
+		}
+		// `assistant.completed` replaces the buffer rather than appending to it,
+		// and it can land while `streaming` is still true. A cheap prefix test
+		// (a memcmp, against milliseconds of parsing) catches that.
+		if (!source.startsWith(headSrc)) {
+			headSrc = '';
+			head = '';
+		}
+		if (!noSplit) {
+			const cut = stablePrefixEnd(source, headSrc.length);
+			if (cut < 0) {
+				// Back to rendering the whole buffer for the rest of the message.
+				noSplit = true;
+				headSrc = '';
+				head = '';
+			} else if (cut > headSrc.length) {
+				// Only the new sections are parsed. Each one is a complete run of
+				// blocks bounded by a hard block start, so rendering them apart
+				// and concatenating gives what one parse of the prefix gives.
+				head += renderMarkdown(source.slice(headSrc.length, cut));
+				headSrc = source.slice(0, cut);
+			}
+		}
+		tail = renderMarkdown(source.slice(headSrc.length), true);
 		// A fence has appeared mid-stream: start fetching the grammar bundle now
 		// so it is resident when the turn ends, instead of flashing plain code
 		// first. Checked here rather than per token — this runs on the debounce.
-		if (streaming && !warmed && source.includes('```')) {
+		if (!warmed && source.includes('```')) {
 			warmed = true;
 			loadHighlighter();
 		}
@@ -59,15 +108,15 @@
 	// Syntax highlighting and copy buttons, only once the message is final —
 	// decorating a growing block redoes the work on every pass for nothing.
 	//
-	// The `tick()` is not cosmetic. `html` is assigned from inside the effect
+	// The `tick()` is not cosmetic. `tail` is assigned from inside the effect
 	// above, so when this effect body runs Svelte has not yet written
-	// `{@html html}` to the DOM: touching `container` here would decorate the
+	// `{@html tail}` to the DOM: touching `container` here would decorate the
 	// *previous* markup, which the pending swap then throws away. That is why
 	// neither highlighting nor the copy button ever appeared (verified against
 	// the live app: a transcript with 13 code blocks had zero `.hljs-*` spans
 	// and zero buttons). Post-processing has to wait for the flush.
 	$effect(() => {
-		void html;
+		void tail;
 		if (streaming || !container) return;
 		const root = container;
 		let cancelled = false;
@@ -117,9 +166,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-<div class="md" bind:this={container} onclick={onCopy}>
-	{@html html}
-</div>
+<div class="md" bind:this={container} onclick={onCopy}>{@html head}{@html tail}</div>
 
 <style>
 	.md {
