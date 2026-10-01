@@ -32,6 +32,47 @@ interface LastPrompt {
 	attachments: Attachment[];
 }
 
+/**
+ * One of the three choices a conversation carries, as `#choose()` applies it.
+ *
+ * Named rather than inlined on the method so the shape the three setters share
+ * is a thing with a definition — and so a fourth choice has something to fill
+ * in instead of a block to copy.
+ */
+interface SessionChoice<T> {
+	/** The value the user picked, and the preference before this call. */
+	value: T;
+	was: T;
+	/** Store the preference for new conversations, localStorage included. */
+	remember: (value: T) => void;
+	/** The conversation to re-pin on, or null for "next discussion only". */
+	target: string | null;
+	/** How the choice shows on a session row, and what to put back on failure. */
+	row: (value: T) => Partial<HermesSession>;
+	rollback: Partial<HermesSession>;
+	/** `POST /api/sessions/{id}/<path>` with this body. */
+	path: string;
+	body: unknown;
+	/** Ran once upstream accepted, with the session it accepted it for. */
+	accepted?: (res: SessionChoiceResponse, id: string) => void;
+}
+
+/**
+ * What the three per-conversation choice routes answer.
+ *
+ * All three echo the session they wrote to; only `POST .../model` carries a
+ * `runtime` block, because only that one reaches Hermes — the agent binding and
+ * the reasoning effort are ours and never leave this app's SQLite. Nothing is
+ * validated on arrival, same convention as `$lib/types`: the point of naming
+ * the shape is that `res.runtime?.model` no longer type-checks as anything.
+ */
+interface SessionChoiceResponse {
+	session_id?: string;
+	runtime?: SessionRuntime;
+	agent_id?: string | null;
+	reasoning?: string | null;
+}
+
 class ChatStore {
 	sessions = $state<HermesSession[]>([]);
 	/**
@@ -339,6 +380,48 @@ class ChatStore {
 		}
 	}
 
+	// -- the three choices a conversation carries ---------------------------
+
+	/**
+	 * Apply one of the three choices a conversation carries.
+	 *
+	 * `setModel()`, `setAgent()` and `setReasoning()` were three copies of the
+	 * same algorithm, and the last two said so in a comment — "same shape as
+	 * setModel()" — while repeating it line by line. The shape: remember the
+	 * choice as the default for NEW conversations, patch the open session's row
+	 * optimistically, POST it, and on refusal put *both* halves back.
+	 *
+	 * The second half is the one a copy forgets. A model Hermes cannot route is
+	 * refused outright (409 `model_lock_unavailable`) instead of falling back to
+	 * the global default, so a rejection means the choice is unusable here at
+	 * all: leaving it in `localStorage` would pin it on the next discussion and
+	 * fail every turn of it (CLAUDE.md §1). Rolling back the preference is
+	 * therefore not symmetry for its own sake, and it now exists once.
+	 *
+	 * `target` is the conversation to re-pin on, or null to only remember the
+	 * preference — which is what a gateway without `session_model_lock` leaves
+	 * the model picker able to do.
+	 */
+	async #choose<T>(choice: SessionChoice<T>): Promise<void> {
+		choice.remember(choice.value);
+
+		const id = choice.target;
+		if (!id) return;
+
+		this.#patchLocal(id, choice.row(choice.value));
+		try {
+			const res = await api<SessionChoiceResponse>(
+				`/api/sessions/${encodeURIComponent(id)}/${choice.path}`,
+				{ method: 'POST', body: JSON.stringify(choice.body) }
+			);
+			choice.accepted?.(res, id);
+		} catch (err) {
+			this.#patchLocal(id, choice.rollback);
+			choice.remember(choice.was);
+			toasts.error(err);
+		}
+	}
+
 	/**
 	 * Pick a model.
 	 *
@@ -347,111 +430,90 @@ class ChatStore {
 	 * conversation right away: Hermes persists a confirmed model lock on the
 	 * session row and resolves every later turn through it, so the switch
 	 * takes effect from the next message instead of the next discussion.
-	 *
-	 * Upstream refuses a model it cannot route (409 `model_lock_unavailable`)
-	 * rather than falling back to the global default, so a rejection means the
-	 * choice is unusable here too: both the session and `nextModel` roll back.
 	 */
 	async setModel(model: string) {
 		if (!model || model === this.activeModel) return;
-		const previousNext = this.nextModel;
-		this.nextModel = model;
-		writeJSON('yadai-next-model', model);
-
-		const id = this.sessionId;
-		if (!id || !this.canSwitchModel) return;
-
-		const previousModel = this.current?.model ?? null;
-		this.#patchLocal(id, { model });
-		try {
-			const res = await api<{ runtime?: SessionRuntime }>(
-				`/api/sessions/${encodeURIComponent(id)}/model`,
-				{
-					method: 'POST',
-					body: JSON.stringify({ model, provider: providerForModel(this.models, model) })
-				}
-			);
-			// Hermes echoes what it actually routed to; trust it over our guess.
-			const applied = res.runtime?.model || model;
-			this.#patchLocal(id, { model: applied });
-			toasts.success(
-				`Cette conversation utilise ${shortModelName(applied)} à partir du prochain message.`
-			);
-		} catch (err) {
-			this.#patchLocal(id, { model: previousModel });
-			this.nextModel = previousNext;
-			writeJSON('yadai-next-model', previousNext);
-			toasts.error(err);
-		}
+		return this.#choose<string>({
+			value: model,
+			was: this.nextModel,
+			remember: (value) => {
+				this.nextModel = value;
+				writeJSON('yadai-next-model', value);
+			},
+			// Without the capability the model is pinned at creation only, and
+			// there is no endpoint to re-pin it: the choice waits for the next
+			// discussion, which is what the picker says in that case.
+			target: this.canSwitchModel ? this.sessionId : null,
+			row: (value) => ({ model: value }),
+			rollback: { model: this.current?.model ?? null },
+			path: 'model',
+			body: { model, provider: providerForModel(this.models, model) },
+			accepted: (res, id) => {
+				// Hermes echoes what it actually routed to; trust it over our guess.
+				const applied = res.runtime?.model || model;
+				this.#patchLocal(id, { model: applied });
+				toasts.success(
+					`Cette conversation utilise ${shortModelName(applied)} à partir du prochain message.`
+				);
+			}
+		});
 	}
 
 	/**
 	 * Pick the agent a conversation runs as.
 	 *
-	 * Same shape as `setModel()`: it becomes the default for new conversations
-	 * and, when one is open, is re-bound on it right away. The persona is
-	 * re-composed server-side on every turn, so the switch takes effect from the
-	 * next message — what is already in the transcript keeps its author.
+	 * The persona is re-composed server-side on every turn, so the switch takes
+	 * effect from the next message — what is already in the transcript keeps its
+	 * author.
 	 */
 	async setAgent(agentId: string) {
 		if (agentId === this.activeAgentId) return;
-		const previousNext = this.nextAgent;
-		this.nextAgent = agentId;
-		writeJSON('yadai-next-agent', agentId);
-
-		const id = this.sessionId;
-		if (!id) return;
-
 		const previous = this.current?.agent_id ?? '';
-		this.#patchLocal(id, { agent_id: agentId || undefined });
-		try {
-			await api(`/api/sessions/${encodeURIComponent(id)}/agent`, {
-				method: 'POST',
-				body: JSON.stringify({ agent_id: agentId || null })
-			});
-		} catch (err) {
-			this.#patchLocal(id, { agent_id: previous || undefined });
-			this.nextAgent = previousNext;
-			writeJSON('yadai-next-agent', previousNext);
-			toasts.error(err);
-		}
+		return this.#choose<string>({
+			value: agentId,
+			was: this.nextAgent,
+			remember: (value) => {
+				this.nextAgent = value;
+				writeJSON('yadai-next-agent', value);
+			},
+			target: this.sessionId,
+			row: (value) => ({ agent_id: value || undefined }),
+			rollback: { agent_id: previous || undefined },
+			path: 'agent',
+			body: { agent_id: agentId || null }
+		});
 	}
 
 	/**
 	 * Pick how hard the next messages think.
 	 *
-	 * Same shape again as `setModel()` / `setAgent()`. Nothing reaches Hermes
-	 * here: the effort is stored server-side and re-sent as `model_options` with
-	 * every turn (see `src/lib/reasoning.ts`), so it applies from the next
-	 * message and the transcript keeps whatever produced it.
+	 * Nothing reaches Hermes here: the effort is stored server-side and re-sent
+	 * as `model_options` with every turn (see `src/lib/reasoning.ts`), so it
+	 * applies from the next message and the transcript keeps whatever produced
+	 * it.
 	 */
 	async setReasoning(effort: ReasoningEffort) {
 		if (effort === this.activeReasoning) return;
-		const previousNext = this.nextReasoning;
-		this.nextReasoning = effort;
-		writeJSON('yadai-next-reasoning', effort);
-
-		const id = this.sessionId;
-		if (!id) return;
-
-		const previous = normalizeReasoning(this.current?.reasoning);
-		this.#patchLocal(id, { reasoning: effort });
-		try {
-			await api(`/api/sessions/${encodeURIComponent(id)}/reasoning`, {
-				method: 'POST',
-				body: JSON.stringify({ reasoning: effort })
-			});
-			toasts.success(
-				effort === DEFAULT_REASONING
-					? 'Effort de réflexion : réglage de Hermes, à partir du prochain message.'
-					: `Effort de réflexion : ${reasoningLabel(effort)}, à partir du prochain message.`
-			);
-		} catch (err) {
-			this.#patchLocal(id, { reasoning: previous });
-			this.nextReasoning = previousNext;
-			writeJSON('yadai-next-reasoning', previousNext);
-			toasts.error(err);
-		}
+		return this.#choose<ReasoningEffort>({
+			value: effort,
+			was: this.nextReasoning,
+			remember: (value) => {
+				this.nextReasoning = value;
+				writeJSON('yadai-next-reasoning', value);
+			},
+			target: this.sessionId,
+			row: (value) => ({ reasoning: value }),
+			rollback: { reasoning: normalizeReasoning(this.current?.reasoning) },
+			path: 'reasoning',
+			body: { reasoning: effort },
+			accepted: () => {
+				toasts.success(
+					effort === DEFAULT_REASONING
+						? 'Effort de réflexion : réglage de Hermes, à partir du prochain message.'
+						: `Effort de réflexion : ${reasoningLabel(effort)}, à partir du prochain message.`
+				);
+			}
+		});
 	}
 
 	// -- session lifecycle --------------------------------------------------

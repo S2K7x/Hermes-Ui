@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile } from 'node:fs/promises';
+import { methodBody, source } from './source.ts';
 
 /**
  * What the app is allowed to wait for before showing a conversation.
@@ -17,22 +17,10 @@ import { readFile } from 'node:fs/promises';
  * asked to see had come back. These tests fail if the wait comes back.
  */
 
-const SOURCE = new URL('../src/lib/stores/chat.svelte.ts', import.meta.url);
+const STORE = 'src/lib/stores/chat.svelte.ts';
 
-/** The body of `name`'s method, from its opening brace to the matching one. */
-function methodBody(source: string, signature: string): string {
-	const start = source.indexOf(signature);
-	assert.notEqual(start, -1, `${signature} not found in chat.svelte.ts`);
-	let depth = 0;
-	for (let i = source.indexOf('{', start); i < source.length; i++) {
-		if (source[i] === '{') depth++;
-		else if (source[i] === '}' && --depth === 0) return source.slice(start, i + 1);
-	}
-	assert.fail(`unbalanced braces after ${signature}`);
-}
-
-test('boot does not wait for the model catalogue', async () => {
-	const body = methodBody(await readFile(SOURCE, 'utf8'), 'async init()');
+test('boot does not wait for the model catalogue', () => {
+	const body = methodBody(source(STORE), 'async init()');
 	assert.ok(body.includes('this.refreshCatalog()'), 'init() must still start the catalogue');
 	assert.doesNotMatch(
 		body,
@@ -46,8 +34,8 @@ test('boot does not wait for the model catalogue', async () => {
 	);
 });
 
-test('the model and skills listings are fetched side by side', async () => {
-	const body = methodBody(await readFile(SOURCE, 'utf8'), 'async refreshCatalog()');
+test('the model and skills listings are fetched side by side', () => {
+	const body = methodBody(source(STORE), 'async refreshCatalog()');
 	assert.match(
 		body,
 		/Promise\.all\(/,
@@ -55,8 +43,8 @@ test('the model and skills listings are fetched side by side', async () => {
 	);
 });
 
-test('creating a conversation still waits for the catalogue', async () => {
-	const body = methodBody(await readFile(SOURCE, 'utf8'), 'async send(');
+test('creating a conversation still waits for the catalogue', () => {
+	const body = methodBody(source(STORE), 'async send(');
 	const wait = body.indexOf('catalogReady()');
 	const create = body.indexOf('this.newSession(');
 	assert.notEqual(wait, -1, 'send() must settle the debt before pinning a model');

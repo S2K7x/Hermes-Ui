@@ -136,6 +136,19 @@ discussions (`nextModel`, persisté en localStorage) et, si une conversation est
 ouverte, pose le verrou dessus. `chat.activeModel` est ce que le sélecteur
 affiche : le modèle de la session ouverte, sinon `nextModel`.
 
+**Les trois choix qu'une conversation porte passent par le même chemin.** Le
+modèle (ici), l'agent (point 18) et l'effort de réflexion (point 34) se
+choisissent de façon identique : mémoriser le choix pour les nouvelles
+discussions, poser la valeur sur la ligne de session par optimisme, l'envoyer,
+et **rendre les deux moitiés** si l'amont refuse. C'était trois copies de cet
+algorithme, dont deux annonçaient en commentaire « même forme que
+`setModel()` » — d'où `#choose()` (`stores/chat.svelte.ts`), que
+`SessionChoice<T>` décrit et que les trois `set*()` remplissent. La moitié
+qu'une copie oublie est la préférence : un choix refusé laissé en localStorage
+serait épinglé sur la discussion suivante, où il ferait échouer chaque tour
+(point 1). `tests/choices.test.ts` relit la source pour qu'aucune des trois ne
+reprenne sa propre requête ni son propre `catch`.
+
 Deux pièges :
 
 - Hermes **refuse** un modèle qu'il ne sait pas router (409
